@@ -1,7 +1,7 @@
 import { writable, get } from 'svelte/store';
 import { supabase } from '$lib/supabase';
 
-export const meetings = writable<any[]>([]);
+export const meetings = writable([]);
 
 export async function refreshMeetings() {
     const { data, error } = await supabase
@@ -19,7 +19,7 @@ export async function refreshMeetings() {
     meetings.set(data || []);
 }
 
-export async function addMeeting(meeting: any) {
+export async function addMeeting(meeting) {
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError || !user) {
@@ -40,7 +40,7 @@ export async function addMeeting(meeting: any) {
             organizer: meeting.organizer,
             participants: Array.isArray(meeting.participants) 
                 ? meeting.participants 
-                : meeting.participants?.split(',').map((p: string) => p.trim()).filter(Boolean) || [],
+                : meeting.participants?.split(',').map((p) => p.trim()).filter(Boolean) || [],
             agenda: meeting.agenda,
             meeting_objective: meeting.meetingObjective,
             reference_no: meeting.referenceNo,
@@ -63,7 +63,7 @@ export async function addMeeting(meeting: any) {
     return data;
 }
 
-export async function updateMeeting(id: number, updates: any) {
+export async function updateMeeting(id, updates) {
     const { data, error } = await supabase
         .from('meetings')
         .update({
@@ -78,7 +78,7 @@ export async function updateMeeting(id: number, updates: any) {
             organizer: updates.organizer,
             participants: Array.isArray(updates.participants) 
                 ? updates.participants 
-                : updates.participants?.split(',').map((p: string) => p.trim()).filter(Boolean) || [],
+                : updates.participants?.split(',').map((p) => p.trim()).filter(Boolean) || [],
             agenda: updates.agenda,
             meeting_objective: updates.meetingObjective,
             reference_no: updates.referenceNo,
@@ -103,7 +103,7 @@ export async function updateMeeting(id: number, updates: any) {
     return data;
 }
 
-export async function removeMeeting(id: number) {
+export async function removeMeeting(id) {
     console.log('Deleting meeting ID:', id);
     
     const { error } = await supabase
@@ -120,7 +120,7 @@ export async function removeMeeting(id: number) {
     console.log('Meeting deleted from store');
 }
 
-export async function completeMeeting(id: number) {
+export async function completeMeeting(id) {
     const { data, error } = await supabase
         .from('meetings')
         .update({ 
@@ -143,7 +143,7 @@ export async function completeMeeting(id: number) {
     return data;
 }
 
-export async function getMeetingById(id: number) {
+export async function getMeetingById(id) {
     const { data, error } = await supabase
         .from('meetings')
         .select('*')
