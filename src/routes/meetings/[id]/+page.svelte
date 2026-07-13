@@ -2,7 +2,7 @@
     import { page } from '$app/stores';
     import { goto } from "$app/navigation";
     import { onMount } from "svelte";
-    import { getMeetingById } from "$lib/stores/meetings";
+  //  import { getMeetingById } from "$lib/stores/meetings";
 
     let meeting: any = null;
     let loading = true;

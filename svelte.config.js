@@ -16,11 +16,11 @@ const config = {
       : adapterStatic({  // For Tauri: SPA mode
           pages: 'build',
           assets: 'build',
-          fallback: 'index.html', // keeps your existing SPA mode
+          fallback: 'index.html',
           precompress: false
         }),
     prerender: { 
-      entries: [] // prevents build errors from dynamic routes
+      entries: []
     }
   }
 };
