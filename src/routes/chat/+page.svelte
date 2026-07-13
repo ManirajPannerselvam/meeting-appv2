@@ -267,7 +267,7 @@
     }
 
     /* -----------------------------
-       MESSAGES
+       MESSAGES - ✅ FIXED: Use report_id not template_id
     ------------------------------*/
 
     async function loadMessages(roomId?: string) {
@@ -311,10 +311,11 @@
 
                     m.is_own = m.sender_id === getCurrentUserId();
 
-                    if (m.template_id) {
+                    // ✅ FIXED: Check for report_id instead of template_id
+                    if (m.report_id) {
                         try {
                             const r = await fetch(
-                                `/api/templates/report-view?id=${m.template_id}`,
+                                `/api/templates/report-view?id=${m.report_id}`,
                                 {
                                     headers: authHeader()
                                 }
@@ -393,11 +394,11 @@
                 console.log("Realtime:", status);
                 if (status === 'SUBSCRIBED') {
                     isOnline = true;
-                    online = true; // ✅ ADDED: Update online status
+                    online = true;
                 }
                 if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
                     isOnline = false;
-                    online = false; // ✅ ADDED: Update online status
+                    online = false;
                 }
             });
     }

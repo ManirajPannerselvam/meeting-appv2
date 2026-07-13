@@ -8,8 +8,8 @@ export const GET: RequestHandler = async ({ url, request }) => {
         const date = url.searchParams.get("date");
 
         let query = supabase
-           .from('template_reports')
-           .select(`
+          .from('template_reports')
+          .select(`
                 id,
                 template_id,
                 template_version,
@@ -20,12 +20,12 @@ export const GET: RequestHandler = async ({ url, request }) => {
                 values_json,
                 created_at
             `)
-           .order('created_at', { ascending: false })
-           .limit(limit);
+          .order('created_at', { ascending: false })
+          .limit(limit);
 
         if (date && date.trim()!== "") {
             query = query.gte('report_date', `${date}T00:00:00`)
-                        .lte('report_date', `${date}T23:59:59`);
+                       .lte('report_date', `${date}T23:59:59`);
         }
 
         const { data, error: dbError } = await query;
@@ -34,7 +34,7 @@ export const GET: RequestHandler = async ({ url, request }) => {
 
         // Parse JSON values
         const reports = data?.map((r: any) => ({
-           ...r,
+          ...r,
             values: r.values_json? JSON.parse(r.values_json) : {}
         })) || [];
 
@@ -86,8 +86,8 @@ export const POST: RequestHandler = async ({ request }) => {
 
         // 5. Insert template report
         const { data: report, error: reportError } = await supabase
-           .from('template_reports')
-           .insert({
+          .from('template_reports')
+          .insert({
                 template_id: templateId,
                 template_version: 1,
                 sender: userId,
@@ -97,23 +97,24 @@ export const POST: RequestHandler = async ({ request }) => {
                 values_json: JSON.stringify(values || {}),
                 created_at: new Date().toISOString()
             })
-           .select()
-           .single();
+          .select()
+          .single();
 
         if (reportError) {
             console.error('Report insert error:', reportError);
             throw error(500, reportError.message);
         }
 
-        // 6. Insert message in chat
+        // 6. Insert message in chat - ✅ FIXED
         const { error: msgError } = await supabase
-           .from('messages')
-           .insert({
+          .from('messages')
+          .insert({
                 room_id: roomId,
-                user_id: userId,
+                sender_id: userId, // ✅ was user_id
                 content: content || `📊 Template Report`,
                 type: 'template',
-                template_id: report.id,
+                template_id: templateId, // ✅ was report.id
+                report_id: report.id, // ✅ added this
                 created_at: new Date().toISOString()
             });
 
