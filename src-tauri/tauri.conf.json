@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "meeting-app",
+  "version": "0.1.0",
+  "identifier": "com.meeting.app",
+  "build": {
+    "beforeDevCommand": "",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "meeting-app",
+        "width": 800,
+        "height": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "devtools": true
+      }
+    ],
+    "security": {
+      "csp": null,
+      "capabilities": [
+        "default",
+        "fs",
+        "sql",
+        "shell",
+        "notification"
+      ]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}
