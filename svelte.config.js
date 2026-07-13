@@ -1,20 +1,24 @@
-// Tauri doesn't have a Node.js server to do proper SSR
-// so we use adapter-static with a fallback to index.html to put the site in SPA mode
-// See: https://svelte.dev/docs/kit/single-page-apps
-// See: https://v2.tauri.app/start/frontend/sveltekit/ for more info
-import adapter from "@sveltejs/adapter-static";
-import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
+// Uses adapter-vercel on Vercel, adapter-static for Tauri/local builds
+// Vercel sets VERCEL=1 automatically during builds
+import adapterVercel from '@sveltejs/adapter-vercel';
+import adapterStatic from '@sveltejs/adapter-static';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+// Check if we're building on Vercel
+const isVercel = process.env.VERCEL === '1';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
   preprocess: vitePreprocess(),
   kit: {
-    adapter: adapter({
-      pages: 'build',
-      assets: 'build',
-      fallback: "index.html", // keeps your existing SPA mode
-      precompress: false
-    }),
+    adapter: isVercel 
+      ? adapterVercel()  // For Vercel: handles SSR + routing
+      : adapterStatic({  // For Tauri: SPA mode
+          pages: 'build',
+          assets: 'build',
+          fallback: 'index.html', // keeps your existing SPA mode
+          precompress: false
+        }),
     prerender: { 
       entries: [] // prevents build errors from dynamic routes
     }
