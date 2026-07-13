@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 import { supabase } from '$lib/supabase';
 
 export const meetings = writable<any[]>([]);
