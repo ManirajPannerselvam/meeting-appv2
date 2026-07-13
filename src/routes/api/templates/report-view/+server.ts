@@ -1,9 +1,9 @@
 import { json } from "@sveltejs/kit";
-import db from "$lib/server/db";
+import { supabase } from '$lib/supabase';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url }) => {
-    const reportId = Number(url.searchParams.get("id"));
+    const reportId = url.searchParams.get("id");
 
     if (!reportId) {
         return json({ success: false, error: 'Missing id' }, { status: 400 });
@@ -11,30 +11,33 @@ export const GET: RequestHandler = async ({ url }) => {
 
     try {
         console.log('Fetching report:', reportId);
-        
-        // 1. Get report + template info
-        const report: any = db.prepare(`
-            SELECT
-                tr.id,
-                tr.template_id,
-                tr.sender,
-                tr.values_json,
-                tr.created_at,
-                t.name as template_name,
-                t.icon,
-                t.department,
-                t.version,
-                t.category
-            FROM template_reports tr
-            JOIN templates t ON t.id = tr.template_id
-            WHERE tr.id =?
-        `).get(reportId);
 
-        if (!report) {
+        // 1. Get report + template info
+        const { data: report, error: reportError } = await supabase
+           .from('template_reports')
+           .select(`
+                id,
+                template_id,
+                sender,
+                values_json,
+                created_at,
+                templates (
+                    name,
+                    icon,
+                    department,
+                    version,
+                    category
+                )
+            `)
+           .eq('id', reportId)
+           .single();
+
+        if (reportError ||!report) {
             return json({ success: false, error: 'Report not found' }, { status: 404 });
         }
 
-        console.log('Report found:', report.template_name);
+        const template = report.templates as any;
+        console.log('Report found:', template?.name);
 
         // 2. Parse values_json
         let values: Record<string, any> = {};
@@ -45,20 +48,18 @@ export const GET: RequestHandler = async ({ url }) => {
             values = {};
         }
 
-        // 3. Get template fields - FIXED: use display_order not field_order
+        // 3. Get template fields
         let fields: any[] = [];
         try {
-            fields = db.prepare(`
-                SELECT 
-                    field_name,
-                    field_label,
-                    field_type,
-                    display_order
-                FROM template_fields
-                WHERE template_id =?
-                ORDER BY display_order ASC
-            `).all(report.template_id);
-            
+            const { data: fieldsData, error: fieldsError } = await supabase
+               .from('template_fields')
+               .select('field_name, field_label, field_type, display_order')
+               .eq('template_id', report.template_id)
+               .order('display_order', { ascending: true });
+
+            if (fieldsError) throw fieldsError;
+            fields = fieldsData || [];
+
             console.log('Fields found:', fields.length);
 
             // Fallback: if no fields defined, build from values_json keys
@@ -91,11 +92,11 @@ export const GET: RequestHandler = async ({ url }) => {
             data: {
                 id: report.id,
                 template_id: report.template_id,
-                template_name: report.template_name,
-                icon: report.icon,
-                department: report.department,
-                category: report.category,
-                version: report.version,
+                template_name: template?.name,
+                icon: template?.icon,
+                department: template?.department,
+                category: template?.category,
+                version: template?.version,
                 sender: report.sender,
                 created_at: report.created_at,
                 fields: fieldsWithValues,
@@ -105,10 +106,10 @@ export const GET: RequestHandler = async ({ url }) => {
 
     } catch (err: any) {
         console.error('report-view FULL ERROR:', err);
-        return json({ 
-            success: false, 
+        return json({
+            success: false,
             error: 'Server error',
-            details: err.message 
+            details: err.message
         }, { status: 500 });
     }
 };

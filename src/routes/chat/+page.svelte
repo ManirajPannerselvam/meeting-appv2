@@ -39,6 +39,10 @@
     // Network status
     let isOnline = true;
     let lastSync = '';
+    
+    // ✅ ADDED: Fix for "online is not defined" crash
+    let online = false;
+    let typing = false;
 
     /* -----------------------------
        POPUPS
@@ -389,9 +393,11 @@
                 console.log("Realtime:", status);
                 if (status === 'SUBSCRIBED') {
                     isOnline = true;
+                    online = true; // ✅ ADDED: Update online status
                 }
                 if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
                     isOnline = false;
+                    online = false; // ✅ ADDED: Update online status
                 }
             });
     }
