@@ -76,6 +76,22 @@ export async function removeMeeting(id: number) {
 }
 
 /* ==========================
+   GET BY ID
+========================== */
+
+export async function getMeetingById(id: number) {
+  if (!browser) return null;
+
+  try {
+    const all = await getMeetings();
+    return all.find((m: any) => Number(m.id) === Number(id)) || null;
+  } catch (err) {
+    console.error("getMeetingById()", err);
+    return null;
+  }
+}
+
+/* ==========================
    AUTO REFRESH
 ========================== */
 
@@ -90,15 +106,10 @@ if (browser) {
 }
 
 export default {
-
   meetings,
-
   refreshMeetings,
-
   addMeeting,
-
   editMeeting,
-
-  removeMeeting
-
+  removeMeeting,
+  getMeetingById
 };
