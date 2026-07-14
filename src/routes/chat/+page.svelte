@@ -8,9 +8,11 @@
     import MessageList from "$lib/components/chat/MessageList.svelte";
     import TemplateDesigner from "$lib/components/templates/designer/TemplateDesigner.svelte";
     import TemplateForm from "$lib/components/templates/form/TemplateForm.svelte";
-    
+    import EmojiPicker from 'emoji-picker-element'; // npm i emoji-picker-element
+
     import { supabase } from '$lib/supabase';
     import type { RealtimeChannel } from '@supabase/supabase-js';
+    import { openDB } from 'idb'; // npm i idb
 
     /* -----------------------------
        STATE
@@ -33,16 +35,57 @@
     let socket: WebSocket | null = null;
     let refresh: any = null;
     let isLoadingMessages = false;
+    let isLoadingOlder = false; // For scroll load
 
     let subscription: RealtimeChannel | null = null;
 
     // Network status
     let isOnline = true;
     let lastSync = '';
-    
-    // ✅ ADDED: Fix for "online is not defined" crash
-    let online = false;
+
+    let online = false; // Kept to avoid crashes, not used in UI
     let typing = false;
+
+    // 6. Emoji
+    let showEmoji = false;
+    let emojiPicker: any;
+    let emojiPickerContainer: HTMLElement;
+
+    // 7. Mic recording
+    let isRecording = false;
+    let mediaRecorder: MediaRecorder | null = null;
+    let audioChunks: Blob[] = [];
+    let micStream: MediaStream | null = null;
+
+    /* -----------------------------
+       INDEXEDDB - LOAD REDUCE
+    ------------------------------*/
+
+    const dbPromise = openDB('erp-chat-cache', 1, {
+        upgrade(db) {
+            db.createObjectStore('messages', { keyPath: 'id' });
+            db.createObjectStore('chats', { keyPath: 'id' });
+        }
+    });
+
+    async function cacheMessages(msgs: any[]) {
+        const db = await dbPromise;
+        const tx = db.transaction('messages', 'readwrite');
+        await Promise.all(msgs.map(m => tx.store.put(m)));
+        await tx.done;
+    }
+
+    async function getCachedMessages(roomId: string, beforeTs?: number) {
+        const db = await dbPromise;
+        const all = await db.getAll('messages');
+        let filtered = all.filter(m => m.room_id === roomId);
+        if (beforeTs) filtered = filtered.filter(m => m.created_at < beforeTs);
+        // 4. DESC order, last 50
+        return filtered
+         .sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+         .slice(0, 50)
+         .reverse(); // Show oldest of 50 first
+    }
 
     /* -----------------------------
        POPUPS
@@ -93,7 +136,7 @@
     }
 
     /* -----------------------------
-       ROOM ID - ✅ ADDED
+       ROOM ID
     ------------------------------*/
 
     function getRoomId(userId1: string, userId2: string) {
@@ -155,28 +198,29 @@
             if (!userId) return;
 
             const { data, error } = await supabase
-                .from('rooms')
-                .select(`
+             .from('rooms')
+             .select(`
                     id,
                     user1_id,
                     user2_id,
                     user1:user1_id(id, name, mobile, email),
                     user2:user2_id(id, name, mobile, email)
                 `)
-                .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+             .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
 
             if (error) throw error;
 
             contacts = (data || []).map((room: any) => {
-                const otherUser = room.user1_id === userId ? room.user2 : room.user1;
+                const otherUser = room.user1_id === userId? room.user2 : room.user1;
                 return {
-                    ...otherUser,
+                 ...otherUser,
                     room_id: room.id,
                     user1_id: room.user1_id,
-                    user2_id: room.user2_id
+                    user2_id: room.user2_id,
+                    members: [room.user1, room.user2] // 2. For 9-grid icon
                 };
             });
-            
+
             console.log('Loaded contacts:', contacts);
         } catch (err) {
             console.error("loadContacts error:", err);
@@ -219,23 +263,19 @@
     }
 
     /* -----------------------------
-       SELECT CONTACT - ✅ FIXED
+       SELECT CONTACT
     ------------------------------*/
 
     async function selectContact(event: any) {
-        const contact = event.detail ?? event;
+        const contact = event.detail?? event;
 
         console.log("Selected Contact:", contact);
 
         selectedGroup = null;
-        
-        // ✅ FIX: Spread contact, not selectedContact
-        selectedContact = { ...contact };
-        
+        selectedContact = {...contact };
         selectedRoomId = contact.room_id || getRoomId(getCurrentUserId(), contact.id);
 
         console.log("Selected Room:", selectedRoomId);
-        console.log("selectedContact state:", selectedContact);
 
         if (!selectedRoomId) {
             console.error('❌ room_id missing');
@@ -253,10 +293,10 @@
     ------------------------------*/
 
     async function selectGroup(event: any) {
-        const group = event.detail ?? event;
+        const group = event.detail?? event;
 
         selectedContact = null;
-        selectedGroup = { ...group }; // ✅ Force reactivity
+        selectedGroup = {...group };
         selectedRoomId = group.id;
 
         console.log("Selected Group:", group);
@@ -267,7 +307,7 @@
     }
 
     /* -----------------------------
-       MESSAGES - ✅ FIXED: Use report_id not template_id
+       MESSAGES - 3. SINGLE QUERY, LAST 50, DESC
     ------------------------------*/
 
     async function loadMessages(roomId?: string) {
@@ -281,29 +321,41 @@
         isLoadingMessages = true;
 
         try {
+            // 1. Try cache first - 0 server load
+            const cached = await getCachedMessages(roomId);
+            if (cached.length > 0) {
+                messages = cached;
+                await tick();
+                scrollToBottom();
+                isLoadingMessages = false;
+                return;
+            }
+
+            // 2. If no cache, single query from server
             if (!(await testNetwork())) {
                 isLoadingMessages = false;
                 return;
             }
 
             const { data, error } = await supabase
-                .from("messages")
-                .select("*")
-                .eq("room_id", roomId)
-                .order("created_at", { ascending: true });
+             .from("messages")
+             .select("*")
+             .eq("room_id", roomId)
+             .order("created_at", { ascending: false }) // DESC
+             .limit(50); // 4. Last 50 only
 
             if (error) throw error;
 
-            messages = await Promise.all(
-                (data || []).map(async (m: any) => {
+            const processed = await Promise.all(
+                (data || []).reverse().map(async (m: any) => { // reverse to show oldest first
                     try {
                         const { data: user } = await supabase
-                            .from("users")
-                            .select("id, name, mobile")
-                            .eq("id", m.sender_id)
-                            .maybeSingle();
+                         .from("users")
+                         .select("id, name, mobile")
+                         .eq("id", m.sender_id)
+                         .maybeSingle();
 
-                        m.users = user ?? null;
+                        m.users = user?? null;
                     } catch (err) {
                         console.error("User fetch error:", err);
                         m.users = null;
@@ -311,16 +363,12 @@
 
                     m.is_own = m.sender_id === getCurrentUserId();
 
-                    // ✅ FIXED: Check for report_id instead of template_id
                     if (m.report_id) {
                         try {
                             const r = await fetch(
                                 `/api/templates/report-view?id=${m.report_id}`,
-                                {
-                                    headers: authHeader()
-                                }
+                                { headers: authHeader() }
                             );
-
                             if (r.ok) {
                                 const reportData = await r.json();
                                 m.report = reportData.data || reportData;
@@ -335,6 +383,9 @@
                 })
             );
 
+            messages = processed;
+            await cacheMessages(processed); // Save to cache
+
             console.log("Loaded messages:", messages);
             await tick();
             scrollToBottom();
@@ -347,10 +398,24 @@
         }
     }
 
+    // 4. Load older on scroll top - cache only, no server
+    async function loadOlderMessages() {
+        if (isLoadingOlder ||!selectedRoomId || messages.length === 0) return;
+        isLoadingOlder = true;
+
+        const oldestTs = messages[0].created_at;
+        const older = await getCachedMessages(selectedRoomId, oldestTs);
+
+        if (older.length > 0) {
+            messages = [...older,...messages];
+        }
+        isLoadingOlder = false;
+    }
+
     /* -----------------------------
        REALTIME SUBSCRIPTION
     ------------------------------*/
-    
+
     function subscribeToChat(roomId?: string) {
         if (subscription) {
             supabase.removeChannel(subscription);
@@ -360,8 +425,8 @@
         if (!roomId) return;
 
         subscription = supabase
-            .channel(`room:${roomId}`)
-            .on(
+         .channel(`room:${roomId}`)
+         .on(
                 "postgres_changes",
                 {
                     event: "INSERT",
@@ -377,20 +442,21 @@
                     }
 
                     const { data: user } = await supabase
-                        .from("users")
-                        .select("id, name, mobile")
-                        .eq("id", newMsg.sender_id)
-                        .maybeSingle();
+                     .from("users")
+                     .select("id, name, mobile")
+                     .eq("id", newMsg.sender_id)
+                     .maybeSingle();
 
-                    newMsg.users = user ?? null;
+                    newMsg.users = user?? null;
                     newMsg.is_own = newMsg.sender_id === getCurrentUserId();
 
                     messages = [...messages, newMsg];
+                    await cacheMessages([newMsg]); // Cache new msg
                     await tick();
                     scrollToBottom();
                 }
             )
-            .subscribe((status) => {
+         .subscribe((status) => {
                 console.log("Realtime:", status);
                 if (status === 'SUBSCRIBED') {
                     isOnline = true;
@@ -415,14 +481,23 @@
         });
     }
 
+    // 4. Scroll handler for loading older
+    function handleScroll(e: Event) {
+        const target = e.target as HTMLElement;
+        if (target.scrollTop === 0) {
+            loadOlderMessages();
+        }
+    }
+
     /* -----------------------------
-       SEND MESSAGE
+       SEND MESSAGE - FIXED: Works for groups too
     ------------------------------*/
 
     async function sendMessage() {
         const text = message.trim();
 
-        if (!text || !selectedRoomId || !selectedContact) {
+        // FIX: Works for both contact and group
+        if (!text ||!selectedRoomId || (!selectedContact &&!selectedGroup)) {
             return;
         }
 
@@ -431,37 +506,34 @@
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    ...authHeader()
+                 ...authHeader()
                 },
                 body: JSON.stringify({
                     roomId: selectedRoomId,
-                    receiverId: selectedContact.id,
+                    receiverId: selectedContact?.id || selectedGroup?.id, // FIX: Support group
                     message: text
                 })
             });
 
             const result = await response.json();
 
-            if (!response.ok || !result.success) {
+            if (!response.ok ||!result.success) {
                 throw new Error(result.message || result.error || "Failed to send message");
             }
 
             messages = [...messages, result.data];
+            await cacheMessages([result.data]);
             message = "";
+            showEmoji = false; // Close emoji after send
 
         } catch (err: any) {
-            console.error("========== SEND MESSAGE ERROR ==========");
-            console.error(err);
-            console.error("Message:", err?.message);
-            console.error("Code:", err?.code);
-            console.error("Details:", err?.details);
-            console.error("Hint:", err?.hint);
+            console.error("SEND MESSAGE ERROR:", err);
             isOnline = false;
         }
     }
 
     /* -----------------------------
-       CREATE GROUP - ✅ ADDED
+       CREATE GROUP
     ------------------------------*/
 
     async function createGroup() {
@@ -469,7 +541,7 @@
             alert('Group name required');
             return;
         }
-        
+
         try {
             const userId = getCurrentUserId();
             if (!userId) {
@@ -478,14 +550,14 @@
             }
 
             const { data: group, error: groupError } = await supabase
-                .from('chat_groups')
-                .insert({
+             .from('chat_groups')
+             .insert({
                     name: groupName,
                     description: groupDesc,
                     created_by: userId
                 })
-                .select()
-                .single();
+             .select()
+             .single();
 
             if (groupError) throw groupError;
 
@@ -506,11 +578,11 @@
     ------------------------------*/
 
     async function createContact() {
-        if (!contactMobile.trim() || !contactEmail.trim()) {
+        if (!contactMobile.trim() ||!contactEmail.trim()) {
             alert('Mobile and Email required');
             return;
         }
-        
+
         try {
             const userId = getCurrentUserId();
             if (!userId) {
@@ -519,45 +591,43 @@
             }
 
             const { data: existingUser } = await supabase
-                .from('users')
-                .select('id, name, mobile, email')
-                .or(`mobile.eq.${contactMobile},email.eq.${contactEmail}`)
-                .single();
+             .from('users')
+             .select('id, name, mobile, email')
+             .or(`mobile.eq.${contactMobile},email.eq.${contactEmail}`)
+             .single();
 
             let contactId;
 
             if (existingUser) {
                 contactId = existingUser.id;
-                console.log('User exists:', existingUser);
-                
                 await supabase
-                    .from('users')
-                    .update({ 
+                 .from('users')
+                 .update({
                         name: contactName || existingUser.name,
                         department: department || existingUser.department
                     })
-                    .eq('id', contactId);
+                 .eq('id', contactId);
             } else {
                 const { data: newUser, error: userError } = await supabase
-                    .from('users')
-                    .insert({
+                 .from('users')
+                 .insert({
                         name: contactName,
                         mobile: contactMobile,
                         email: contactEmail,
                         department
                     })
-                    .select()
-                    .single();
+                 .select()
+                 .single();
 
                 if (userError) throw userError;
                 contactId = newUser.id;
             }
 
             const { data: existingRoom } = await supabase
-                .from('rooms')
-                .select('id')
-                .or(`and(user1_id.eq.${userId},user2_id.eq.${contactId}),and(user1_id.eq.${contactId},user2_id.eq.${userId})`)
-                .single();
+             .from('rooms')
+             .select('id')
+             .or(`and(user1_id.eq.${userId},user2_id.eq.${contactId}),and(user1_id.eq.${contactId},user2_id.eq.${userId})`)
+             .single();
 
             if (existingRoom) {
                 alert('Contact already exists in your chat list');
@@ -567,10 +637,10 @@
             }
 
             const { error: roomError } = await supabase
-                .from('rooms')
-                .insert({
-                    user1_id: userId < contactId ? userId : contactId,
-                    user2_id: userId < contactId ? contactId : userId
+             .from('rooms')
+             .insert({
+                    user1_id: userId < contactId? userId : contactId,
+                    user2_id: userId < contactId? contactId : userId
                 });
 
             if (roomError) throw roomError;
@@ -586,6 +656,60 @@
         } catch (err: any) {
             console.error("createContact error:", err);
             alert("Failed: " + err.message);
+        }
+    }
+
+    /* -----------------------------
+       5. DELETE/EDIT CONTACT/GROUP
+    ------------------------------*/
+
+    async function deleteContact(id: string) {
+        if (!confirm('Delete this contact?')) return;
+        await supabase.from('rooms').delete().eq('id', id);
+        await loadContacts();
+        selectedContact = null;
+        selectedRoomId = null;
+    }
+
+    async function deleteGroup(id: string) {
+        if (!confirm('Delete this group?')) return;
+        await supabase.from('chat_groups').delete().eq('id', id);
+        await loadGroups();
+        selectedGroup = null;
+        selectedRoomId = null;
+    }
+
+    /* -----------------------------
+       7. MIC RECORDING - FIXED: Cleanup stream
+    ------------------------------*/
+
+    async function toggleRecording() {
+        if (!isRecording) {
+            try {
+                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(micStream);
+                audioChunks = [];
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = async () => {
+                    const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                    // Send as message - you need backend to handle file upload
+                    const formData = new FormData();
+                    formData.append('file', audioBlob, 'voice.webm');
+                    formData.append('roomId', selectedRoomId!);
+                    // await fetch('/api/messages/voice', { method: 'POST', body: formData });
+                    alert('Voice recorded. Add upload API to send.');
+                    // Cleanup
+                    micStream?.getTracks().forEach(track => track.stop());
+                    micStream = null;
+                };
+                mediaRecorder.start();
+                isRecording = true;
+            } catch (err) {
+                alert('Mic access denied');
+            }
+        } else {
+            mediaRecorder?.stop();
+            isRecording = false;
         }
     }
 
@@ -611,7 +735,7 @@
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
-                    ...authHeader()
+                 ...authHeader()
                 },
                 body: JSON.stringify({
                     template_code: msg.template_code,
@@ -644,7 +768,7 @@
                     method: "POST",
                     headers: {
                         "Content-Type": "application/json",
-                        ...authHeader()
+                     ...authHeader()
                     },
                     body: JSON.stringify({
                         template: e.detail.template,
@@ -685,7 +809,7 @@
     }
 
     /* -----------------------------
-       LIFECYCLE
+       LIFECYCLE - FIXED: Emoji picker init
     ------------------------------*/
 
     onMount(() => {
@@ -697,6 +821,15 @@
         loadGroups();
         loadContacts();
         testNetwork();
+
+        // 6. Init emoji picker safely
+        tick().then(() => {
+            emojiPicker = document.querySelector('emoji-picker');
+            emojiPicker?.addEventListener('emoji-click', (e: any) => {
+                message += e.detail.unicode;
+                showEmoji = false;
+            });
+        });
     });
 
     onDestroy(() => {
@@ -704,18 +837,15 @@
             subscription.unsubscribe();
         }
         socket?.close();
+        // Cleanup mic stream
+        micStream?.getTracks().forEach(track => track.stop());
     });
 
     function selectTemplate(event: CustomEvent) {
         selectedTemplate = event.detail;
-        templateFields = selectedTemplate.fields ?? [];
-        console.log("========== SELECTED TEMPLATE ==========");
-        console.log(selectedTemplate);
-        console.log("FIELDS:", templateFields);
-        console.log("FIELDS COUNT:", templateFields.length);
+        templateFields = selectedTemplate.fields?? [];
         showTemplatePopup = false;
         showTemplateForm = true;
-        console.log("showTemplateForm =", showTemplateForm);
     }
 </script>
 
@@ -732,20 +862,22 @@
         on:newContact={() => showContactForm=true}
         on:selectGroup={selectGroup}
         on:selectContact={selectContact}
+        on:deleteContact={(e) => deleteContact(e.detail.id)}
+        on:deleteGroup={(e) => deleteGroup(e.detail.id)}
     />
 
     <!-- ================= CHAT ================= -->
 
     <section class="chat-area">
 
-        {#if selectedRoomId}  <!-- ✅ FIXED: Changed from selectedGroup || selectedContact -->
+        {#if selectedRoomId}
 
-            <!-- HEADER -->
+            <!-- HEADER - 1. NO ONLINE STATUS -->
 
             <ChatHeader
-                title={selectedContact?.name ?? selectedGroup?.name}
-                subtitle={selectedContact ? selectedContact.mobile : `${selectedGroup?.members ?? 0} members`}
-                {online}
+                title={selectedContact?.name?? selectedGroup?.name}
+                subtitle={selectedContact? selectedContact.mobile : `${selectedGroup?.members?? 0} members`}
+                online={false}
                 {typing}
             />
 
@@ -759,12 +891,14 @@
                 {/if}
             </div>
 
-            <!-- ================= MESSAGES ================= -->
+            <!-- ================= MESSAGES - 8. SCROLL FADE ================= -->
 
-            <MessageList
-                {messages}
-                on:install={(e) => installTemplate(e.detail)}
-            />
+            <div class="messages" on:scroll={handleScroll}>
+                <MessageList
+                    {messages}
+                    on:install={(e) => installTemplate(e.detail)}
+                />
+            </div>
 
             <!-- ================= TYPING ================= -->
 
@@ -772,9 +906,16 @@
                 <div class="typing">{typingStatus}</div>
             {/if}
 
-            <!-- ================= MESSAGE BOX ================= -->
+            <!-- ================= MESSAGE BOX - 6. EMOJI + 7. MIC ================= -->
 
             <div class="message-box">
+                <button class="icon-btn" on:click={() => showEmoji =!showEmoji}>😀</button>
+                {#if showEmoji}
+                    <div class="emoji-popup" bind:this={emojiPickerContainer}>
+                        <emoji-picker></emoji-picker>
+                    </div>
+                {/if}
+
                 <input
                     bind:value={message}
                     placeholder="Type your message..."
@@ -783,9 +924,15 @@
                         if (e.key === "Enter")
                             sendMessage();
                     }}
-                    disabled={!isOnline || !selectedRoomId}
+                    disabled={!isOnline ||!selectedRoomId}
                 />
-                <button on:click={sendMessage} disabled={!isOnline || !selectedRoomId}>Send</button>
+
+                <!-- 7. MIC BUTTON -->
+                <button class="icon-btn" class:recording={isRecording} on:click={toggleRecording}>
+                    {#if isRecording}⏹️{:else}🎤{/if}
+                </button>
+
+                <button on:click={sendMessage} disabled={!isOnline ||!selectedRoomId}>Send</button>
             </div>
 
         {:else}
@@ -938,6 +1085,16 @@
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
 }
+
+/* 8. SCROLL INDICATION TRANSPARENCY */
+.messages{
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    mask-image: linear-gradient(to bottom, transparent 0%, black 3%, black 97%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 3%, black 97%, transparent 100%);
+}
+
 .typing{
     padding:8px 20px;
     font-size:13px;
@@ -951,6 +1108,7 @@
     padding:12px;
     background:white;
     border-top: 1px solid #e5e7eb;
+    position: relative;
 }
 .message-box input{
     flex:1;
@@ -979,6 +1137,23 @@
 .message-box button:disabled{
     opacity: 0.5;
     cursor: not-allowed;
+}
+.icon-btn{
+    background: none!important;
+    color: #666!important;
+    padding: 8px!important;
+    font-size: 20px;
+}
+.icon-btn.recording{
+    background: #ef4444!important;
+    color: white!important;
+    animation: pulse 1s infinite;
+}
+.emoji-popup{
+    position: absolute;
+    bottom: 70px;
+    left: 12px;
+    z-index: 100;
 }
 .empty-chat-screen{
     flex:1;

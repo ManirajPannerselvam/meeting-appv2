@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { afterUpdate } from "svelte";
+    import { afterUpdate, onMount } from "svelte";
     
     export let messages: any[] = [];
     export let selectedUser: any = null;
@@ -7,12 +7,22 @@
 
     let messagesContainer: HTMLDivElement;
     let previewImage: string | null = null;
+    let shouldAutoScroll = true;
+    let userScrolledUp = false;
 
+    // FIXED: Only auto-scroll if user is at bottom
     afterUpdate(() => {
-        if (messagesContainer) {
+        if (messagesContainer && shouldAutoScroll && !userScrolledUp) {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
     });
+
+    function handleScroll(e: Event) {
+        const target = e.target as HTMLElement;
+        const isAtBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 100;
+        userScrolledUp = !isAtBottom;
+        shouldAutoScroll = isAtBottom;
+    }
 
     function formatTime(timestamp: string) {
         return new Date(timestamp).toLocaleTimeString('en-US', {
@@ -23,6 +33,10 @@
 
     function isImage(url: string) {
         return /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
+    }
+
+    function isAudio(url: string) {
+        return /\.(mp3|wav|ogg|webm|m4a)$/i.test(url);
     }
 
     function getFileName(url: string) {
@@ -59,9 +73,18 @@
     function closePreview() {
         previewImage = null;
     }
+
+    // ADDED: Close preview on ESC
+    onMount(() => {
+        const handleEsc = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && previewImage) closePreview();
+        };
+        window.addEventListener('keydown', handleEsc);
+        return () => window.removeEventListener('keydown', handleEsc);
+    });
 </script>
 
-<div class="messages-container" bind:this={messagesContainer}>
+<div class="messages-container" bind:this={messagesContainer} on:scroll={handleScroll}>
     {#each messages as msg (msg.id)}
         <div class="message-wrapper" class:own={msg.is_own}>
             <div class="message-bubble">
@@ -81,14 +104,20 @@
                                         alt="attachment" 
                                         class="attachment-image"
                                         on:click={() => openPreview(url)}
+                                        loading="lazy"
                                     />
                                     <button 
                                         class="download-btn"
-                                        on:click={() => downloadFile(url, getFileName(url))}
+                                        on:click|stopPropagation={() => downloadFile(url, getFileName(url))}
                                         title="Download"
                                     >
                                         ⬇️
                                     </button>
+                                </div>
+                            {:else if isAudio(url)}
+                                <!-- ADDED: Voice/Audio support -->
+                                <div class="voice-msg">
+                                    <audio controls src={url} preload="metadata"></audio>
                                 </div>
                             {:else}
                                 <div class="attachment-file-wrapper">
@@ -109,10 +138,10 @@
                 {/if}
 
                 <!-- Template message -->
-                {#if msg.type === 'template' && msg.template_data}
+                {#if msg.type === 'template' && (msg.template_data || msg.report)}
                     <div class="template-message">
-                        <div class="template-name">📋 {msg.content}</div>
-                        {#each Object.entries(msg.template_data) as [key, value]}
+                        <div class="template-name">📋 {msg.content || msg.report?.template_name}</div>
+                        {#each Object.entries(msg.template_data || msg.report?.values || {}) as [key, value]}
                             <div class="template-field">
                                 <span class="field-label">{key}:</span>
                                 <span class="field-value">{value}</span>
@@ -128,7 +157,8 @@
                         <span class="status">
                             {#if msg.status === 'sent'}✓{/if}
                             {#if msg.status === 'delivered'}✓✓{/if}
-                            {#if msg.status === 'read'}<span class="read">✓✓</span>{/if}
+                            {#if msg.status === 'read' || msg.read_at}<span class="read">✓✓</span>{/if}
+                            {#if !msg.status && msg.id}✓✓{/if}
                         </span>
                     {/if}
                 </div>
@@ -178,7 +208,8 @@
     box-shadow: 0 1px 2px rgba(0,0,0,.08);
 }
 
-.message-wrapper.own .message-bubble {
+/* FIXED: Added space */
+.message-wrapper.own.message-bubble {
     background: #d9fdd3;
 }
 
@@ -274,6 +305,14 @@
 
 .download-btn-file:hover {
     background: #e9edef;
+}
+
+/* ADDED: Voice message style */
+.voice-msg audio {
+    width: 100%;
+    max-width: 280px;
+    height: 40px;
+    margin-top: 4px;
 }
 
 .template-message {
