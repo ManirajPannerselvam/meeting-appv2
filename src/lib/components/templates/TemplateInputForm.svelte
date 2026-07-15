@@ -1,5 +1,6 @@
 <script lang="ts">
     import { createEventDispatcher, onMount } from 'svelte';
+    import { browser } from "$app/environment";
     
     export let template: any;
     
@@ -10,6 +11,7 @@
     let loading = true;
 
     function getToken() {
+        if (!browser) return "";
         return localStorage.getItem("token") || "";
     }
 
@@ -78,35 +80,40 @@
         <div class="fields">
             {#each fields as field}
                 <div class="field">
-                    <label>
+                    <label for={field.field_name}>
                         {field.field_label}
                         {#if field.required}<span class="required">*</span>{/if}
                     </label>
                     
                     {#if field.field_type === 'number'}
                         <input 
+                            id={field.field_name}
                             type="number" 
                             bind:value={values[field.field_name]}
                             placeholder={field.field_label}
                         />
                     {:else if field.field_type === 'text'}
                         <input 
+                            id={field.field_name}
                             type="text" 
                             bind:value={values[field.field_name]}
                             placeholder={field.field_label}
                         />
                     {:else if field.field_type === 'textarea'}
                         <textarea 
+                            id={field.field_name}
                             bind:value={values[field.field_name]}
                             placeholder={field.field_label}
                         ></textarea>
                     {:else if field.field_type === 'date'}
                         <input 
+                            id={field.field_name}
                             type="date" 
                             bind:value={values[field.field_name]}
                         />
                     {:else}
                         <input 
+                            id={field.field_name}
                             type="text" 
                             bind:value={values[field.field_name]}
                             placeholder={field.field_label}
