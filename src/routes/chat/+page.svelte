@@ -3,68 +3,81 @@
     import { browser } from "$app/environment";
     import { goto, afterNavigate, invalidateAll } from "$app/navigation";
     import { page } from '$app/stores';
+    import TemplatePopup from "$lib/components/templates/TemplatePopup.svelte";
+    import TemplateInputForm from "$lib/components/templates/TemplateInputForm.svelte";
     import ChatSidebar from "$lib/components/chat/ChatSidebar.svelte";
     import ChatHeader from "$lib/components/chat/ChatHeader.svelte";
     import MessageList from "$lib/components/chat/MessageList.svelte";
-    import TemplatePopup from "$lib/components/templates/TemplatePopup.svelte";
     import TemplateDesigner from "$lib/components/templates/designer/TemplateDesigner.svelte";
     import TemplateForm from "$lib/components/templates/form/TemplateForm.svelte";
     import { supabase } from '$lib/supabase';
     import type { RealtimeChannel } from '@supabase/supabase-js';
 
-    // ALL STATE - reset-safe
+    /* -----------------------------
+       STATE
+    ------------------------------*/
+
     let groups: any[] = [];
     let contacts: any[] = [];
     let messages: any[] = [];
+
     let selectedGroup: any = null;
     let selectedContact: any = null;
     let selectedRoomId: string | null = null;
+
     let showCreateTemplate = false;
     let showTemplateDesigner = false;
-    let showTemplatePopup = false;
-    let showTemplateForm = false;
-    let showGroupForm = false;
-    let showContactForm = false;
-    let selectedTemplate: any = null;
-    let templates: any[] = [];
-    let templateFields: any[] = [];
+
     let message = "";
     let typingStatus = "";
+
     let isLoadingMessages = false;
     let isLoadingOlder = false;
+
     let subscription: RealtimeChannel | null = null;
+
+    // Network status
     let isOnline = true;
     let lastSync = '';
+
     let online = false;
     let typing = false;
+
+    // Emoji
     let showEmoji = false;
     let emojiPicker: any;
     let emojiPickerContainer: HTMLElement;
+
+    // Mic recording
     let isRecording = false;
     let mediaRecorder: MediaRecorder | null = null;
     let audioChunks: Blob[] = [];
     let micStream: MediaStream | null = null;
-    let groupName = "";
-    let groupDesc = "";
-    let contactName = "";
-    let contactMobile = "";
-    let department = "";
-    let contactEmail = "";
 
-    // NAVIGATION GUARD - prevents double init
+    // NAVIGATION GUARD
     let isInitializing = false;
-let isDataLoaded = false;
-    let componentMounted = false;
+
+    /* -----------------------------
+       INDEXEDDB - FIX #4: Use index
+    ------------------------------*/
 
     let dbPromise: any = null;
 
     async function initDB() {
         if (!browser || dbPromise) return dbPromise;
         const { openDB } = await import('idb');
-        dbPromise = openDB('erp-chat-cache', 1, {
-            upgrade(db) {
-                db.createObjectStore('messages', { keyPath: 'id' });
-                db.createObjectStore('chats', { keyPath: 'id' });
+        dbPromise = openDB('erp-chat-cache', 2, {
+            upgrade(db, oldVersion) {
+                if (oldVersion < 1) {
+                    db.createObjectStore('messages', { keyPath: 'id' });
+                    db.createObjectStore('chats', { keyPath: 'id' });
+                }
+                if (oldVersion < 2) {
+                    // FIX #4: Add index for fast room queries
+                    const msgStore = db.transaction('messages').objectStore('messages');
+                    msgStore.createIndex('room_id_index', 'room_id');
+                    msgStore.createIndex('room_created_index', ['room_id', 'created_at']);
+                }
             }
         });
         return dbPromise;
@@ -80,21 +93,58 @@ let isDataLoaded = false;
         } catch (e) { console.error('Cache failed:', e); }
     }
 
+    // FIX #4: Use index instead of getAll() + filter
     async function getCachedMessages(roomId: string, beforeTs?: number) {
         if (!browser) return [];
         try {
             const db = await initDB();
-            const all = await db.getAll('messages');
-            let filtered = all.filter(m => m.room_id === roomId);
-            if (beforeTs) filtered = filtered.filter(m => m.created_at < beforeTs);
-            return filtered
-             .sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-             .slice(0, 50)
-             .reverse();
+            const tx = db.transaction('messages');
+            const index = tx.store.index('room_created_index');
+            
+            let range;
+            if (beforeTs) {
+                range = IDBKeyRange.bound([roomId, -Infinity], [roomId, beforeTs], false, true);
+            } else {
+                range = IDBKeyRange.bound([roomId, -Infinity], [roomId, Infinity]);
+            }
+            
+            const msgs = await index.getAll(range, 20); // FIX #6: Only 20 msgs first load
+            return msgs.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
         } catch (e) { return []; }
     }
 
-    // AUTH - SSR SAFE
+    /* -----------------------------
+       POPUPS
+    ------------------------------*/
+
+    let showGroupForm = false;
+    let showContactForm = false;
+
+    /* -----------------------------
+       TEMPLATE UI
+    ------------------------------*/
+
+    let showTemplatePopup = false;
+    let showTemplateForm = false;
+    let selectedTemplate: any = null;
+    let templates: any[] = [];
+    let templateFields: any[] = [];
+
+    /* -----------------------------
+       FORM DATA
+    ------------------------------*/
+
+    let groupName = "";
+    let groupDesc = "";
+    let contactName = "";
+    let contactMobile = "";
+    let department = "";
+    let contactEmail = "";
+
+    /* -----------------------------
+       AUTH - SSR SAFE
+    ------------------------------*/
+
     function token(): string {
         if (!browser) return "";
         return localStorage.getItem("token") || "";
@@ -111,9 +161,17 @@ let isDataLoaded = false;
         return localStorage.getItem("userId") || "";
     }
 
+    /* -----------------------------
+       ROOM ID
+    ------------------------------*/
+
     function getRoomId(userId1: string, userId2: string) {
         return [userId1, userId2].sort().join('_');
     }
+
+    /* -----------------------------
+       NETWORK TEST
+    ------------------------------*/
 
     async function testNetwork() {
         try {
@@ -126,6 +184,10 @@ let isDataLoaded = false;
             return false;
         }
     }
+
+    /* -----------------------------
+       GROUPS
+    ------------------------------*/
 
     async function loadGroups() {
         if (!token()) { goto("/login"); return; }
@@ -140,24 +202,32 @@ let isDataLoaded = false;
         }
     }
 
+    /* -----------------------------
+       CONTACTS
+    ------------------------------*/
+
     async function loadContacts() {
         try {
             const userId = getCurrentUserId();
             if (!userId) return;
             const { data, error } = await supabase
-             .from('rooms')
-             .select(`id, user1_id, user2_id, user1:user1_id(id, name, mobile, email), user2:user2_id(id, name, mobile, email)`)
-             .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
+            .from('rooms')
+            .select(`id, user1_id, user2_id, user1:user1_id(id, name, mobile, email), user2:user2_id(id, name, mobile, email)`)
+            .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
             if (error) throw error;
             contacts = (data || []).map((room: any) => {
                 const otherUser = room.user1_id === userId? room.user2 : room.user1;
-                return { ...otherUser, room_id: room.id, user1_id: room.user1_id, user2_id: room.user2_id, members: [room.user1, room.user2] };
+                return {...otherUser, room_id: room.id, user1_id: room.user1_id, user2_id: room.user2_id, members: [room.user1, room.user2] };
             });
         } catch (err) {
             console.error("loadContacts error:", err);
             isOnline = false;
         }
     }
+
+    /* -----------------------------
+       TEMPLATES
+    ------------------------------*/
 
     async function loadTemplates() {
         try {
@@ -173,11 +243,15 @@ let isDataLoaded = false;
     async function loadTemplateFields(templateId: number) {
         try {
             const res = await fetch(`/api/templates/fields?id=${templateId}`, { headers: authHeader() });
-            templateFields = res.ok ? await res.json() : [];
+            templateFields = res.ok? await res.json() : [];
         } catch (err) {
             templateFields = [];
         }
     }
+
+    /* -----------------------------
+       SELECT CONTACT/GROUP
+    ------------------------------*/
 
     async function selectContact(event: any) {
         const contact = event.detail?? event;
@@ -200,10 +274,15 @@ let isDataLoaded = false;
         await tick();
     }
 
+    /* -----------------------------
+       MESSAGES - FIX #1 + #2 + #6
+    ------------------------------*/
+
     async function loadMessages(roomId?: string) {
-        if (isLoadingMessages || !roomId) { messages = []; return; }
+        if (isLoadingMessages ||!roomId) { messages = []; return; }
         isLoadingMessages = true;
         try {
+            // 1. Try cache first - 0 server load
             const cached = await getCachedMessages(roomId);
             if (cached.length > 0) {
                 messages = cached;
@@ -212,27 +291,44 @@ let isDataLoaded = false;
                 isLoadingMessages = false;
                 return;
             }
+            
             if (!(await testNetwork())) { isLoadingMessages = false; return; }
-            const { data, error } = await supabase.from("messages").select("*").eq("room_id", roomId).order("created_at", { ascending: false }).limit(50);
+            
+            // FIX #1: Single query with JOIN - eliminates N+1
+            const { data, error } = await supabase
+            .from("messages")
+            .select("*, users:sender_id(id, name, mobile)")
+            .eq("room_id", roomId)
+            .order("created_at", { ascending: false })
+            .limit(20); // FIX #6: Only 20 msgs first load
+            
             if (error) throw error;
-            const processed = await Promise.all((data || []).reverse().map(async (m: any) => {
-                try {
-                    const { data: user } = await supabase.from("users").select("id, name, mobile").eq("id", m.sender_id).maybeSingle();
-                    m.users = user?? null;
-                } catch (err) { m.users = null; }
-                m.is_own = m.sender_id === getCurrentUserId();
-                if (m.report_id) {
-                    try {
-                        const r = await fetch(`/api/templates/report-view?id=${m.report_id}`, { headers: authHeader() });
-                        if (r.ok) {
-                            const reportData = await r.json();
-                            m.report = reportData.data || reportData;
-                            m.type = "template";
-                        }
-                    } catch (err) {}
-                }
-                return m;
+
+            let processed = (data || []).reverse().map((m: any) => ({
+                ...m,
+                is_own: m.sender_id === getCurrentUserId()
             }));
+
+            // FIX #2: Batch fetch all reports in 1 call
+            const reportIds = processed.filter(m => m.report_id).map(m => m.report_id);
+            if (reportIds.length > 0) {
+                try {
+                    const r = await fetch(`/api/templates/reports/batch`, {
+                        method: 'POST',
+                        headers: { "Content-Type": "application/json", ...authHeader() },
+                        body: JSON.stringify({ ids: reportIds })
+                    });
+                    if (r.ok) {
+                        const reportsMap = await r.json(); // { id: reportData }
+                        processed = processed.map(m => ({
+                            ...m,
+                            report: reportsMap[m.report_id] || null,
+                            type: m.report_id ? "template" : m.type
+                        }));
+                    }
+                } catch (err) { console.error("Batch report fetch error:", err); }
+            }
+
             messages = processed;
             await cacheMessages(processed);
             await tick();
@@ -254,30 +350,39 @@ let isDataLoaded = false;
         isLoadingOlder = false;
     }
 
+    /* -----------------------------
+       REALTIME
+    ------------------------------*/
+
     function subscribeToChat(roomId?: string) {
-        if (subscription) { 
+        if (subscription) {
             try { supabase.removeChannel(subscription); } catch(e){}
-            subscription = null; 
+            subscription = null;
         }
         if (!roomId) return;
         subscription = supabase.channel(`room:${roomId}`)
-         .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${roomId}` },
+        .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${roomId}` },
             async (payload) => {
                 const newMsg: any = payload.new;
                 if (messages.some(m => m.id === newMsg.id)) return;
-                const { data: user } = await supabase.from("users").select("id, name, mobile").eq("id", newMsg.sender_id).maybeSingle();
-                newMsg.users = user?? null;
+                
+                // FIX #1: Don't fetch user again, we have sender_id
                 newMsg.is_own = newMsg.sender_id === getCurrentUserId();
+                
                 messages = [...messages, newMsg];
                 await cacheMessages([newMsg]);
                 await tick();
                 scrollToBottom();
             })
-         .subscribe((status) => {
+        .subscribe((status) => {
                 if (status === 'SUBSCRIBED') { isOnline = true; online = true; }
                 if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { isOnline = false; online = false; }
             });
     }
+
+    /* -----------------------------
+       SCROLL
+    ------------------------------*/
 
     function scrollToBottom() {
         requestAnimationFrame(() => {
@@ -292,13 +397,17 @@ let isDataLoaded = false;
         if (target.scrollTop === 0) loadOlderMessages();
     }
 
+    /* -----------------------------
+       SEND MESSAGE
+    ------------------------------*/
+
     async function sendMessage() {
         const text = message.trim();
         if (!text ||!selectedRoomId || (!selectedContact &&!selectedGroup)) return;
         try {
             const response = await fetch("/api/messages/send", {
                 method: "POST",
-                headers: { "Content-Type": "application/json", ...authHeader() },
+                headers: { "Content-Type": "application/json",...authHeader() },
                 body: JSON.stringify({ roomId: selectedRoomId, receiverId: selectedContact?.id || selectedGroup?.id, message: text })
             });
             const result = await response.json();
@@ -312,6 +421,10 @@ let isDataLoaded = false;
             isOnline = false;
         }
     }
+
+    /* -----------------------------
+       CREATE GROUP/CONTACT
+    ------------------------------*/
 
     async function createGroup() {
         if (!groupName.trim()) { alert('Group name required'); return; }
@@ -341,7 +454,7 @@ let isDataLoaded = false;
                 contactId = newUser.id;
             }
             const { error: roomError } = await supabase.from('rooms').insert({ user1_id: userId < contactId? userId : contactId, user2_id: userId < contactId? contactId : userId });
-            if (roomError && !roomError.message.includes('duplicate')) throw roomError;
+            if (roomError &&!roomError.message.includes('duplicate')) throw roomError;
             contactName = ""; contactMobile = ""; contactEmail = ""; department = ""; showContactForm = false;
             await loadContacts();
             alert('Contact created successfully');
@@ -364,6 +477,10 @@ let isDataLoaded = false;
         selectedGroup = null; selectedRoomId = null;
     }
 
+    /* -----------------------------
+       MIC
+    ------------------------------*/
+
     async function toggleRecording() {
         if (!isRecording) {
             try {
@@ -385,19 +502,23 @@ let isDataLoaded = false;
         }
     }
 
+    /* -----------------------------
+       TEMPLATE HANDLERS
+    ------------------------------*/
+
     async function useTemplate(event: any) { selectedTemplate = event.detail; showTemplatePopup = false; await loadTemplateFields(selectedTemplate.id); showTemplateForm = true; }
     async function installTemplate(msg: any) {
         try {
-            const res = await fetch("/api/templates/install", { method: "POST", headers: { "Content-Type": "application/json", ...authHeader() }, body: JSON.stringify({ template_code: msg.template_code, template_id: msg.template_id, version: msg.template_version, name: msg.template_name, user: "Mani" }) });
+            const res = await fetch("/api/templates/install", { method: "POST", headers: { "Content-Type": "application/json",...authHeader() }, body: JSON.stringify({ template_code: msg.template_code, template_id: msg.template_id, version: msg.template_version, name: msg.template_name, user: "Mani" }) });
             const data = await res.json();
-            if (data.success) { alert("✅ Template Installed Successfully"); await loadTemplates(); } 
+            if (data.success) { alert("✅ Template Installed Successfully"); await loadTemplates(); }
             else { alert("❌ Installation Failed"); }
         } catch (err) { alert("❌ Installation Failed"); }
     }
 
     async function sendTemplateReport(e: any) {
         try {
-            const res = await fetch("/api/templates/report", { method: "POST", headers: { "Content-Type": "application/json", ...authHeader() }, body: JSON.stringify({ template: e.detail.template, values: e.detail.values, sender: "Mani", room_id: selectedRoomId }) });
+            const res = await fetch("/api/templates/report", { method: "POST", headers: { "Content-Type": "application/json",...authHeader() }, body: JSON.stringify({ template: e.detail.template, values: e.detail.values, sender: "Mani", room_id: selectedRoomId }) });
             const data = await res.json();
             if (!res.ok) { alert(data.error || "Failed to send report"); return; }
             alert("✅ Report Sent Successfully");
@@ -416,24 +537,37 @@ let isDataLoaded = false;
         showTemplateForm = true;
     }
 
-    // CORE: Bulletproof init - runs on mount + every navigation
+    /* -----------------------------
+       BULLETPROOF INIT - FIX #5
+    ------------------------------*/
+
     async function initChat() {
-        if (isInitializing || !browser) return;
+        if (isInitializing ||!browser) return;
         isInitializing = true;
-        isDataLoaded = false; // ADD THIS
-        
+
         try {
             const userId = getCurrentUserId();
             if (!userId) { goto("/login"); return; }
-            
-            // Kill old subscription FIRST
-            if (subscription) { 
+
+            // Reset ALL state
+            selectedGroup = null;
+            selectedContact = null;
+            selectedRoomId = null;
+            messages = [];
+            showEmoji = false;
+            showGroupForm = false;
+            showContactForm = false;
+            showTemplatePopup = false;
+            showTemplateForm = false;
+
+            // Kill old subscription
+            if (subscription) {
                 try { supabase.removeChannel(subscription); } catch(e){}
-                subscription = null; 
+                subscription = null;
             }
-            
+
             await initDB();
-            
+
             // Load emoji picker once
             if (!emojiPicker) {
                 try {
@@ -446,36 +580,24 @@ let isDataLoaded = false;
                     });
                 } catch (e) {}
             }
-            
-            // Load data
-            await Promise.all([loadGroups(), loadContacts()]);
+
+            // FIX #5: Don't block UI - load sidebar in background
+            loadGroups();
+            loadContacts();
             testNetwork();
-            
-            // THEN reset UI state after data is loaded
-            selectedGroup = null; 
-            selectedContact = null; 
-            selectedRoomId = null; 
-            messages = []; 
-            showEmoji = false;
-            showGroupForm = false;
-            showContactForm = false;
-            showTemplatePopup = false;
-            showTemplateForm = false;
-            
-            isDataLoaded = true; // ADD THIS
         } finally {
             isInitializing = false;
         }
     }
 
-    onMount(async () => { 
-        await initChat(); 
+    onMount(async () => {
+        await initChat();
     });
 
-    afterNavigate(async () => { 
+    afterNavigate(async () => {
         await invalidateAll();
         await tick();
-        await initChat(); 
+        await initChat();
     });
 
     onDestroy(() => {
@@ -486,6 +608,7 @@ let isDataLoaded = false;
     });
 </script>
 
+<!-- FIX #3: Only ONE template block -->
 {#key $page.url.pathname}
 <svelte:boundary onerror={(e) => console.error('CHAT CRASH:', e)}>
 <div class="chat-container">
@@ -545,22 +668,6 @@ let isDataLoaded = false;
 </svelte:boundary>
 {/key}
 
-<!-- Update the template guard -->
-{#key $page.url.pathname}
-<svelte:boundary onerror={(e) => console.error('CHAT CRASH:', e)}>
-    {#if isDataLoaded}
-        <div class="chat-container">
-            <!-- existing template -->
-        </div>
-    {:else if browser && componentMounted}
-        <div class="chat-container">
-            <div style="flex:1; display:flex; justify-content:center; align-items:center;">
-                <p>Loading chat...</p>
-            </div>
-        </div>
-    {/if}
-</svelte:boundary>
-{/key}
 {#if showGroupForm}
 <div class="popup">
     <div class="popup-card">
