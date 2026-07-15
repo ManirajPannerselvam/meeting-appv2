@@ -10,7 +10,6 @@
     let shouldAutoScroll = true;
     let userScrolledUp = false;
 
-    // FIXED: Only auto-scroll if user is at bottom
     afterUpdate(() => {
         if (messagesContainer && shouldAutoScroll && !userScrolledUp) {
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -32,11 +31,15 @@
     }
 
     function isImage(url: string) {
-        return /\.(jpg|jpeg|png|gif|webp)$/i.test(url);
+        return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
     }
 
     function isAudio(url: string) {
         return /\.(mp3|wav|ogg|webm|m4a)$/i.test(url);
+    }
+
+    function isVideo(url: string) {
+        return /\.(mp4|webm|mov)$/i.test(url);
     }
 
     function getFileName(url: string) {
@@ -74,7 +77,6 @@
         previewImage = null;
     }
 
-    // ADDED: Close preview on ESC
     onMount(() => {
         const handleEsc = (e: KeyboardEvent) => {
             if (e.key === 'Escape' && previewImage) closePreview();
@@ -82,14 +84,38 @@
         window.addEventListener('keydown', handleEsc);
         return () => window.removeEventListener('keydown', handleEsc);
     });
+
+    // FIX 1: Keyboard support for img click
+    function handleImageKeydown(event: KeyboardEvent, url: string) {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openPreview(url);
+        }
+    }
 </script>
 
 <div class="messages-container" bind:this={messagesContainer} on:scroll={handleScroll}>
     {#each messages as msg (msg.id)}
         <div class="message-wrapper" class:own={msg.is_own}>
             <div class="message-bubble">
+                
+                <!-- Template Message - முதல்ல check பண்ணுங்க -->
+                {#if msg.type === 'template' && msg.template_data}
+                    <div class="template-message">
+                        <div class="template-name">📋 {msg.template_data.name || 'Template'}</div>
+                        {#each Object.entries(msg.template_data.values || {}) as [key, value]}
+                            <div class="template-field">
+                                <span class="field-label">{key}:</span>
+                                <span class="field-value">{value || '-'}</span>
+                            </div>
+                        {/each}
+                    </div>
+                    {#if msg.content}
+                        <div class="message-text mt-2">{msg.content}</div>
+                    {/if}
+                
                 <!-- Text content -->
-                {#if msg.content}
+                {:else if msg.content}
                     <div class="message-text">{msg.content}</div>
                 {/if}
 
@@ -99,35 +125,45 @@
                         {#each msg.attachments as url}
                             {#if isImage(url)}
                                 <div class="attachment-wrapper">
+                                    <!-- FIX 2: A11y - role + tabindex + keydown -->
                                     <img 
                                         src={url} 
                                         alt="attachment" 
                                         class="attachment-image"
+                                        role="button"
+                                        tabindex="0"
                                         on:click={() => openPreview(url)}
+                                        on:keydown={(e) => handleImageKeydown(e, url)}
                                         loading="lazy"
                                     />
                                     <button 
                                         class="download-btn"
                                         on:click|stopPropagation={() => downloadFile(url, getFileName(url))}
                                         title="Download"
+                                        aria-label="Download image"
                                     >
                                         ⬇️
                                     </button>
                                 </div>
                             {:else if isAudio(url)}
-                                <!-- ADDED: Voice/Audio support -->
                                 <div class="voice-msg">
                                     <audio controls src={url} preload="metadata"></audio>
                                 </div>
+                            {:else if isVideo(url)}
+                                <!-- ADDED: Video support -->
+                                <div class="video-msg">
+                                    <video controls src={url} preload="metadata"></video>
+                                </div>
                             {:else}
                                 <div class="attachment-file-wrapper">
-                                    <a href={url} target="_blank" class="attachment-file">
+                                    <a href={url} target="_blank" rel="noopener noreferrer" class="attachment-file">
                                         📎 {getFileName(url)}
                                     </a>
                                     <button 
                                         class="download-btn-file"
                                         on:click={() => downloadFile(url, getFileName(url))}
                                         title="Download"
+                                        aria-label="Download file"
                                     >
                                         ⬇️
                                     </button>
@@ -137,28 +173,15 @@
                     </div>
                 {/if}
 
-                <!-- Template message -->
-                {#if msg.type === 'template' && (msg.template_data || msg.report)}
-                    <div class="template-message">
-                        <div class="template-name">📋 {msg.content || msg.report?.template_name}</div>
-                        {#each Object.entries(msg.template_data || msg.report?.values || {}) as [key, value]}
-                            <div class="template-field">
-                                <span class="field-label">{key}:</span>
-                                <span class="field-value">{value}</span>
-                            </div>
-                        {/each}
-                    </div>
-                {/if}
-
                 <!-- Timestamp + status -->
                 <div class="message-meta">
                     <span class="time">{formatTime(msg.created_at)}</span>
                     {#if msg.is_own}
                         <span class="status">
+                            {#if msg.status === 'sending'}🕐{/if}
                             {#if msg.status === 'sent'}✓{/if}
                             {#if msg.status === 'delivered'}✓✓{/if}
                             {#if msg.status === 'read' || msg.read_at}<span class="read">✓✓</span>{/if}
-                            {#if !msg.status && msg.id}✓✓{/if}
                         </span>
                     {/if}
                 </div>
@@ -169,9 +192,15 @@
 
 <!-- Image Preview Modal -->
 {#if previewImage}
-    <div class="preview-modal" on:click={closePreview}>
+    <div 
+        class="preview-modal" 
+        on:click={closePreview}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Image preview"
+    >
         <div class="preview-content" on:click|stopPropagation>
-            <button class="close-preview" on:click={closePreview}>×</button>
+            <button class="close-preview" on:click={closePreview} aria-label="Close preview">×</button>
             <img src={previewImage} alt="Preview" />
             <button 
                 class="preview-download"
@@ -208,8 +237,8 @@
     box-shadow: 0 1px 2px rgba(0,0,0,.08);
 }
 
-/* FIXED: Added space */
-.message-wrapper.own.message-bubble {
+/* FIX 3: CSS Selector fix - space இல்ல */
+.message-wrapper.own .message-bubble {
     background: #d9fdd3;
 }
 
@@ -218,6 +247,10 @@
     line-height: 1.4;
     word-wrap: break-word;
     white-space: pre-wrap;
+}
+
+.mt-2 {
+    margin-top: 8px;
 }
 
 .attachments {
@@ -240,8 +273,9 @@
     display: block;
 }
 
-.attachment-image:hover {
+.attachment-image:hover, .attachment-image:focus {
     opacity: 0.9;
+    outline: 2px solid #00a884;
 }
 
 .download-btn {
@@ -263,7 +297,8 @@
     transition: opacity 0.2s;
 }
 
-.attachment-wrapper:hover .download-btn {
+.attachment-wrapper:hover .download-btn,
+.attachment-wrapper:focus-within .download-btn {
     opacity: 1;
 }
 
@@ -307,12 +342,15 @@
     background: #e9edef;
 }
 
-/* ADDED: Voice message style */
-.voice-msg audio {
+.voice-msg audio, .video-msg video {
     width: 100%;
     max-width: 280px;
-    height: 40px;
     margin-top: 4px;
+}
+
+.video-msg video {
+    max-height: 300px;
+    border-radius: 8px;
 }
 
 .template-message {
@@ -323,15 +361,23 @@
     margin-top: 4px;
 }
 
+.message-wrapper.own .template-message {
+    background: #dbeafe;
+    border-color: #93c5fd;
+}
+
 .template-name {
     font-weight: 600;
     margin-bottom: 8px;
     font-size: 14px;
+    color: #1f2937;
 }
 
 .template-field {
     font-size: 13px;
     margin: 4px 0;
+    display: flex;
+    gap: 4px;
 }
 
 .field-label {
@@ -342,7 +388,7 @@
 
 .field-value {
     color: #111b21;
-    margin-left: 4px;
+    word-break: break-word;
 }
 
 .message-meta {
@@ -432,7 +478,7 @@
     .message-bubble {
         max-width: 80%;
     }
-    .attachment-image {
+    .attachment-image, .video-msg video {
         max-width: 200px;
     }
 }

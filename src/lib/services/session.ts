@@ -1,13 +1,14 @@
 export function getCurrentUser() {
-  const user = localStorage.getItem(
-    "currentUser"
-  );
+    if (typeof localStorage === "undefined") return null;
 
-  return user ? JSON.parse(user) : null;
+    try {
+        const user = localStorage.getItem("currentUser");
+        return user ? JSON.parse(user) : null;
+    } catch {
+        return null;
+    }
 }
 
 export function isAdmin() {
-  const user = getCurrentUser();
-
-  return user?.role === "Admin";
+    return getCurrentUser()?.role === "Admin";
 }

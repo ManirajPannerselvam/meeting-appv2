@@ -1,12 +1,11 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { getTemplates } from "$lib/db/database";
+    import { supabaseTemplates } from "$lib/supabase";
     import { createEventDispatcher } from "svelte";
 
     const dispatch = createEventDispatcher();
 
     export let search = "";
-
     let department = "All";
 
     const departments = [
@@ -23,7 +22,13 @@
 
     async function loadTemplates() {
         try {
-            templates = await getTemplates();
+            const { data, error } = await supabaseTemplates
+                .from('templates')
+                .select('*')
+                .order('created_at', { ascending: false });
+                
+            if (error) throw error;
+            templates = data || [];
         } catch (e) {
             console.error("Failed to load templates", e);
             templates = [];
@@ -81,9 +86,12 @@
                 </div>
                 <div class="info">
                     <h3>{t.name}</h3>
-                    <small>{t.department}</small>
+                    <small>{t.department || 'General'}</small>
                     <div class="chart">
-                        {t.chart}
+                        {t.chart_x || t.chart || 'No chart'}
+                    </div>
+                    <div class="fields-count">
+                        {t.fields?.length || 0} fields
                     </div>
                 </div>
                 <button
@@ -107,6 +115,13 @@
     padding: 10px;
     border: 1px solid #d6dbe5;
     border-radius: 8px;
+    font-size: 15px;
+    box-sizing: border-box;
+}
+
+.toolbar input:focus {
+    outline: none;
+    border-color: #3b82f6;
 }
 
 .departments {
@@ -122,6 +137,14 @@
     border-radius: 8px;
     background: #f3f4f6;
     cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #475569;
+    transition: all 0.2s;
+}
+
+.departments button:hover {
+    background: #e5e7eb;
 }
 
 .departments button.selected {
@@ -133,7 +156,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 20px;
-    width: 100%; /* fills parent column */
+    width: 100%;
 }
 
 .template-card {
@@ -141,10 +164,18 @@
     border-radius: 12px;
     padding: 16px;
     box-shadow: 0 4px 12px rgba(0,0,0,.08);
-    width: 100%; /* no fixed px width */
+    width: 100%;
     display: flex;
     flex-direction: column;
     gap: 10px;
+    box-sizing: border-box;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+}
+
+.template-card:hover {
+    border-color: #3b82f6;
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.2);
 }
 
 .template-card .icon {
@@ -152,17 +183,26 @@
 }
 
 .template-card .info h3 {
-    margin: 0;
+    margin: 0 0 4px 0;
     font-size: 18px;
     color: #1e293b;
 }
 
 .template-card .info small {
     color: #64748b;
+    font-size: 13px;
 }
 
 .template-card .chart {
     margin-top: 8px;
+    font-size: 13px;
+    color: #3b82f6;
+}
+
+.fields-count {
+    font-size: 12px;
+    color: #94a3b8;
+    margin-top: 4px;
 }
 
 .template-card .use {
@@ -173,6 +213,19 @@
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    font-weight: bold;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.template-card .use:hover {
+    background: #15803d;
+}
+
+.empty {
+    grid-column: 1 / -1;
+    text-align: center;
+    padding: 40px;
+    color: #94a3b8;
+    font-size: 15px;
 }
 </style>

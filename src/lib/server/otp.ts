@@ -1,3 +1,8 @@
-export function generateOTP() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+import { randomInt } from "crypto";
+
+/**
+ * Generate a secure random 6-digit OTP
+ */
+export function generateOTP(): string {
+    return randomInt(100000, 1000000).toString();
 }

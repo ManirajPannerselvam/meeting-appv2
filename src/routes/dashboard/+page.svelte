@@ -1,412 +1,467 @@
 <script lang="ts">
+import { onMount } from "svelte";
+import { goto } from "$app/navigation";
 
-const now = new Date();
+import ProductionSummary from "$lib/components/dashboard/ProductionSummary.svelte";
+import MeetingSummary from "$lib/components/dashboard/MeetingSummary.svelte";
+import ActionSummary from "$lib/components/dashboard/ActionSummary.svelte";
+import ReportSummary from "$lib/components/dashboard/ReportSummary.svelte";
 
-const currentTime = now.toLocaleTimeString();
+import RecentMeetings from "$lib/components/dashboard/RecentMeetings.svelte";
+import RecentActions from "$lib/components/dashboard/RecentActions.svelte";
 
-const shift =
-    now.getHours() < 14
-        ? "Shift A"
-        : now.getHours() < 22
-        ? "Shift B"
-        : "Shift C";
+import ProductionTrend from "$lib/components/dashboard/ProductionTrend.svelte";
 
-let production = {
+import AISummary from "$lib/components/dashboard/AISummary.svelte";
+import DowntimeSummary from "$lib/components/dashboard/DowntimeSummary.svelte";
 
-    target: 120000,
+import {
+    dashboard,
+    startDashboardRefresh
+} from "$lib/stores/dashboard";
 
-    actual: 118450,
+import {
+    aiSummary,
+    startAISummaryRefresh
+} from "$lib/stores/aiSummary";
 
-    good: 117420,
+import {
+    machineDowntime,
+    startMachineDowntimeRefresh
+} from "$lib/stores/machineDowntime";
 
-    ng: 1030,
+let stopDashboardRefresh: (() => void) | undefined;
 
-    yield: 99.12,
+let stopAIRefresh: (() => void) | undefined;
 
-    rr: 0.42,
+let stopDowntimeRefresh: (() => void) | undefined;
 
-    uph: 1180,
+onMount(() => {
 
-    dt: 45,
+    stopDashboardRefresh = startDashboardRefresh();
 
-    oee: 88.4
+    stopAIRefresh = startAISummaryRefresh();
 
-};
+    stopDowntimeRefresh = startMachineDowntimeRefresh();
 
-$: achievement = (
-    production.actual /
-    production.target *
-    100
-).toFixed(1);
+    return () => {
 
-const lines = [
+        stopDashboardRefresh?.();
 
-{
-line:"SMT-01",
-status:"Running",
-target:25000,
-actual:24880,
-yield:99.35,
-rr:0.31,
-oee:91
-},
+        stopAIRefresh?.();
 
-{
-line:"SMT-02",
-status:"Running",
-target:25000,
-actual:24650,
-yield:98.92,
-rr:0.62,
-oee:89
-},
+        stopDowntimeRefresh?.();
 
-{
-line:"SMT-03",
-status:"Breakdown",
-target:25000,
-actual:21450,
-yield:97.81,
-rr:1.35,
-oee:71
-},
+    };
 
-{
-line:"FATP-01",
-status:"Running",
-target:45000,
-actual:44520,
-yield:99.56,
-rr:0.22,
-oee:94
-}
+});
+$: production = $dashboard.production ?? [];
 
-];
+$: meetings = $dashboard.meetings ?? [];
+
+$: actions = $dashboard.actions ?? [];
+
+$: downtime = $machineDowntime.today ?? [];
+
+$: todayMeetings =
+meetings.filter(m=>m.status==="Today").length;
+
+$: upcomingMeetings =
+meetings.filter(m=>m.status==="Upcoming").length;
+
+$: completedMeetings =
+meetings.filter(m=>m.status==="Completed").length;
+
+$: pendingActions =
+actions.filter(a=>a.status!=="Completed").length;
+
+$: totalReports = production.length;
+
+$: totalTarget =
+production.reduce((t,r)=>t+Number(r.target||0),0);
+
+$: totalActual =
+production.reduce((t,r)=>t+Number(r.actual||0),0);
+
+$: totalNG =
+production.reduce((t,r)=>t+Number(r.ng||0),0);
+
+$: avgYield =
+production.length
+?
+(
+production.reduce(
+(t,r)=>t+Number(r.yield||0),0
+)
+/
+production.length
+).toFixed(2)
+:
+"0.00";
 
 </script>
-<div class="page">
 
-<h1>🏭 EMS Production Dashboard</h1>
+<div class="dashboard">
 
-<div class="cards">
+    <!-- AI Executive Summary -->
 
-<div class="card blue">
-<h2>{production.target.toLocaleString()}</h2>
-<p>Daily Target</p>
-</div>
+    <AISummary
+        summary={$aiSummary}
+    />
 
-<div class="card green">
-<h2>{production.actual.toLocaleString()}</h2>
-<p>Actual Output</p>
-</div>
+    <!-- Top Summary -->
 
-<div class="card teal">
-<h2>{achievement}%</h2>
-<p>Achievement</p>
-</div>
+    <div class="top-cards">
 
-<div class="card cyan">
-<h2>{production.yield}%</h2>
-<p>Yield</p>
-</div>
+        <ProductionSummary production={production}/>
 
-<div class="card orange">
-<h2>{production.ng}</h2>
-<p>NG Qty</p>
-</div>
+        <MeetingSummary meetings={meetings}/>
 
-<div class="card red">
-<h2>{production.rr}%</h2>
-<p>Reject Rate</p>
-</div>
+        <ActionSummary actions={actions}/>
 
-<div class="card purple">
-<h2>{production.uph}</h2>
-<p>UPH</p>
-</div>
+        <ReportSummary reports={production}/>
 
-<div class="card dark">
-<h2>{production.oee}%</h2>
-<p>OEE</p>
-</div>
+        <DowntimeSummary downtime={downtime}/>
 
-<div class="card gray">
-<h2>{production.dt} min</h2>
-<p>Downtime</p>
-</div>
+    </div>
 
-</div>
-<div class="summary">
+    <!-- KPI Cards -->
 
-<div>
+    <div class="kpi-grid">
 
-<b>Current Shift</b>
+        <div
+            class="card blue clickable"
+            on:click={() => goto("/meeting-list?filter=today")}
+        >
+            <h2>{todayMeetings}</h2>
+            <p>Today's Meetings</p>
+        </div>
 
-<p>{shift}</p>
+        <div
+            class="card green clickable"
+            on:click={() => goto("/meeting-list?filter=upcoming")}
+        >
+            <h2>{upcomingMeetings}</h2>
+            <p>Upcoming Meetings</p>
+        </div>
 
-</div>
+        <div
+            class="card red clickable"
+            on:click={() => goto("/meeting-actions")}
+        >
+            <h2>{pendingActions}</h2>
+            <p>Pending Actions</p>
+        </div>
 
-<div>
+        <div
+            class="card orange clickable"
+            on:click={() => goto("/report-summary")}
+        >
+            <h2>{totalReports}</h2>
+            <p>Production Reports</p>
+        </div>
 
-<b>Good Qty</b>
+        <div
+            class="card purple clickable"
+            on:click={() => goto("/machine-downtime")}
+        >
+            <h2>{$machineDowntime.totalMinutes}</h2>
+            <p>Today's Downtime</p>
+        </div>
 
-<p>{production.good.toLocaleString()}</p>
+        <div
+            class="card dark clickable"
+            on:click={() => goto("/ai-summary")}
+        >
+            <h2>🤖</h2>
+            <p>AI Executive Summary</p>
+        </div>
 
-</div>
+    </div>
 
-<div>
+    <!-- Recent -->
 
-<b>NG Qty</b>
+    <div class="middle-grid">
 
-<p>{production.ng.toLocaleString()}</p>
+        <RecentMeetings meetings={meetings}/>
 
-</div>
+        <RecentActions actions={actions}/>
 
-<div>
+    </div>
 
-<b>Last Update</b>
+    <!-- Production Trend -->
 
-<p>{currentTime}</p>
+    <ProductionTrend production={production}/>
 
-</div>
+    <!-- Factory KPI -->
 
-</div>
+    <div class="summary">
 
-<div class="table">
+        <div>
 
-<table>
+            <b>Total Target</b>
 
-<thead>
+            <p>{totalTarget.toLocaleString()}</p>
 
-<tr>
+        </div>
 
-<th>Line</th>
-<th>Status</th>
-<th>Target</th>
-<th>Actual</th>
-<th>Yield</th>
-<th>RR</th>
-<th>OEE</th>
+        <div>
 
-</tr>
+            <b>Total Actual</b>
 
-</thead>
+            <p>{totalActual.toLocaleString()}</p>
 
-<tbody>
+        </div>
 
-{#each lines as line}
+        <div>
 
-<tr>
+            <b>Total NG</b>
 
-<td>
+            <p>{totalNG.toLocaleString()}</p>
 
-<b>{line.line}</b>
+        </div>
 
-</td>
+        <div>
 
-<td>
+            <b>Average Yield</b>
 
-{#if line.status==="Running"}
+            <p>{avgYield}%</p>
 
-<span class="running">
+        </div>
 
-🟢 Running
+        <div>
 
-</span>
+            <b>Completed Meetings</b>
 
-{:else}
+            <p>{completedMeetings}</p>
 
-<span class="breakdown">
+        </div>
 
-🔴 Breakdown
-
-</span>
-
-{/if}
-
-</td>
-
-<td>{line.target.toLocaleString()}</td>
-
-<td>{line.actual.toLocaleString()}</td>
-
-<td>
-
-<span class:good={line.yield>=99}
-
-class:warn={line.yield<99}
-
->
-
-{line.yield}%
-
-</span>
-
-</td>
-
-<td>
-
-<span class:good={line.rr<0.5}
-
-class:bad={line.rr>=0.5}
-
->
-
-{line.rr}%
-
-</span>
-
-</td>
-
-<td>
-
-{line.oee}%
-
-</td>
-
-</tr>
-
-{/each}
-
-</tbody>
-</table>
-
-</div>
+    </div>
 
 </div>
 
 <style>
 
-.page{
-padding:25px;
-background:#eef3f8;
-min-height:100vh;
+.dashboard{
+    display:flex;
+    flex-direction:column;
+    gap:24px;
+    padding:5px;
 }
 
-.cards{
-display:grid;
-grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-gap:18px;
-margin:20px 0;
+/* ---------- TOP SUMMARY ---------- */
+
+.top-cards{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    gap:20px;
 }
 
-.card{
-padding:20px;
-border-radius:16px;
-color:white;
-box-shadow:0 6px 18px rgba(0,0,0,.08);
+/* ---------- KPI GRID ---------- */
+
+.kpi-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:20px;
 }
 
-.card h2{
-margin:0;
-font-size:32px;
+/* ---------- MIDDLE ---------- */
+
+.middle-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:20px;
 }
+
+/* ---------- FACTORY SUMMARY ---------- */
+
 .summary{
-display:grid;
-grid-template-columns:repeat(4,1fr);
-gap:15px;
-margin-bottom:20px;
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:20px;
 }
 
 .summary div{
-background:white;
-padding:18px;
-border-radius:14px;
-box-shadow:0 5px 15px rgba(0,0,0,.08);
+
+    background:white;
+
+    padding:22px;
+
+    border-radius:16px;
+
+    box-shadow:0 8px 24px rgba(0,0,0,.08);
+
+    transition:.25s;
+
+}
+
+.summary div:hover{
+
+    transform:translateY(-4px);
+
 }
 
 .summary b{
-color:#475569;
+
+    color:#64748b;
+
+    font-size:14px;
+
 }
 
 .summary p{
-margin-top:8px;
-font-size:22px;
-font-weight:bold;
-}
 
-.running{
-color:#16a34a;
-font-weight:bold;
-}
+    margin-top:12px;
 
-.breakdown{
-color:#dc2626;
-font-weight:bold;
-}
+    font-size:30px;
 
-.good{
-color:#16a34a;
-font-weight:bold;
-}
+    font-weight:bold;
 
-.warn{
-color:#ca8a04;
-font-weight:bold;
-}
-
-.bad{
-color:#dc2626;
-font-weight:bold;
-}
-
-.teal{
-background:#0f766e;
-}
-
-.gray{
-background:#475569;
-}
-
-@media(max-width:900px){
-
-.summary{
-
-grid-template-columns:repeat(2,1fr);
+    color:#1e293b;
 
 }
+
+/* ---------- KPI CARD ---------- */
+
+.card{
+
+    color:white;
+
+    padding:24px;
+
+    border-radius:18px;
+
+    box-shadow:0 10px 30px rgba(0,0,0,.15);
+
+    transition:.25s;
+
+}
+
+.card:hover{
+
+    transform:translateY(-6px);
+
+}
+
+.card h2{
+
+    margin:0;
+
+    font-size:40px;
 
 }
 
 .card p{
-margin-top:8px;
-opacity:.9;
+
+    margin-top:10px;
+
+    opacity:.9;
+
 }
 
-.blue{background:#2563eb;}
-.green{background:#16a34a;}
-.red{background:#dc2626;}
-.orange{background:#ea580c;}
-.purple{background:#9333ea;}
-.cyan{background:#0891b2;}
-.dark{background:#1e293b;}
+/* ---------- COLORS ---------- */
 
-.table{
-background:white;
+.blue{
+
+    background:linear-gradient(135deg,#2563eb,#1d4ed8);
+
+}
+
+.green{
+
+    background:linear-gradient(135deg,#16a34a,#15803d);
+
+}
+
+.red{
+
+    background:linear-gradient(135deg,#dc2626,#b91c1c);
+
+}
+
+.orange{
+
+    background:linear-gradient(135deg,#ea580c,#c2410c);
+
+}
+
+.purple{
+
+    background:linear-gradient(135deg,#7c3aed,#6d28d9);
+
+}
+
+.dark{
+
+    background:linear-gradient(135deg,#1e293b,#0f172a);
+
+}
+
+.clickable{
+
+    cursor:pointer;
+
+}
+
+/* ---------- TABLETS ---------- */
+
+@media(max-width:1200px){
+
+.middle-grid{
+
+grid-template-columns:1fr;
+
+}
+
+}
+
+/* ---------- MOBILE ---------- */
+
+@media(max-width:768px){
+
+.dashboard{
+
+gap:18px;
+
+}
+
+.top-cards{
+
+grid-template-columns:1fr;
+
+}
+
+.kpi-grid{
+
+grid-template-columns:1fr;
+
+}
+
+.summary{
+
+grid-template-columns:1fr;
+
+}
+
+.card{
+
 padding:20px;
-border-radius:16px;
-box-shadow:0 5px 18px rgba(0,0,0,.08);
-overflow:auto;
+
 }
 
-table{
-width:100%;
-border-collapse:collapse;
+.card h2{
+
+font-size:30px;
+
 }
 
-th{
-background:#1e293b;
-color:white;
-padding:12px;
+.summary p{
+
+font-size:24px;
+
 }
 
-td{
-padding:12px;
-border-bottom:1px solid #e5e7eb;
-}
-
-tr:hover{
-background:#f8fafc;
 }
 
 </style>

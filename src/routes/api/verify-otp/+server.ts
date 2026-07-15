@@ -1,11 +1,12 @@
 import { json, error } from '@sveltejs/kit';
-import { supabase } from '$lib/supabase';
-import { verifyStoredOtp } from '$lib/server/otp-store'; // ✅ Import from lib
+import { createClient } from '@supabase/supabase-js';
+import { VITE_SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY, JWT_SECRET } from '$env/static/private';
 import jwt from 'jsonwebtoken';
+import type { RequestHandler } from './$types';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const supabaseAdmin = createClient(VITE_SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY);
 
-export async function POST({ request }) {
+export const POST: RequestHandler = async ({ request }) => {
     try {
         const { mobile, otp } = await request.json();
 
@@ -13,54 +14,85 @@ export async function POST({ request }) {
             throw error(400, 'Mobile and OTP are required');
         }
 
-        console.log('Verify OTP Request:', { mobile, otp });
+        // Match send-otp normalization exactly
+        const cleanMobile = String(mobile).replace(/\D/g, '');
+        
+        if (cleanMobile.length!== 10) {
+            throw error(400, `Invalid mobile. Got ${cleanMobile.length} digits, need 10`);
+        }
+        
+        const fullMobile = `+91${cleanMobile}`;
+        const cleanOtp = String(otp).trim();
 
-        // ✅ Verify OTP from store
-        const isValidOtp = verifyStoredOtp(mobile, otp);
+        console.log('[VERIFY] Attempting:', { fullMobile, otp: cleanOtp });
 
-        if (!isValidOtp) {
-            console.log('Invalid OTP for:', mobile);
-            throw error(401, 'Invalid OTP');
+        // 1. Verify OTP - check not expired and not used
+        const { data: otpRecord, error: otpError } = await supabaseAdmin
+           .from('otp_verifications')
+           .select('*')
+           .eq('mobile', fullMobile)
+           .eq('otp', cleanOtp)
+           .eq('verified', false)
+           .gte('expires_at', new Date().toISOString())
+           .maybeSingle();
+
+        if (otpError) {
+            console.error('[VERIFY] OTP query error:', otpError);
+            throw error(500, 'Database error');
         }
 
-        // ✅ Get or Create user
-        let { data: user, error: userError } = await supabase
-          .from('users')
-          .select('id, mobile, name, role, is_active')
-          .eq('mobile', mobile)
-          .maybeSingle();
+        if (!otpRecord) {
+            console.log('[VERIFY] OTP not found or expired');
+            throw error(401, 'Invalid or expired OTP');
+        }
+
+        // 2. Mark OTP as used
+        const { error: updateOtpError } = await supabaseAdmin
+           .from('otp_verifications')
+           .update({ verified: true })
+           .eq('id', otpRecord.id);
+
+        if (updateOtpError) {
+            console.error('[VERIFY] Mark OTP used error:', updateOtpError);
+        }
+
+        // 3. Get or Create user
+        let { data: user, error: userError } = await supabaseAdmin
+           .from('users')
+           .select('id, mobile, name, role, is_active')
+           .eq('mobile', fullMobile)
+           .maybeSingle();
 
         if (userError) {
-            console.error('User fetch error:', userError);
+            console.error('[VERIFY] User fetch error:', userError);
             throw error(500, 'Database error');
         }
 
         if (!user) {
-            // Create new user
-            const { data: newUser, error: createError } = await supabase
-              .from('users')
-              .insert({
-                    mobile: mobile,
-                    name: `User ${mobile.slice(-4)}`,
+            const { data: newUser, error: createError } = await supabaseAdmin
+               .from('users')
+               .insert({
+                    mobile: fullMobile,
+                    name: `User ${fullMobile.slice(-4)}`,
                     role: 'user',
                     is_active: true
                 })
-              .select()
-              .single();
+               .select()
+               .single();
 
             if (createError) {
-                console.error('User create error:', createError);
+                console.error('[VERIFY] User create error:', createError);
                 throw error(500, 'Failed to create user');
             }
             user = newUser;
-            console.log('New user created:', user.id);
+            console.log('[VERIFY] New user created:', user.id);
         }
 
         if (!user.is_active) {
             throw error(403, 'Account disabled');
         }
 
-        // ✅ Generate JWT with role
+        // 4. Generate JWT
         const token = jwt.sign(
             {
                 userId: user.id,
@@ -72,13 +104,16 @@ export async function POST({ request }) {
             { expiresIn: '7d' }
         );
 
-        // Update last login
-        await supabase
-          .from('users')
-          .update({ last_login: new Date().toISOString() })
-          .eq('id', user.id);
+        // 5. Update last login - don't await, fire and forget
+        supabaseAdmin
+           .from('users')
+           .update({ last_login: new Date().toISOString() })
+           .eq('id', user.id)
+           .then(({ error }) => {
+                if (error) console.error('[VERIFY] Last login update error:', error);
+            });
 
-        console.log('Login successful for:', user.mobile);
+        console.log('[VERIFY] Login successful:', user.mobile);
 
         return json({
             success: true,
@@ -92,8 +127,8 @@ export async function POST({ request }) {
         });
 
     } catch (err: any) {
-        console.error('Verify OTP error:', err);
+        console.error('[VERIFY] Error:', err);
         if (err.status) throw err;
         throw error(500, err.message || 'OTP verification failed');
     }
-}
+};

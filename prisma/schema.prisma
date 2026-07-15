@@ -1,0 +1,17 @@
+model templates {
+  id          String   @id @default(uuid())
+  name        String
+  template_code String? // if you use it
+  department  String?
+  category    String?
+  chart       Json?
+  chart_x     String?
+  chart_y     String?
+  description String?
+  fields      Json     @default("[]")
+  created_by  String?
+  createdAt   DateTime @default(now()) // MUST be camelCase
+  updatedAt   DateTime @updatedAt
+
+  @@map("templates")
+}

@@ -1,936 +1,388 @@
 <script lang="ts">
-    console.log('🚀 CHAT SCRIPT STARTED');
-
     import { onMount, onDestroy, tick } from "svelte";
     import { browser } from "$app/environment";
-    import { goto, afterNavigate, invalidateAll } from "$app/navigation";
-    import { page } from '$app/stores';
-    import TemplatePopup from "$lib/components/templates/TemplatePopup.svelte";
-    import TemplateInputForm from "$lib/components/templates/TemplateInputForm.svelte";
+    import { goto } from "$app/navigation";
+    
     import ChatSidebar from "$lib/components/chat/ChatSidebar.svelte";
     import ChatHeader from "$lib/components/chat/ChatHeader.svelte";
     import MessageList from "$lib/components/chat/MessageList.svelte";
-    import TemplateDesigner from "$lib/components/templates/designer/TemplateDesigner.svelte";
+    import ChatInput from "$lib/components/chat/ChatInput.svelte";
+    import TemplatePopup from "$lib/components/templates/TemplatePopup.svelte";
     import TemplateForm from "$lib/components/templates/form/TemplateForm.svelte";
-    import { supabase } from '$lib/supabase';
-    import type { RealtimeChannel } from '@supabase/supabase-js';
+    import TemplateDesigner from "$lib/components/templates/designer/TemplateDesigner.svelte";
 
-    console.log('✅ IMPORTS DONE, BROWSER:', browser);
+    import { supabaseChat, supabaseTemplates } from "$lib/supabase";
 
-    /* -----------------------------
-       DEBUG + PERF ANALYSIS
-    ------------------------------*/
-    const DEBUG = true;
-    const PERF_MARKS: Record<string, number> = {};
+    // ================= DB ALIASES =================
+    const chatDB = supabaseChat; // for chat, users, rooms, groups, messages
+    const templateDB = supabaseTemplates; // for templates, records
+    const GUEST_USER_ID = "guest-user-001" as const;
 
-    function log(step: string, data?: any) {
-        if (!DEBUG) return;
-        const t = performance.now().toFixed(0);
-        console.log(`[CHAT ${t}ms] ${step}`, data?? '');
-    }
+    // ================= TYPES =================
+    type ChatUser = { id: string; name?: string; email?: string; mobile?: string; avatar_url?: string; room_id?: string; user_metadata?: { name?: string }; };
+    type ChatGroup = { id: string; name: string; description?: string; avatar_url?: string; created_at?: string; created_by?: string; };
+    type Template = { id: string; name: string; data: any; template_code?: string; t_code?: string; };
+    type ChatMessage = { 
+        id: string; sender_id: string; receiver_id?: string; room_id?: string; group_id?: string; 
+        content?: string; attachments?: string[]; created_at: string; template_id?: string; 
+        template_data?: Record<string, unknown>; status?: string; users?: ChatUser; is_own?: boolean; type?: string; 
+    };
 
-    function perfStart(key: string) {
-        PERF_MARKS[key] = performance.now();
-        log(`⏱️ START: ${key}`);
-    }
+    // ================= STATE =================
+    let currentUser: ChatUser | null = null;
+    let isAuthChecked = false;
+    let isOnline = true;
+    let lastSync = "";
 
-    function perfEnd(key: string) {
-        const start = PERF_MARKS[key];
-        if (!start) return;
-        const duration = (performance.now() - start).toFixed(1);
-        log(`⏱️ END: ${key}`, `${duration}ms`);
-        if (parseFloat(duration) > 300) {
-            console.warn(`🐌 SLOW: ${key} took ${duration}ms`);
-        }
-        delete PERF_MARKS[key];
-    }
+    let groups: ChatGroup[] = [];
+    let contacts: ChatUser[] = [];
+    let messages: ChatMessage[] = [];
+    let templates: Template[] = [];
 
-    log('LOGGER READY');
-
-    /* -----------------------------
-       STATE
-    ------------------------------*/
-
-    let groups: any[] = [];
-    let contacts: any[] = [];
-    let messages: any[] = [];
-
-    let selectedGroup: any = null;
-    let selectedContact: any = null;
+    let selectedGroup: ChatGroup | null = null;
+    let selectedContact: ChatUser | null = null;
+    let selectedTemplate: Template | null = null;
     let selectedRoomId: string | null = null;
-
-    let showCreateTemplate = false;
-    let showTemplateDesigner = false;
-
-    let message = "";
-    let typingStatus = "";
+    let selectedGroupId: string | null = null;
+    let groupMembers: ChatUser[] = [];
 
     let isLoadingMessages = false;
-    let isLoadingOlder = false;
-    let groupsLoaded = false;
-    let contactsLoaded = false;
-
-    let subscription: RealtimeChannel | null = null;
-
-    // Network status
-    let isOnline = true;
-    let lastSync = '';
-
-    let online = false;
     let typing = false;
-
-    // Emoji
-    let showEmoji = false;
-    let emojiPicker: any;
-    let emojiPickerContainer: HTMLElement;
-
-    // Mic recording
-    let isRecording = false;
-    let mediaRecorder: MediaRecorder | null = null;
-    let audioChunks: Blob[] = [];
-    let micStream: MediaStream | null = null;
-
-    // NAVIGATION GUARD
-    let isInitializing = false;
-
-    /* -----------------------------
-       INDEXEDDB - v3 with meta cache
-    ------------------------------*/
-
-    let dbPromise: any = null;
-
-    async function initDB() {
-        if (!browser || dbPromise) return dbPromise;
-        perfStart('INIT_DB');
-        const { openDB } = await import('idb');
-        dbPromise = openDB('erp-chat-cache', 3, {
-            upgrade(db, oldVersion) {
-                log('DB UPGRADE', { oldVersion });
-                if (oldVersion < 1) {
-                    db.createObjectStore('messages', { keyPath: 'id' });
-                    db.createObjectStore('chats', { keyPath: 'id' });
-                }
-                if (oldVersion < 2) {
-                    const msgStore = db.transaction('messages').objectStore('messages');
-                    msgStore.createIndex('room_id_index', 'room_id');
-                    msgStore.createIndex('room_created_index', ['room_id', 'created_at']);
-                }
-                if (oldVersion < 3) {
-                    db.createObjectStore('meta', { keyPath: 'key' });
-                }
-            }
-        });
-        perfEnd('INIT_DB');
-        return dbPromise;
-    }
-
-    async function cacheMessages(msgs: any[]) {
-        if (!browser ||!msgs.length) return;
-        try {
-            perfStart('CACHE_MSG_WRITE');
-            const db = await initDB();
-            const tx = db.transaction('messages', 'readwrite');
-            await Promise.all(msgs.map(m => tx.store.put(m)));
-            await tx.done;
-            perfEnd('CACHE_MSG_WRITE');
-            log('CACHE MSG: SAVED', msgs.length);
-        } catch (e) { log('CACHE MSG: FAIL', e); }
-    }
-
-    async function getCachedMessages(roomId: string, beforeTs?: number) {
-        if (!browser) return [];
-        try {
-            perfStart('CACHE_MSG_READ');
-            const db = await initDB();
-            const tx = db.transaction('messages');
-            const index = tx.store.index('room_created_index');
-
-            let range;
-            if (beforeTs) {
-                range = IDBKeyRange.bound([roomId, -Infinity], [roomId, beforeTs], false, true);
-            } else {
-                range = IDBKeyRange.bound([roomId, -Infinity], [roomId, Infinity]);
-            }
-
-            const msgs = await index.getAll(range, 20);
-            perfEnd('CACHE_MSG_READ');
-            return msgs.sort((a,b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-        } catch (e) { log('CACHE MSG: READ FAIL', e); return []; }
-    }
-
-    async function cacheMeta(key: string, data: any[]) {
-        if (!browser) return;
-        try {
-            const db = await initDB();
-            await db.put('meta', { key, data, ts: Date.now() });
-            log('CACHE META: SAVED', { key, count: data.length });
-        } catch (e) { log('CACHE META: FAIL', e); }
-    }
-
-    async function getCachedMeta(key: string, maxAge = 60000) {
-        if (!browser) return null;
-        try {
-            perfStart('CACHE_META_READ');
-            const db = await initDB();
-            const row = await db.get('meta', key);
-            perfEnd('CACHE_META_READ');
-            if (!row || Date.now() - row.ts > maxAge) {
-                log('CACHE META: MISS', key);
-                return null;
-            }
-            log('CACHE META: HIT', { key, count: row.data.length, age: `${((Date.now() - row.ts)/1000).toFixed(0)}s` });
-            return row.data;
-        } catch (e) { log('CACHE META: READ FAIL', e); return null; }
-    }
-
-    /* -----------------------------
-       POPUPS
-    ------------------------------*/
+    let typingTimeout: ReturnType<typeof setTimeout> | null = null;
+    let onlineUsers = new Set<string>();
 
     let showGroupForm = false;
     let showContactForm = false;
-
-    /* -----------------------------
-       TEMPLATE UI
-    ------------------------------*/
-
     let showTemplatePopup = false;
     let showTemplateForm = false;
-    let selectedTemplate: any = null;
-    let templates: any[] = [];
-    let templateFields: any[] = [];
-
-    /* -----------------------------
-       FORM DATA
-    ------------------------------*/
+    let showCreateTemplate = false;
+    let showAddMembersForm = false;
 
     let groupName = "";
     let groupDesc = "";
     let contactName = "";
     let contactMobile = "";
-    let department = "";
     let contactEmail = "";
+    let department = "";
 
-    /* -----------------------------
-       AUTH - SSR SAFE
-    ------------------------------*/
+    let availableContacts: ChatUser[] = [];
+    let selectedContactsToAdd: string[] = [];
+    let uploadingFiles: File[] = [];
+    let fileInput!: HTMLInputElement;
 
-    function token(): string {
-        if (!browser) return "";
-        return localStorage.getItem("token") || "";
+    let messagesChannel: RealtimeChannel | null = null;
+    let presenceChannel: RealtimeChannel | null = null;
+
+    // ================= AUTH =================
+    async function checkAuth() {
+        currentUser = { id: GUEST_USER_ID, email: "guest@test.com", name: "Guest User", user_metadata: { name: "Guest User" } };
+        isAuthChecked = true;
+        await initApp();
     }
 
-    function authHeader() {
-        const t = token();
-        if (!t) return {};
-        return { Authorization: `Bearer ${t}` };
-    }
+    function getCurrentUserId(): string { return currentUser?.id ?? GUEST_USER_ID; }
 
-    function getCurrentUserId() {
-        if (!browser) return "";
-        return localStorage.getItem("userId") || "";
-    }
-
-    /* -----------------------------
-       ROOM ID
-    ------------------------------*/
-
-    function getRoomId(userId1: string, userId2: string) {
-        return [userId1, userId2].sort().join('_');
-    }
-
-    /* -----------------------------
-       GROUPS - WITH CACHE
-    ------------------------------*/
-
-    async function loadGroups() {
-        perfStart('LOAD_GROUPS_TOTAL');
-        log('GROUPS: START');
-        if (!token()) { log('GROUPS: NO TOKEN'); goto("/login"); return; }
-
-        const cached = await getCachedMeta('groups');
-        if (cached) {
-            groups = cached;
-            groupsLoaded = true;
-            log('GROUPS: CACHED', groups.length);
-        }
-
+    async function ensureUserExists(userId: string, email = "guest@test.com", name = "Guest User", mobile = "") {
         try {
-            perfStart('GROUPS_API');
-            const res = await fetch("/api/recent-chats", { headers: authHeader() });
-            perfEnd('GROUPS_API');
-            log('GROUPS: STATUS', res.status);
-            if (res.status === 401) { log('GROUPS: 401'); goto("/login"); return; }
-            const data = await res.json();
-            groups = data.chats || [];
-            groupsLoaded = true;
-            await cacheMeta('groups', groups);
-            log('GROUPS: FRESH', groups.length);
-        } catch (err) {
-            log('GROUPS: ERROR', err);
-            isOnline = false;
-        }
-        perfEnd('LOAD_GROUPS_TOTAL');
+            const { data: existing } = await chatDB.from("users").select("id").eq("id", userId).maybeSingle();
+            if (existing) return existing;
+            const { data, error } = await chatDB.from("users").upsert({ id: userId, email, name, mobile }, { onConflict: "id" }).select().single();
+            if (error) throw error;
+            return data;
+        } catch (err) { console.error("ensureUserExists()", err); return null; }
     }
 
-    /* -----------------------------
-       CONTACTS - WITH CACHE
-    ------------------------------*/
+    // ================= INIT =================
+    async function initApp() {
+        const userId = getCurrentUserId();
+        if (!userId) return;
+        await ensureUserExists(userId);
+        await Promise.all([setupPresence(), loadGroups(), loadContacts(), loadTemplates()]);
+        testNetwork();
+    }
+
+    function testNetwork() { lastSync = new Date().toLocaleTimeString(); isOnline = navigator.onLine; }
+
+    // ================= PRESENCE =================
+    async function setupPresence() {
+        const userId = getCurrentUserId();
+        if (!userId) return;
+        if (presenceChannel) await chatDB.removeChannel(presenceChannel);
+        
+        presenceChannel = chatDB.channel("online-users", { config: { presence: { key: userId } });
+        presenceChannel
+            .on("presence", { event: "sync" }, () => { onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); })
+            .on("presence", { event: "join" }, ({ key }) => { onlineUsers.add(key); onlineUsers = new Set(onlineUsers); })
+            .on("presence", { event: "leave" }, ({ key }) => { onlineUsers.delete(key); onlineUsers = new Set(onlineUsers); })
+            .subscribe(async (status) => { if (status === "SUBSCRIBED") { await presenceChannel!.track({ user_id: userId, online_at: new Date().toISOString() }); } });
+    }
+
+    function isUserOnline(userId: string): boolean { return onlineUsers.has(userId); }
+    async function cleanupRealtime() { if (messagesChannel) await chatDB.removeChannel(messagesChannel); if (presenceChannel) await chatDB.removeChannel(presenceChannel); }
+
+    // ================= FILE UPLOAD =================
+    const MAX_FILE_SIZE = 50 * 1024 * 1024;
+    async function uploadFile(file: File): Promise<string | null> {
+        if (!file || file.size > MAX_FILE_SIZE) { alert("Max 50 MB"); return null; }
+        try {
+            const extension = file.name.split(".").pop() ?? "";
+            const filename = `${Date.now()}-${crypto.randomUUID()}.${extension}`;
+            const storagePath = `chat-attachments/${filename}`;
+            const { error } = await chatDB.storage.from("attachments").upload(storagePath, file);
+            if (error) throw error;
+            const { data } = chatDB.storage.from("attachments").getPublicUrl(storagePath);
+            return data.publicUrl;
+        } catch (err) { console.error(err); alert("Upload failed."); return null; }
+    }
+
+    // ================= MESSAGES =================
+    async function loadMessages({ roomId, groupId }: { roomId?: string; groupId?: string; }) {
+        if (isLoadingMessages) return;
+        if (!roomId && !groupId) { messages = []; return; }
+        isLoadingMessages = true;
+        try {
+            let query = chatDB.from("messages").select("*");
+            query = groupId ? query.eq("group_id", groupId) : query.eq("room_id", roomId);
+            const { data, error } = await query.order("created_at", { ascending: true });
+            if (error) throw error;
+            const senderIds = [...new Set((data || []).map(m => m.sender_id))];
+            const { data: users } = await chatDB.from("users").select("id,name,mobile").in("id", senderIds);
+            const userMap = new Map((users || []).map(u => [u.id, u]));
+            const currentUserId = getCurrentUserId();
+            messages = (data || []).map(msg => ({ ...msg, users: userMap.get(msg.sender_id), is_own: msg.sender_id === currentUserId, type: msg.template_id ? "template" : msg.attachments?.length ? "attachment" : "text", status: msg.status ?? "sent" }));
+        } catch (err) { console.error(err); messages = []; } finally { isLoadingMessages = false; }
+    }
+
+    function subscribeToMessages({ roomId, groupId }: { roomId?: string; groupId?: string; }) {
+        if (messagesChannel) chatDB.removeChannel(messagesChannel);
+        const filter = groupId ? `group_id=eq.${groupId}` : `room_id=eq.${roomId}`;
+        messagesChannel = chatDB.channel(`chat-${groupId ?? roomId}`)
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter }, async ({ new: newMessage }) => {
+                if (newMessage.sender_id === getCurrentUserId()) return;
+                const { data: sender } = await chatDB.from("users").select("id,name,mobile").eq("id", newMessage.sender_id).single();
+                messages = [...messages, { ...newMessage, users: sender, is_own: false, type: newMessage.template_id ? "template" : newMessage.attachments?.length ? "attachment" : "text", status: newMessage.status ?? "delivered" }];
+            })
+            .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages", filter }, ({ new: updated }) => {
+                messages = messages.map(m => m.id === updated.id ? { ...m, status: updated.status } : m);
+            }).subscribe();
+    }
+
+    async function markMessagesAsRead() {
+        if (!selectedRoomId && !selectedGroupId) return;
+        const currentUserId = getCurrentUserId();
+        const unread = messages.filter(m => !String(m.id).startsWith("temp-") && m.sender_id !== currentUserId && m.status !== "read");
+        if (!unread.length) return;
+        const ids = unread.map(m => m.id);
+        await chatDB.from("messages").update({ status: "read" }).in("id", ids);
+        messages = messages.map(m => ids.includes(m.id) ? { ...m, status: "read" } : m);
+    }
+
+    async function sendMessage(event: CustomEvent) {
+        const { content, files, template } = event.detail;
+        const isGroupChat = !!selectedGroupId;
+        if (!content?.trim() && (!files || files.length === 0) && !template) return;
+        if (!selectedRoomId && !selectedGroupId) return;
+        const currentUserId = getCurrentUserId();
+        await ensureUserExists(currentUserId);
+        let attachmentUrls: string[] = [];
+        if (files?.length) { uploadingFiles = files; attachmentUrls = (await Promise.all(files.map(uploadFile))).filter(Boolean) as string[]; uploadingFiles = []; }
+        const templateSnapshot = template ? { id: template.id, name: template.name, values: structuredClone(template.values), chart: template.chart, fields: template.fields } : null;
+        const tempId = `temp-${Date.now()}`;
+        messages = [...messages, { id: tempId, sender_id: currentUserId, receiver_id: isGroupChat ? undefined : selectedContact?.id, room_id: isGroupChat ? undefined : selectedRoomId ?? undefined, group_id: isGroupChat ? selectedGroupId ?? undefined : undefined, content: content?.trim() || "", attachments: attachmentUrls, created_at: new Date().toISOString(), template_id: template?.id, template_data: templateSnapshot, is_own: true, status: "sending", type: template ? "template" : attachmentUrls.length ? "attachment" : "text", users: { id: currentUserId, name: "You" } }];
+        try {
+            const { data, error } = await chatDB.from("messages").insert({ sender_id: currentUserId, receiver_id: isGroupChat ? null : selectedContact?.id, room_id: isGroupChat ? null : selectedRoomId, group_id: isGroupChat ? selectedGroupId : null, content: content?.trim() || null, attachments: attachmentUrls.length ? attachmentUrls : null, template_id: template?.id ?? null, template_data: templateSnapshot, event: "message", extension: "chat", private: !isGroupChat, status: "sent" }).select().single();
+            if (error) throw error;
+            messages = messages.map(m => m.id === tempId ? { ...data, users: { id: currentUserId, name: "You" }, is_own: true, type: template ? "template" : attachmentUrls.length ? "attachment" : "text", status: "sent" } : m);
+        } catch (err) { console.error(err); messages = messages.filter(m => m.id !== tempId); alert("Failed to send"); }
+    }
+
+    // ================= GROUPS / CONTACTS =================
+    async function loadGroups() {
+        try {
+            const currentUserId = getCurrentUserId();
+            const { data, error } = await chatDB.from("chat_groups").select(`id,name,description,avatar_url,created_at,created_by,chat_group_members!inner(user_id)`).eq("chat_group_members.user_id", currentUserId).order("created_at", { ascending: false });
+            if (error) throw error; groups = data ?? [];
+        } catch (error) { console.error(error); groups = []; }
+    }
+
+    async function loadGroupMembers(groupId: string) {
+        try {
+            const { data, error } = await chatDB.from("chat_group_members").select(`users:user_id(id,name,email,mobile,avatar_url)`).eq("group_id", groupId);
+            if (error) throw error; groupMembers = (data ?? []).map((m: any) => m.users);
+        } catch (error) { console.error(error); groupMembers = []; }
+    }
 
     async function loadContacts() {
-        perfStart('LOAD_CONTACTS_TOTAL');
-        log('CONTACTS: START');
-        const cached = await getCachedMeta('contacts');
-        if (cached) {
-            contacts = cached;
-            contactsLoaded = true;
-            log('CONTACTS: CACHED', contacts.length);
-        }
-
         try {
-            const userId = getCurrentUserId();
-            log('CONTACTS: USER_ID', userId);
-            if (!userId) return;
-            perfStart('CONTACTS_SUPABASE');
-            const { data, error } = await supabase
-              .from('rooms')
-              .select(`id, user1_id, user2_id, user1:user1_id(id, name, mobile, email), user2:user2_id(id, name, mobile, email)`)
-              .or(`user1_id.eq.${userId},user2_id.eq.${userId}`);
-            perfEnd('CONTACTS_SUPABASE');
-            if (error) { log('CONTACTS: ERROR', error); throw error; }
-            contacts = (data || []).map((room: any) => {
-                const otherUser = room.user1_id === userId? room.user2 : room.user1;
-                return {...otherUser, room_id: room.id, user1_id: room.user1_id, user2_id: room.user2_id, members: [room.user1, room.user2] };
+            const currentUserId = getCurrentUserId();
+            const { data, error } = await chatDB.from("rooms").select(`id,user1_id,user2_id,user1:user1_id(id,name,mobile,email,avatar_url),user2:user2_id(id,name,mobile,email,avatar_url)`).or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+            if (error) throw error;
+            contacts = (data ?? []).map((room: any) => {
+                const otherUser = room.user1_id === currentUserId ? room.user2 : room.user1;
+                return { ...otherUser, room_id: room.id };
             });
-            contactsLoaded = true;
-            await cacheMeta('contacts', contacts);
-            log('CONTACTS: FRESH', contacts.length);
-        } catch (err) {
-            log('CONTACTS: ERROR', err);
-            isOnline = false;
-        }
-        perfEnd('LOAD_CONTACTS_TOTAL');
+        } catch (error) { console.error(error); contacts = []; }
     }
-
-    /* -----------------------------
-       TEMPLATES
-    ------------------------------*/
-
-    async function loadTemplates() {
-        try {
-            perfStart('LOAD_TEMPLATES');
-            const res = await fetch("/api/templates");
-            if (!res.ok) throw new Error(await res.text());
-            const data = await res.json();
-            templates = data.templates || data;
-            perfEnd('LOAD_TEMPLATES');
-            log('TEMPLATES: LOADED', templates.length);
-        } catch (e) {
-            log('TEMPLATES: ERROR', e);
-        }
-    }
-
-    async function loadTemplateFields(templateId: number) {
-        try {
-            perfStart('LOAD_TEMPLATE_FIELDS');
-            const res = await fetch(`/api/templates/fields?id=${templateId}`, { headers: authHeader() });
-            templateFields = res.ok? await res.json() : [];
-            perfEnd('LOAD_TEMPLATE_FIELDS');
-            log('TEMPLATE FIELDS: LOADED', templateFields.length);
-        } catch (err) {
-            templateFields = [];
-        }
-    }
-
-    /* -----------------------------
-       SELECT CONTACT/GROUP
-    ------------------------------*/
 
     async function selectContact(event: any) {
-        const contact = event.detail?? event;
-        log('SELECT CONTACT', contact.name);
-        selectedGroup = null;
-        selectedContact = {...contact };
-        selectedRoomId = contact.room_id || getRoomId(getCurrentUserId(), contact.id);
-        log('ROOM_ID', selectedRoomId);
-        if (!selectedRoomId) { log('NO ROOM_ID'); alert('Room not found'); return; }
-        await loadMessages(selectedRoomId);
-        subscribeToChat(selectedRoomId);
-        await tick();
-        log('SELECT CONTACT DONE');
+        const contact = event.detail ?? event;
+        selectedGroup = null; selectedGroupId = null; groupMembers = [];
+        selectedContact = { ...contact }; selectedRoomId = contact.room_id;
+        await tick(); await loadMessages({ roomId: selectedRoomId! }); subscribeToMessages({ roomId: selectedRoomId! }); await markMessagesAsRead();
+    }
+
+    async function createContact(){
+        if(!contactName.trim()){ alert("Enter Contact Name"); return; }
+        const {data:user,error:userError}=await chatDB.from("users").insert({ id:crypto.randomUUID(), name:contactName, mobile:contactMobile, email:contactEmail }).select().single();
+        if(userError){ console.error(userError); alert(userError.message); return; }
+        await chatDB.from("rooms").insert({ user1_id:getCurrentUserId(), user2_id:user.id });
+        showContactForm=false; contactName=""; contactMobile=""; contactEmail=""; department=""; await loadContacts();
+    }
+
+    async function createGroup(){
+        if(!groupName.trim()){ alert("Enter Group Name"); return; }
+        const {data:group,error}=await chatDB.from("chat_groups").insert({ name:groupName, description:groupDesc, created_by:getCurrentUserId() }).select().single();
+        if(error){ console.error(error); alert(error.message); return; }
+        await chatDB.from("chat_group_members").insert({ group_id:group.id, user_id:getCurrentUserId() });
+        groupName=""; groupDesc=""; showGroupForm=false; await loadGroups();
     }
 
     async function selectGroup(event: any) {
-        const group = event.detail?? event;
-        log('SELECT GROUP', group.name);
-        selectedContact = null;
-        selectedGroup = {...group };
-        selectedRoomId = group.id;
-        await loadMessages(group.id);
-        subscribeToChat(group.id);
-        await tick();
-        log('SELECT GROUP DONE');
-    }
-
-    /* -----------------------------
-       MESSAGES
-    ------------------------------*/
-
-    async function loadMessages(roomId?: string) {
-        perfStart('LOAD_MESSAGES_TOTAL');
-        log('LOAD MSG START', roomId);
-        if (isLoadingMessages ||!roomId) { messages = []; log('LOAD MSG ABORT'); return; }
-        isLoadingMessages = true;
-        try {
-            log('LOAD MSG: CHECK CACHE');
-            const cached = await getCachedMessages(roomId);
-            log('LOAD MSG: CACHED COUNT', cached.length);
-            if (cached.length > 0) {
-                messages = cached;
-                await tick();
-                scrollToBottom();
-                isLoadingMessages = false;
-                log('LOAD MSG: USED CACHE - FAST PATH');
-                perfEnd('LOAD_MESSAGES_TOTAL');
-                return;
-            }
-
-            perfStart('MSG_SUPABASE_QUERY');
-            const { data, error } = await supabase
-              .from("messages")
-              .select("*, users:sender_id(id, name, mobile)")
-              .eq("room_id", roomId)
-              .order("created_at", { ascending: false })
-              .limit(20);
-            perfEnd('MSG_SUPABASE_QUERY');
-
-            if (error) { log('LOAD MSG: ERROR', error); throw error; }
-            log('LOAD MSG: RAW COUNT', data?.length);
-
-            let processed = (data || []).reverse().map((m: any) => ({
-              ...m,
-                is_own: m.sender_id === getCurrentUserId()
-            }));
-
-            const reportIds = processed.filter(m => m.report_id).map(m => m.report_id);
-            log('LOAD MSG: REPORT_IDS', reportIds.length);
-            if (reportIds.length > 0) {
-                try {
-                    perfStart('MSG_BATCH_REPORTS');
-                    const r = await fetch(`/api/templates/reports/batch`, {
-                        method: 'POST',
-                        headers: { "Content-Type": "application/json",...authHeader() },
-                        body: JSON.stringify({ ids: reportIds })
-                    });
-                    perfEnd('MSG_BATCH_REPORTS');
-                    log('LOAD MSG: BATCH STATUS', r.status);
-                    if (r.ok) {
-                        const reportsMap = await r.json();
-                        processed = processed.map(m => ({
-                          ...m,
-                            report: reportsMap[m.report_id] || null,
-                            type: m.report_id? "template" : m.type
-                        }));
-                    }
-                } catch (err) { log('LOAD MSG: BATCH ERROR', err); }
-            }
-
-            messages = processed;
-            await cacheMessages(processed);
-            await tick();
-            scrollToBottom();
-            log('LOAD MSG: DONE', messages.length);
-        } catch (err) {
-            log('LOAD MSG: FATAL', err);
-            isOnline = false;
-        } finally {
-            isLoadingMessages = false;
-            perfEnd('LOAD_MESSAGES_TOTAL');
-        }
-    }
-
-    async function loadOlderMessages() {
-        if (isLoadingOlder ||!selectedRoomId || messages.length === 0) return;
-        log('LOAD OLDER MSG');
-        isLoadingOlder = true;
-        const oldestTs = messages[0].created_at;
-        const older = await getCachedMessages(selectedRoomId, oldestTs);
-        if (older.length > 0) {
-            messages = [...older,...messages];
-            log('LOAD OLDER: ADDED', older.length);
-        }
-        isLoadingOlder = false;
-    }
-
-    /* -----------------------------
-       REALTIME
-    ------------------------------*/
-
-    function subscribeToChat(roomId?: string) {
-        if (subscription) {
-            log('SUB: KILLING OLD');
-            try { supabase.removeChannel(subscription); } catch(e){}
-            subscription = null;
-        }
-        if (!roomId) return;
-        log('SUB: START', roomId);
-        subscription = supabase.channel(`room:${roomId}`)
-          .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `room_id=eq.${roomId}` },
-                async (payload) => {
-                    const newMsg: any = payload.new;
-                    log('SUB: NEW MSG', newMsg.id);
-                    if (messages.some(m => m.id === newMsg.id)) return;
-                    newMsg.is_own = newMsg.sender_id === getCurrentUserId();
-                    messages = [...messages, newMsg];
-                    await cacheMessages([newMsg]);
-                    await tick();
-                    scrollToBottom();
-                })
-          .subscribe((status) => {
-                log('SUB: STATUS', status);
-                if (status === 'SUBSCRIBED') { isOnline = true; online = true; lastSync = new Date().toLocaleTimeString('en-IN'); }
-                if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') { isOnline = false; online = false; }
-            });
-    }
-
-    /* -----------------------------
-       SCROLL
-    ------------------------------*/
-
-    function scrollToBottom() {
-        requestAnimationFrame(() => {
-            const element = document.querySelector(".messages");
-            if (!element) return;
-            element.scrollTop = element.scrollHeight;
-        });
-    }
-
-    function handleScroll(e: Event) {
-        const target = e.target as HTMLElement;
-        if (target.scrollTop === 0) {
-            log('SCROLL: TOP REACHED');
-            loadOlderMessages();
-        }
-    }
-
-    /* -----------------------------
-       SEND MESSAGE
-    ------------------------------*/
-
-    async function sendMessage() {
-        const text = message.trim();
-        log('SEND CLICK', { text: text.slice(0,20), roomId: selectedRoomId });
-        if (!text ||!selectedRoomId || (!selectedContact &&!selectedGroup)) {
-            log('SEND ABORT');
-            return;
-        }
-        try {
-            perfStart('SEND_MSG_API');
-            const response = await fetch("/api/messages/send", {
-                method: "POST",
-                headers: { "Content-Type": "application/json",...authHeader() },
-                body: JSON.stringify({ roomId: selectedRoomId, receiverId: selectedContact?.id || selectedGroup?.id, message: text })
-            });
-            perfEnd('SEND_MSG_API');
-            log('SEND: STATUS', response.status);
-            const result = await response.json();
-            if (!response.ok ||!result.success) throw new Error(result.message || result.error);
-            messages = [...messages, result.data];
-            await cacheMessages([result.data]);
-            message = "";
-            showEmoji = false;
-            log('SEND: SUCCESS');
-        } catch (err: any) {
-            log('SEND: ERROR', err);
-            isOnline = false;
-        }
-    }
-
-    /* -----------------------------
-       CREATE GROUP/CONTACT
-    ------------------------------*/
-
-    async function createGroup() {
-        log('CREATE GROUP CLICK');
-        if (!groupName.trim()) { alert('Group name required'); return; }
-        try {
-            const userId = getCurrentUserId();
-            if (!userId) { alert('Please login first'); return; }
-            perfStart('CREATE_GROUP');
-            const { error } = await supabase.from('chat_groups').insert({ name: groupName, description: groupDesc, created_by: userId });
-            perfEnd('CREATE_GROUP');
-            if (error) throw error;
-            groupName = ""; groupDesc = ""; showGroupForm = false;
-            await loadGroups();
-            log('CREATE GROUP: DONE');
-            alert('Group created successfully');
-        } catch (err: any) {
-            log('CREATE GROUP: ERROR', err);
-            alert("Failed: " + err.message);
-        }
-    }
-
-    async function createContact() {
-        log('CREATE CONTACT CLICK');
-        if (!contactMobile.trim() ||!contactEmail.trim()) { alert('Mobile and Email required'); return; }
-        try {
-            const userId = getCurrentUserId();
-            if (!userId) { alert('Please login first'); return; }
-            perfStart('CREATE_CONTACT');
-            const { data: existingUser } = await supabase.from('users').select('id').or(`mobile.eq.${contactMobile},email.eq.${contactEmail}`).single();
-            let contactId = existingUser?.id;
-            if (!contactId) {
-                const { data: newUser, error } = await supabase.from('users').insert({ name: contactName, mobile: contactMobile, email: contactEmail, department }).select().single();
-                if (error) throw error;
-                contactId = newUser.id;
-            }
-            const { error: roomError } = await supabase.from('rooms').insert({ user1_id: userId < contactId? userId : contactId, user2_id: userId < contactId? contactId : userId });
-            perfEnd('CREATE_CONTACT');
-            if (roomError &&!roomError.message.includes('duplicate')) throw roomError;
-            contactName = ""; contactMobile = ""; contactEmail = ""; department = ""; showContactForm = false;
-            await loadContacts();
-            log('CREATE CONTACT: DONE');
-            alert('Contact created successfully');
-        } catch (err: any) {
-            log('CREATE CONTACT: ERROR', err);
-            alert("Failed: " + err.message);
-        }
-    }
-
-    async function deleteContact(id: string) {
-        log('DELETE CONTACT', id);
-        if (!confirm('Delete this contact?')) return;
-        perfStart('DELETE_CONTACT');
-        await supabase.from('rooms').delete().eq('id', id);
-        perfEnd('DELETE_CONTACT');
-        await loadContacts();
+        const group = event.detail ?? event;
         selectedContact = null; selectedRoomId = null;
+        selectedGroup = { ...group }; selectedGroupId = group.id;
+        await tick(); await loadGroupMembers(selectedGroupId!); await loadMessages({ groupId: selectedGroupId! }); subscribeToMessages({ groupId: selectedGroupId! }); await markMessagesAsRead();
     }
 
-    async function deleteGroup(id: string) {
-        log('DELETE GROUP', id);
-        if (!confirm('Delete this group?')) return;
-        perfStart('DELETE_GROUP');
-        await supabase.from('chat_groups').delete().eq('id', id);
-        perfEnd('DELETE_GROUP');
-        await loadGroups();
-        selectedGroup = null; selectedRoomId = null;
-    }
-
-    /* -----------------------------
-       MIC
-    ------------------------------*/
-
-    async function toggleRecording() {
-        log('MIC CLICK', isRecording);
-        if (!isRecording) {
-            try {
-                log('MIC: PERMISSION');
-                micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                mediaRecorder = new MediaRecorder(micStream);
-                audioChunks = [];
-                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                mediaRecorder.onstop = async () => {
-                    log('MIC: STOPPED');
-                    alert('Voice recorded. Add upload API to send.');
-                    micStream?.getTracks().forEach(track => track.stop());
-                    micStream = null;
-                };
-                mediaRecorder.start();
-                isRecording = true;
-                log('MIC: RECORDING');
-            } catch (err) { log('MIC: DENIED', err); alert('Mic access denied'); }
-        } else {
-            mediaRecorder?.stop();
-            isRecording = false;
-            log('MIC: STOP REQUESTED');
-        }
-    }
-
-    /* -----------------------------
-       TEMPLATE HANDLERS
-    ------------------------------*/
-
-    async function useTemplate(event: any) {
-        log('USE TEMPLATE', event.detail.name);
-        selectedTemplate = event.detail;
-        showTemplatePopup = false;
-        await loadTemplateFields(selectedTemplate.id);
-        showTemplateForm = true;
-    }
-
-    async function installTemplate(msg: any) {
-        log('INSTALL TEMPLATE', msg.template_name);
+    // ================= TEMPLATES =================
+    async function loadTemplates() {
         try {
-            perfStart('INSTALL_TEMPLATE');
-            const res = await fetch("/api/templates/install", { method: "POST", headers: { "Content-Type": "application/json",...authHeader() }, body: JSON.stringify({ template_code: msg.template_code, template_id: msg.template_id, version: msg.template_version, name: msg.template_name, user: "Mani" }) });
-            perfEnd('INSTALL_TEMPLATE');
-            const data = await res.json();
-            if (data.success) { log('INSTALL: SUCCESS'); alert("✅ Template Installed Successfully"); await loadTemplates(); }
-            else { log('INSTALL: FAIL'); alert("❌ Installation Failed"); }
-        } catch (err) { log('INSTALL: ERROR', err); alert("❌ Installation Failed"); }
+            const response = await fetch(`/api/templates?t=${Date.now()}`, { cache: "no-store" });
+            if (!response.ok) { templates = []; return; }
+            const json = await response.json();
+            templates = (json.templates || []).map((t: any) => ({ ...t, data: typeof t.data === "string" ? JSON.parse(t.data) : structuredClone(t.data || {}) }));
+        } catch (err) { console.error(err); templates = []; }
     }
-
-    async function sendTemplateReport(e: any) {
-        log('SEND TEMPLATE REPORT');
-        try {
-            perfStart('SEND_TEMPLATE_REPORT');
-            const res = await fetch("/api/templates/report", { method: "POST", headers: { "Content-Type": "application/json",...authHeader() }, body: JSON.stringify({ template: e.detail.template, values: e.detail.values, sender: "Mani", room_id: selectedRoomId }) });
-            perfEnd('SEND_TEMPLATE_REPORT');
-            const data = await res.json();
-            if (!res.ok) { log('SEND REPORT: FAIL', data); alert(data.error || "Failed to send report"); return; }
-            log('SEND REPORT: SUCCESS');
-            alert("✅ Report Sent Successfully");
-            showTemplateForm = false;
-            await loadMessages(selectedRoomId);
-        } catch (err) {
-            log('SEND REPORT: ERROR', err);
-            alert("❌ Failed to send report");
-        }
-    }
-
-    function notifyTyping() { return; }
+    function openTemplatePopup() { loadTemplates(); showTemplatePopup = true; }
     function selectTemplate(event: CustomEvent) {
-        log('SELECT TEMPLATE', event.detail.name);
-        selectedTemplate = event.detail;
-        templateFields = selectedTemplate.fields?? [];
-        showTemplatePopup = false;
-        showTemplateForm = true;
+        const selected = event.detail; const latest = templates.find(t => t.id === selected.id) || selected;
+        const templateData = typeof latest.data === "string" ? JSON.parse(latest.data) : structuredClone(latest.data || {});
+        templateData.fields = (templateData.fields || []).map((f: any) => ({ ...f, field_type: f.field_type ?? f.type ?? "text", field_name: f.field_name ?? f.name ?? "", label: f.label ?? "", required: !!f.required }));
+        selectedTemplate = { ...latest, data: templateData }; showTemplatePopup = false; showTemplateForm = true;
     }
 
-    /* -----------------------------
-       BULLETPROOF INIT - NON BLOCKING
-    ------------------------------*/
-
-    async function initChat() {
-        perfStart('INIT_CHAT_TOTAL');
-        log('INIT START');
-        if (isInitializing ||!browser) return;
-        isInitializing = true;
-
-        try {
-            const userId = getCurrentUserId();
-            log('USER_ID', userId);
-            if (!userId) { log('NO USER -> LOGIN'); goto("/login"); return; }
-
-            // Reset state
-            selectedGroup = null;
-            selectedContact = null;
-            selectedRoomId = null;
-            messages = [];
-            showEmoji = false;
-            showGroupForm = false;
-            showContactForm = false;
-            showTemplatePopup = false;
-            showTemplateForm = false;
-            log('STATE RESET');
-
-            // Kill old subscription
-            if (subscription) {
-                log('KILL OLD SUB');
-                try { supabase.removeChannel(subscription); } catch(e){}
-                subscription = null;
-            }
-
-            // Init DB
-            await initDB();
-
-            // Load emoji picker - don't block
-            if (!emojiPicker) {
-                import('emoji-picker-element').then(async () => {
-                    await tick();
-                    emojiPicker = document.querySelector('emoji-picker');
-                    emojiPicker?.addEventListener('emoji-click', (e: any) => {
-                        log('EMOJI CLICKED', e.detail.unicode);
-                        message += e.detail.unicode;
-                        showEmoji = false;
-                    });
-                    log('EMOJI READY');
-                }).catch(e => log('EMOJI FAIL', e));
-            }
-
-            // Load sidebar - DON'T AWAIT, let UI render
-            log('LOAD SIDEBAR - NON BLOCKING');
-            loadGroups().then(() => log('GROUPS DONE'));
-            loadContacts().then(() => log('CONTACTS DONE'));
-
-            log('INIT END - UI VISIBLE');
-        } finally {
-            isInitializing = false;
-            perfEnd('INIT_CHAT_TOTAL');
-            console.log('📊 PERFORMANCE SUMMARY: Check logs above for 🐌 SLOW warnings');
-        }
+    async function sendTemplateReport(event: CustomEvent) {
+        const { template, values } = event.detail;
+        const payload = { reference_template_id: template.id, t_code: template.template_code || template.t_code, ts: new Date().toISOString(), shift: values.shift ?? null, station: values.station ?? null, user_name: currentUser?.name ?? "Guest", data: values };
+        const { error } = await templateDB.from("records").insert(payload);
+        if (error) { console.error("Insert Error:", error); alert(error.message); return; }
+        const templateData = structuredClone(template.data || {});
+        templateData.last_values = values;
+        await templateDB.from("templates").update({ data: templateData }).eq("id", template.id);
+        await sendMessage(new CustomEvent("sendMessage", { detail: { content: `📋 ${template.name}`, template: { ...template, values } } }));
+        showTemplateForm = false; selectedTemplate = null;
     }
 
-    onMount(async () => {
-        log('ONMOUNT');
-        isOnline = navigator.onLine;
-        window.addEventListener('online', () => { isOnline = true; log('NETWORK: ONLINE'); });
-        window.addEventListener('offline', () => { isOnline = false; log('NETWORK: OFFLINE'); });
-        await initChat();
-    });
+    // ================= STUBS =================
+    function editContact() { alert("Edit contact TBD"); }
+    function editGroup() { alert("Edit group TBD"); }
+    function deleteContact() { alert("Delete contact TBD"); }
+    function deleteGroup() { alert("Delete group TBD"); }
+    function openAddMembers() { showAddMembersForm = true; availableContacts = contacts.filter(c => !groupMembers.find(gm => gm.id === c.id)); }
+    function toggleContactSelection(id: string) { selectedContactsToAdd.includes(id) ? selectedContactsToAdd = selectedContactsToAdd.filter(x => x !== id) : selectedContactsToAdd = [...selectedContactsToAdd, id]; }
+    async function addMembersToGroup() { alert("Add members TBD"); showAddMembersForm = false; }
 
-    afterNavigate(async () => {
-        log('AFTER NAVIGATE');
-        await invalidateAll();
-        await tick();
-        await initChat();
-    });
-
-    onDestroy(() => {
-        log('ONDESTROY');
-        if (subscription) {
-            try { subscription.unsubscribe(); } catch(e){}
-        }
-        micStream?.getTracks().forEach(track => track.stop());
-    });
+    // ================= LIFECYCLE =================
+    onMount(async () => { await checkAuth(); });
+    onDestroy(async () => { await cleanupRealtime(); });
 </script>
 
-<!-- FIX #3: Only ONE template block -->
-{#key $page.url.pathname}
-<svelte:boundary onerror={(e) => console.error('CHAT CRASH:', e)}>
+{#if isAuthChecked}
 <div class="chat-container">
-    <ChatSidebar
-        {groups}
-        {contacts}
-        {selectedGroup}
-        {selectedContact}
-        loading={!groupsLoaded ||!contactsLoaded}
-        on:newGroup={() => { log('NEW GROUP BTN'); showGroupForm=true; }}
-        on:newContact={() => { log('NEW CONTACT BTN'); showContactForm=true; }}
+    <ChatSidebar 
+        {groups} {contacts} {selectedGroup} {selectedContact}
+        loading={false}
+        on:newGroup={() => showGroupForm = true}
+        on:newContact={() => showContactForm = true}
         on:selectGroup={selectGroup}
         on:selectContact={selectContact}
-        on:deleteContact={(e) => deleteContact(e.detail.id)}
-        on:deleteGroup={(e) => deleteGroup(e.detail.id)}
-    />
+        on:editContact={editContact}
+        on:editGroup={editGroup}
+        on:deleteContact={deleteContact}
+        on:deleteGroup={deleteGroup} />
 
     <section class="chat-area">
-        {#if selectedRoomId}
-            <ChatHeader
-                title={selectedContact?.name?? selectedGroup?.name}
-                subtitle={selectedContact? selectedContact.mobile : `${selectedGroup?.members?? 0} members`}
-                online={false}
-                {typing}
-            />
-            <div class="network-status" class:offline={!isOnline}>
-                {#if isOnline}
-                    <span class="dot online"></span> Online - Last sync: {lastSync}
-                {:else}
-                    <span class="dot offline"></span> Offline - Reconnecting...
-                {/if}
-            </div>
-            <div class="messages" on:scroll={handleScroll}>
-                <MessageList {messages} on:install={(e) => installTemplate(e.detail)} />
-            </div>
-            {#if typingStatus}<div class="typing">{typingStatus}</div>{/if}
-            <div class="message-box">
-                <button class="icon-btn" on:click={() => { log('EMOJI BTN'); showEmoji =!showEmoji; }}>😀</button>
-                {#if showEmoji}
-                    <div class="emoji-popup" bind:this={emojiPickerContainer}>
-                        <emoji-picker></emoji-picker>
-                    </div>
-                {/if}
-                <input bind:value={message} placeholder="Type your message..." on:input={notifyTyping} on:keydown={(e) => { if (e.key === "Enter") { log('ENTER KEY'); sendMessage(); } }} disabled={!isOnline ||!selectedRoomId} />
-                <button class="icon-btn" class:recording={isRecording} on:click={toggleRecording}>
-                    {#if isRecording}⏹️{:else}🎤{/if}
-                </button>
-                <button on:click={sendMessage} disabled={!isOnline ||!selectedRoomId}>Send</button>
-            </div>
+        {#if selectedContact || selectedGroup}
+            <ChatHeader 
+                title={selectedContact?.name ?? selectedGroup?.name}
+                subtitle={selectedContact ? (isUserOnline(selectedContact.id) ? "Online" : "Offline") : `${groupMembers.length} Members`}
+                online={selectedContact ? isUserOnline(selectedContact.id) : false}
+                typing={typing} isGroup={!!selectedGroup} memberCount={groupMembers.length}
+                on:menu={selectedGroup ? openAddMembers : () => {}}
+                on:back={() => { selectedRoomId = null; selectedGroupId = null; selectedContact = null; selectedGroup = null; groupMembers = []; messages = []; }} />
+            
+            {#if isLoadingMessages}<div class="loading">Loading messages...</div>{/if}
+            <MessageList {messages} selectedUser={selectedContact || selectedGroup} currentUserId={getCurrentUserId()} />
+            <ChatInput {uploadingFiles} on:sendMessage={sendMessage} on:openTemplate={openTemplatePopup} />
         {:else}
-            <div class="empty-chat-screen">
-                <h2>💬 Select a Group or Contact</h2>
-                <p>Start chatting with your team.</p>
-            </div>
+            <div class="empty"><h2>💬 Select Contact or Group</h2></div>
         {/if}
     </section>
 </div>
-</svelte:boundary>
-{/key}
+{/if}
+
+<input bind:this={fileInput} type="file" hidden multiple />
+
+{#if showTemplatePopup}<div class="overlay"><TemplatePopup {templates} on:close={() => showTemplatePopup = false} on:use={selectTemplate} /></div>{/if}
+{#if showTemplateForm && selectedTemplate}<div class="overlay"><TemplateForm template={selectedTemplate} on:submit={sendTemplateReport} on:close={() => showTemplateForm = false} /></div>{/if}
+{#if showCreateTemplate}<div class="overlay"><TemplateDesigner {templates} on:close={() => showCreateTemplate = false} /></div>{/if}
+
+{#if showContactForm}
+<div class="overlay">
+    <div class="popup">
+        <h2>New Contact</h2>
+        <input bind:value={contactName} placeholder="Contact Name" />
+        <input bind:value={contactMobile} placeholder="Mobile" />
+        <input bind:value={contactEmail} placeholder="Email" />
+        <input bind:value={department} placeholder="Department" />
+        <div class="buttons">
+            <button on:click={createContact}>Save</button>
+            <button on:click={() => showContactForm=false}>Cancel</button>
+        </div>
+    </div>
+</div>
+{/if}
 
 {#if showGroupForm}
-<div class="popup">
-    <div class="popup-card">
+<div class="overlay">
+    <div class="popup">
         <h2>Create Group</h2>
         <input bind:value={groupName} placeholder="Group Name" />
         <textarea bind:value={groupDesc} placeholder="Description"></textarea>
-        <div class="popup-buttons">
+        <div class="buttons">
             <button on:click={createGroup}>Create</button>
-            <button class="cancel-btn" on:click={() => { log('CANCEL GROUP'); showGroupForm = false; }}>Cancel</button>
+            <button on:click={() => showGroupForm=false}>Cancel</button>
         </div>
     </div>
-</div>
-{/if}
-
-{#if showContactForm}
-<div class="popup">
-    <div class="popup-card">
-        <h2>Create Contact</h2>
-        <input bind:value={contactName} placeholder="Name" />
-        <input bind:value={contactMobile} placeholder="Mobile Number" />
-        <input bind:value={contactEmail} placeholder="Email" />
-        <input bind:value={department} placeholder="Department" />
-        <div class="popup-buttons">
-            <button on:click={createContact}>Create</button>
-            <button class="cancel-btn" on:click={() => { log('CANCEL CONTACT'); showContactForm = false; }}>Cancel</button>
-        </div>
-    </div>
-</div>
-{/if}
-
-{#if showCreateTemplate}
-<div class="overlay">
-    <TemplateDesigner on:saved={async () => { log('TEMPLATE SAVED'); showCreateTemplate = false; await loadTemplates(); }} on:close={() => { log('TEMPLATE CLOSE'); showCreateTemplate = false; }} />
-</div>
-{/if}
-
-{#if showTemplatePopup}
-<div class="overlay">
-    <TemplatePopup {templates} on:close={() => { log('TEMPLATE POPUP CLOSE'); showTemplatePopup = false; }} on:new={() => { log('NEW TEMPLATE'); showTemplatePopup = false; showTemplateDesigner = true; }} on:use={selectTemplate} />
-</div>
-{/if}
-
-{#if showTemplateDesigner}
-<div class="overlay">
-    <TemplateDesigner on:close={() => { log('DESIGNER CLOSE'); showTemplateDesigner = false; }} on:saved={async () => { log('DESIGNER SAVED'); showTemplateDesigner = false; await loadTemplates(); showTemplatePopup = true; }} />
-</div>
-{/if}
-
-{#if showTemplateForm && selectedTemplate}
-<div class="overlay">
-    <TemplateForm template={selectedTemplate} fields={selectedTemplate.fields} on:cancel={() => { log('FORM CANCEL'); showTemplateForm = false; selectedTemplate = null; }} on:submit={sendTemplateReport} />
 </div>
 {/if}
 
 <style>
-.overlay{ position:fixed; inset:0; background:rgba(0,0,0,.35); display:flex; justify-content:center; align-items:center; z-index:9999; }
-.chat-container{ display:flex; height:100vh; background:#f0f2f5; }
-.chat-area{ flex:1; display:flex; flex-direction:column; min-width: 0; }
-.network-status{ padding: 6px 16px; background: #dcf8c6; font-size: 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid #e5e7eb; }
-.network-status.offline{ background: #ffebee; }
-.dot{ width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.dot.online{ background: #25d366; }
-.dot.offline{ background: #ff3b30; animation: pulse 1.5s infinite; }
-@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-.messages{ flex: 1; overflow-y: auto; padding: 12px; mask-image: linear-gradient(to bottom, transparent 0%, black 3%, black 97%, transparent 100%); -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 3%, black 97%, transparent 100%); }
-.typing{ padding:8px 20px; font-size:13px; color:#666; }
-.message-box{ height:70px; display:flex; align-items:center; gap:10px; padding:12px; background:white; border-top: 1px solid #e5e7eb; position: relative; }
-.message-box input{ flex:1; border:none; background:#f0f2f5; border-radius:30px; padding:12px 18px; outline: none; }
-.message-box input:disabled{ opacity: 0.5; cursor: not-allowed; }
-.message-box button{ padding:12px 20px; border:none; background:#2563eb; color:#fff; border-radius:30px; cursor:pointer; font-weight: 600; }
-.message-box button:hover:not(:disabled){ background: #1d4ed8; }
-.message-box button:disabled{ opacity: 0.5; cursor: not-allowed; }
-.icon-btn{ background: none!important; color: #666!important; padding: 8px!important; font-size: 20px; }
-.icon-btn.recording{ background: #ef4444!important; color: white!important; animation: pulse 1s infinite; }
-.emoji-popup{ position: absolute; bottom: 70px; left: 12px; z-index: 100; }
-.empty-chat-screen{ flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#666; }
-.popup{ position:fixed; inset:0; background:rgba(0,0,0,0.5);
-.emoji-popup{ position: absolute; bottom: 70px; left: 12px; z-index: 100; }
-.empty-chat-screen{ flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#666; }
-.popup{ position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex; justify-content:center; align-items:center; z-index:100; }
-.popup-card{ background:#fff; padding:24px; border-radius:12px; width:90%; max-width:500px; }
-.popup-card input,.popup-card textarea{ width:100%; padding:10px; margin:8px 0; border:1px solid #ddd; border-radius:6px; font-family: inherit; }
-.popup-buttons{ display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
-.popup-buttons button{ padding:10px 20px; border:none; border-radius:6px; cursor:pointer; font-weight: 600; }
-.popup-buttons button:first-child{ background: #2563eb; color: white; }
-.cancel-btn{ background:#f0f2f5; }
+.chat-container{ display:flex; width:100%; height:100vh; overflow:hidden; background:#f8fafc; }
+.chat-area{ flex:1; display:flex; flex-direction:column; overflow:hidden; }
+.loading{ padding:30px; text-align:center; font-size:18px; color:#64748b; }
+.empty{ flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#64748b; background:white; }
+.empty h2{ margin-bottom:10px; color:#334155; }
+.overlay{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; justify-content:center; align-items:center; z-index:9999; padding:20px; }
+.popup{ background:white; width:100%; max-width:450px; border-radius:14px; padding:25px; display:flex; flex-direction:column; gap:16px; box-shadow:0 15px 40px rgba(0,0,0,.25); }
+.popup h2{ margin:0; color:#1e293b; font-size:22px; font-weight:600; }
+.popup input, .popup textarea{ width:100%; padding:12px 14px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; outline:none; transition:.2s; }
+.popup textarea{ min-height:100px; resize:vertical; }
+.popup input:focus, .popup textarea:focus{ border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.15); }
+.buttons{ display:flex; justify-content:flex-end; gap:12px; margin-top:10px; }
+.buttons button{ padding:10px 20px; border:none; border-radius:8px; cursor:pointer; font-weight:600; transition:.2s; }
+.buttons button:first-child{ background:#2563eb; color:white; }
+.buttons button:first-child:hover{ background:#1d4ed8; }
+.buttons button:last-child{ background:#e5e7eb; color:#111827; }
+.buttons button:last-child:hover{ background:#d1d5db; }
 </style>

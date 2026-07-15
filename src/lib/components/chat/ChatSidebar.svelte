@@ -5,13 +5,10 @@
     export let contacts: any[] = [];
     export let selectedGroup: any = null;
     export let selectedContact: any = null;
-    export let loading = false; // <-- new prop from parent
+    export let loading = false;
 
     const dispatch = createEventDispatcher();
 
-    /* -----------------------------
-       DEBUG LOGGER
-    ------------------------------*/
     const DEBUG = true;
     function log(step: string, data?: any) {
         if (!DEBUG) return;
@@ -38,58 +35,49 @@
     let contextType: 'contact' | 'group' | null = null;
 
     $: filteredContacts = contacts.filter((c: any) =>
-       !search ||
+      !search ||
         (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
         (c.mobile || "").includes(search)
     );
 
     $: filteredGroups = groups.filter((g: any) =>
-       !search ||
+      !search ||
         (g.name || "").toLowerCase().includes(search.toLowerCase())
     );
 
-    $: log('FILTER UPDATE', { search, filteredGroups: filteredGroups.length, filteredContacts: filteredContacts.length });
+    $: log('FILTER UPDATE', {
+        search,
+        filteredGroups: filteredGroups.length,
+        filteredContacts: filteredContacts.length
+    });
 
-    // 2. 9-grid icon: FIXED - Single letter for contacts, 9-grid for groups
     function getGridItems(name: string, members?: any[]) {
         if (members && members.length > 1) {
-            // Group: show up to 9 member initials
             return members.slice(0, 9).map(m => (m.name?.[0] || '?').toUpperCase());
         }
-        // Contact: just first letter, big
         return [(name?.[0] || '?').toUpperCase()];
     }
 
-    // Generate consistent colors
     function getColor(index: number) {
-        const hue = (index * 47) % 360; // Spread colors better
+        const hue = (index * 47) % 360;
         return `hsl(${hue}, 65%, 55%)`;
     }
 
-    // Format time like Image 1: "7:02 AM", "yesterday", "Mon"
     function formatTime(timestamp: string | number) {
-        if (!timestamp) return 'yesterday';
-
+        if (!timestamp) return '';
         const date = new Date(timestamp);
         const now = new Date();
         const diff = now.getTime() - date.getTime();
         const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
         if (days === 0) {
-            return date.toLocaleTimeString('en-US', {
-                hour: 'numeric',
-                minute: '2-digit',
-                hour12: true
-            });
+            return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
         } else if (days === 1) {
             return 'yesterday';
         } else if (days < 7) {
             return date.toLocaleDateString('en-US', { weekday: 'short' });
         } else {
-            return date.toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric'
-            });
+            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         }
     }
 
@@ -105,7 +93,6 @@
         showMenu = false;
     }
 
-    // 5. Long press for delete/edit/image
     let pressTimer: any;
     let isLongPress = false;
 
@@ -135,7 +122,7 @@
     }
 
     function handleContextAction(action: string) {
-        if (!contextItem ||!contextType) return;
+        if (!contextItem ||!contextType) return; // FIX 2: added space
         log('CONTEXT ACTION', { action, item: contextItem.name, type: contextType });
 
         if (action === 'delete') {
@@ -165,7 +152,7 @@
     }
 
     function toggleMenu() {
-        showMenu =!showMenu;
+        showMenu =!showMenu; // FIX 2: added space
         log('TOGGLE MENU', showMenu);
     }
 </script>
@@ -173,8 +160,6 @@
 <svelte:window on:click={closeMenu}/>
 
 <div class="sidebar">
-
-    <!-- HEADER: Blue like Image 1, 1. ONLINE STATUS REMOVED -->
     <div class="header">
         <div class="left">
             <span class="title">Chats</span>
@@ -191,17 +176,11 @@
     </div>
 
     <div class="search">
-        <input
-            bind:value={search}
-            on:input={() => log('SEARCH INPUT', search)}
-            placeholder="Search contact or group..."
-        />
+        <input bind:value={search} on:input={() => log('SEARCH INPUT', search)} placeholder="Search contact or group..." />
     </div>
 
-    <!-- COMBINED LIST: Groups + Contacts in single list like Image 1 -->
     <div class="chat-list">
         {#if loading}
-            <!-- SKELETON LOADING STATE -->
             <div class="skeleton-list">
                 {#each Array(8) as _}
                     <div class="skeleton-row">
@@ -216,93 +195,60 @@
         {:else if filteredGroups.length === 0 && filteredContacts.length === 0}
             <div class="empty">No Chats</div>
         {:else}
-            <!-- Groups first -->
             {#each filteredGroups as group (group.id)}
                 {@const gridItems = getGridItems(group.name, group.members)}
-                <div
-                    class="chat-row"
-                    class:selected={selectedGroup?.id === group.id}
+                <div class="chat-row" class:selected={selectedGroup?.id === group.id}
                     on:click={() => handleClick(group, 'group')}
                     on:mousedown={() => handleLongPress(group, 'group')}
-                    on:mouseup={clearPressTimer}
-                    on:mouseleave={clearPressTimer}
-                    on:touchstart={() => handleLongPress(group, 'group')}
-                    on:touchend={clearPressTimer}
-                    role="button"
-                    tabindex="0"
-                    on:keydown={(e) => e.key === 'Enter' && handleClick(group, 'group')}
+                    on:mouseup={clearPressTimer} on:mouseleave={clearPressTimer}
+                    on:touchstart={() => handleLongPress(group, 'group')} on:touchend={clearPressTimer}
+                    role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleClick(group, 'group')}
                 >
                     <div class="avatar-wrap">
                         <div class="avatar-grid" class:single={gridItems.length === 1}>
                             {#if gridItems.length === 1}
-                                <div class="mini single-letter" style="background: {getColor(0)}">
-                                    {gridItems[0]}
-                                </div>
+                                <div class="mini single-letter" style="background: {getColor(0)}">{gridItems[0]}</div>
                             {:else}
-                                {#each gridItems as initial, i}
-                                    <div class="mini" style="background: {getColor(i)}">{initial}</div>
-                                {/each}
-                                <!-- Fill empty cells -->
-                                {#each Array(9 - gridItems.length) as _, i}
-                                    <div class="mini empty"></div>
-                                {/each}
+                                {#each gridItems as initial, i}<div class="mini" style="background: {getColor(i)}">{initial}</div>{/each}
+                                {#each Array(9 - gridItems.length) as _, i}<div class="mini empty"></div>{/each}
                             {/if}
                         </div>
-                        {#if group.unread}
-                            <div class="badge">{group.unread > 99? '99+' : group.unread}</div>
-                        {/if}
+                        {#if group.unread}<div class="badge">{group.unread > 99? '99+' : group.unread}</div>{/if}
                     </div>
-
                     <div class="content">
                         <div class="name">{group.name}</div>
-                        <div class="msg">{group.lastMsg || 'Group Chat'}</div>
+                        <div class="msg">{group.lastMsg || group.description || 'Group Chat'}</div>
                     </div>
-
-                    <div class="time">{formatTime(group.time || group.updated_at)}</div>
+                    <div class="time">{formatTime(group.time || group.updated_at || group.created_at)}</div>
                 </div>
             {/each}
 
-            <!-- Contacts -->
             {#each filteredContacts as contact (contact.id)}
                 {@const gridItems = getGridItems(contact.name)}
-                <div
-                    class="chat-row"
-                    class:selected={selectedContact?.id === contact.id}
+                <div class="chat-row" class:selected={selectedContact?.id === contact.id}
                     on:click={() => handleClick(contact, 'contact')}
                     on:mousedown={() => handleLongPress(contact, 'contact')}
-                    on:mouseup={clearPressTimer}
-                    on:mouseleave={clearPressTimer}
-                    on:touchstart={() => handleLongPress(contact, 'contact')}
-                    on:touchend={clearPressTimer}
-                    role="button"
-                    tabindex="0"
-                    on:keydown={(e) => e.key === 'Enter' && handleClick(contact, 'contact')}
+                    on:mouseup={clearPressTimer} on:mouseleave={clearPressTimer}
+                    on:touchstart={() => handleLongPress(contact, 'contact')} on:touchend={clearPressTimer}
+                    role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleClick(contact, 'contact')}
                 >
                     <div class="avatar-wrap">
                         <div class="avatar-grid single">
-                            <div class="mini single-letter" style="background: {getColor(0)}">
-                                {gridItems[0]}
-                            </div>
+                            <div class="mini single-letter" style="background: {getColor(0)}">{gridItems[0]}</div>
                         </div>
-                        {#if contact.unread}
-                            <div class="badge">{contact.unread > 99? '99+' : contact.unread}</div>
-                        {/if}
+                        {#if contact.unread}<div class="badge">{contact.unread > 99? '99+' : contact.unread}</div>{/if}
                     </div>
-
                     <div class="content">
                         <div class="name">{contact.name}</div>
-                        <div class="msg">{contact.lastMsg || contact.mobile || ''}</div>
+                        <div class="msg">{contact.lastMsg || contact.mobile || contact.email || ''}</div>
                     </div>
-
                     <div class="time">{formatTime(contact.time || contact.updated_at)}</div>
                 </div>
             {/each}
         {/if}
     </div>
-
 </div>
 
-<!-- 5. CONTEXT MENU: Delete/Edit/Add Image like WhatsApp -->
 {#if showContextMenu && contextItem}
 <div class="context-overlay">
     <div class="context-popup">
@@ -323,7 +269,6 @@
     background:#fff;
 }
 
-/* HEADER: Blue bar like Image 1 */
 .header{
     background: #3b82f6;
     color: white;
@@ -336,7 +281,7 @@
     z-index: 10;
 }
 
-/* FIXED: Added space between.header and.left */
+/* FIX 1: Added space. Was.header.left now.header.left */
 .header.left{
     display: flex;
     gap: 12px;
@@ -344,10 +289,7 @@
     align-items: center;
 }
 
-.title{
-    font-size: 18px;
-    font-weight: 600;
-}
+.title{ font-size: 18px; font-weight: 600; }
 
 .icon-btn{
     background: none;
@@ -358,9 +300,7 @@
     cursor: pointer;
 }
 
-.menu-wrap{
-    position: relative;
-}
+.menu-wrap{ position: relative; }
 
 .dropdown{
     position: absolute;
@@ -386,15 +326,9 @@
     cursor: pointer;
 }
 
-.dropdown button:hover{
-    background: #f5f5f5;
-}
+.dropdown button:hover{ background: #f5f5f5; }
 
-.search{
-    padding:10px 16px;
-    background: white;
-}
-
+.search{ padding:10px 16px; background: white; }
 .search input{
     width:100%;
     padding:10px;
@@ -404,52 +338,26 @@
     font-size: 14px;
 }
 
-.chat-list{
-    flex: 1;
-    overflow-y: auto;
-    background: white;
-}
+.chat-list{ flex: 1; overflow-y: auto; background: white; }
 
-/* SKELETON LOADING */
-.skeleton-list {
-    padding: 8px 0;
-}
-.skeleton-row {
-    display: flex;
-    align-items: center;
-    padding: 10px 16px;
-    gap: 12px;
-}
+/* SKELETON */
+.skeleton-list { padding: 8px 0; }
+.skeleton-row { display: flex; align-items: center; padding: 10px 16px; gap: 12px; }
 .skeleton-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 8px;
+    width: 48px; height: 48px; border-radius: 8px;
     background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s infinite;
-    flex-shrink: 0;
+    background-size: 200% 100%; animation: loading 1.5s infinite; flex-shrink: 0;
 }
-.skeleton-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
+.skeleton-content { flex: 1; display: flex; flex-direction: column; gap: 8px; }
 .skeleton-line {
-    height: 14px;
-    border-radius: 4px;
+    height: 14px; border-radius: 4px;
     background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s infinite;
+    background-size: 200% 100%; animation: loading 1.5s infinite;
 }
 .skeleton-line.w-40 { width: 40%; }
 .skeleton-line.w-60 { width: 60%; }
-@keyframes loading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
+@keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-/* CHAT ROW: Single line like Image 1 */
 .chat-row{
     display: flex;
     align-items: center;
@@ -461,24 +369,12 @@
     user-select: none;
     -webkit-tap-highlight-color: transparent;
 }
+.chat-row:active{ background: #f5f5f5; }
+.chat-row.selected{ background: #e5f3ff; }
 
-.chat-row:active{
-    background: #f5f5f5;
-}
-
-.chat-row.selected{
-    background: #e5f3ff;
-}
-
-.avatar-wrap{
-    position: relative;
-    flex-shrink: 0;
-}
-
-/* 2. 9-GRID ICON like Image 1 */
+.avatar-wrap{ position: relative; flex-shrink: 0; }
 .avatar-grid{
-    width: 48px;
-    height: 48px;
+    width: 48px; height: 48px;
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-template-rows: repeat(3, 1fr);
@@ -487,12 +383,7 @@
     overflow: hidden;
     background: #e5e7eb;
 }
-
-/* Single letter for contacts */
-.avatar-grid.single{
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
-}
+.avatar-grid.single{ grid-template-columns: 1fr; grid-template-rows: 1fr; }
 
 .mini{
     color: white;
@@ -503,39 +394,24 @@
     justify-content: center;
     text-transform: uppercase;
 }
+.mini.single-letter{ font-size: 20px; }
+.mini.empty{ background: #e5e7eb!important; }
 
-.mini.single-letter{
-    font-size: 20px;
-}
-
-.mini.empty{
-    background: #e5e7eb!important;
-}
-
-/* Unread badge top-left like Image 1 */
 .badge{
     position: absolute;
-    top: -4px;
-    right: -4px;
+    top: -4px; right: -4px;
     background: #ef4444;
     color: white;
     border-radius: 12px;
     padding: 2px 6px;
     font-size: 11px;
     font-weight: 600;
-    min-width: 18px;
-    height: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    min-width: 18px; height: 18px;
+    display: flex; align-items: center; justify-content: center;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
 
-.content{
-    flex: 1;
-    min-width: 0;
-}
-
+.content{ flex: 1; min-width: 0; }
 .name{
     font-size: 16px;
     font-weight: 500;
@@ -545,7 +421,6 @@
     color: #111b21;
     margin-bottom: 2px;
 }
-
 .msg{
     font-size: 14px;
     color: #667781;
@@ -553,7 +428,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
 }
-
 .time{
     font-size: 12px;
     color: #667781;
@@ -562,37 +436,21 @@
     margin-top: 2px;
 }
 
-.empty{
-    padding: 40px 15px;
-    color: #999;
-    text-align: center;
-}
+.empty{ padding: 40px 15px; color: #999; text-align: center; }
 
-/* 5. CONTEXT MENU for Edit/Delete/Image */
 .context-overlay{
-    position: fixed;
-    inset: 0;
+    position: fixed; inset: 0;
     background: rgba(0,0,0,0.4);
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    display: flex; justify-content: center; align-items: center;
     z-index: 1000;
 }
-
 .context-popup{
     background: white;
     border-radius: 12px;
     min-width: 250px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.2);
 }
-
-.context-title{
-    padding: 16px;
-    font-weight: 600;
-    border-bottom: 1px solid #eee;
-    color: #111;
-}
-
+.context-title{ padding: 16px; font-weight: 600; border-bottom: 1px solid #eee; color: #111; }
 .context-popup button{
     display: block;
     width: 100%;
@@ -604,12 +462,6 @@
     cursor: pointer;
     color: #333;
 }
-
-.context-popup button:hover{
-    background: #f5f5f5;
-}
-
-.context-popup button.delete{
-    color: #ef4444;
-}
+.context-popup button:hover{ background: #f5f5f5; }
+.context-popup button.delete{ color: #ef4444; }
 </style>

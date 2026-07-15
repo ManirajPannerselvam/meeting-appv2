@@ -7,48 +7,49 @@ export function calculateFormula(
     values: FormulaContext
 ): number {
 
-    if (!formula || formula.trim() === '') return 0;
+    if (!formula) return 0;
 
     let expression = formula;
 
+    // Replace longest names first
+    const keys = Object.keys(values).sort((a, b) => b.length - a.length);
+
+    for (const key of keys) {
+
+        const value = Number(values[key]) || 0;
+
+        // {Field}
+        expression = expression.replace(
+            new RegExp(`\\{${key}\\}`, "gi"),
+            String(value)
+        );
+
+        // Field
+        expression = expression.replace(
+            new RegExp(`\\b${key}\\b`, "gi"),
+            String(value)
+        );
+    }
+
+    // remove %
+    expression = expression.replace(/%/g, "");
+
+    console.log("FORMULA :", formula);
+    console.log("VALUES  :", values);
+    console.log("EXPR    :", expression);
+
     try {
-        // Convert all values to numbers first
-        const numericValues: Record<string, number> = {};
-        Object.keys(values).forEach(key => {
-            const val = values[key];
-            numericValues[key] = val === "" || val === null || val === undefined
-               ? 0
-                : Number(val) || 0; // Force number conversion
-        });
 
-        // Replace field names with numeric values
-        const sortedKeys = Object.keys(numericValues).sort((a, b) => b.length - a.length);
+        const result = Function(
+            `"use strict";return (${expression})`
+        )();
 
-        sortedKeys.forEach((key) => {
-            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp("\\b" + escapedKey + "\\b", "g");
-            expression = expression.replace(regex, String(numericValues[key]));
-        });
+        return Number(Number(result).toFixed(2));
 
-        // Remove any leftover field names
-        expression = expression.replace(/[a-zA-Z_][a-zA-Z0-9_]*/g, '0');
+    } catch (e) {
 
-        // Sanitize
-        expression = expression.replace(/[^0-9+\-*/(). ]/g, '');
+        console.error("Formula Error", e);
 
-        // Check division by zero
-        if (/\/\s*0(?![0-9.])/.test(expression)) {
-            console.warn('Division by zero');
-            return 0;
-        }
-
-        console.log("Expression:", expression);
-        const result = Function(`"use strict"; return (${expression})`)();
-
-        return isNaN(result) ||!isFinite(result)? 0 : Number(result.toFixed(2));
-
-    } catch (err) {
-        console.error("Formula error:", err);
         return 0;
     }
 }

@@ -4,166 +4,159 @@
 
     let values: Record<string, any> = {};
 
+    function getOptions(field: any) {
+        try {
+            if (!field.options) return [];
+            if (Array.isArray(field.options)) return field.options;
+            return JSON.parse(field.options);
+        } catch {
+            return [];
+        }
+    }
+
     function calculateFormula(field: any) {
         if (!field.formula) return "";
 
         try {
-            const expr = field.formula.replace(
-                /\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g,
-                (m) => values[m] ?? 0
+            let formula = field.formula;
+
+            formula = formula.replace(
+                /\{([^}]+)\}/g,
+                (_, key) => Number(values[key] || 0)
             );
 
-            return Function(`return ${expr}`)();
+            return Number(Function(`return ${formula}`)()).toFixed(2);
         } catch {
             return "";
         }
     }
 </script>
 
-<div class="preview">
+{#each fields as field}
 
-    <div class="header">
+    {#if !field.hidden}
 
-        <div>
+    <div class="item">
 
-            <h2>{template.name || "Untitled Template"}</h2>
+        <label>
+            {field.label}
+            {#if field.required}
+                <span>*</span>
+            {/if}
+        </label>
 
-            <small>
+        {#if field.field_type === "text"}
 
-                {template.department} • Version {template.version}
+            <input
+                bind:value={values[field.field_name]}
+                placeholder={field.placeholder}
+                readonly={field.readonly}
+            />
 
-            </small>
+        {:else if field.field_type === "number"}
 
-        </div>
+            <input
+                type="number"
+                bind:value={values[field.field_name]}
+                placeholder={field.placeholder}
+                readonly={field.readonly}
+            />
+
+        {:else if field.field_type === "textarea"}
+
+            <textarea
+                rows="3"
+                bind:value={values[field.field_name]}
+                placeholder={field.placeholder}
+                readonly={field.readonly}
+            />
+
+        {:else if field.field_type === "date"}
+
+            <input
+                type="date"
+                bind:value={values[field.field_name]}
+            />
+
+        {:else if field.field_type === "time"}
+
+            <input
+                type="time"
+                bind:value={values[field.field_name]}
+            />
+
+        {:else if field.field_type === "dropdown"}
+
+            <select bind:value={values[field.field_name]}>
+
+                <option value="">Select</option>
+
+                {#each getOptions(field) as option}
+
+                    <option value={option}>{option}</option>
+
+                {/each}
+
+            </select>
+
+        {:else if field.field_type === "checkbox"}
+
+            <input
+                type="checkbox"
+                bind:checked={values[field.field_name]}
+            />
+
+        {:else if field.field_type === "formula"}
+
+            <input
+                readonly
+                value={calculateFormula(field)}
+            />
+
+        {:else if field.field_type === "rating"}
+
+            <input
+                type="number"
+                min="1"
+                max="5"
+                bind:value={values[field.field_name]}
+            />
+
+        {:else if field.field_type === "image"}
+
+            <input type="file" accept="image/*" />
+
+        {:else if field.field_type === "attachment"}
+
+            <input type="file" />
+
+        {:else if field.field_type === "signature"}
+
+            <input
+                placeholder="Signature"
+                readonly
+            />
+
+        {:else if field.field_type === "gps"}
+
+            <input
+                placeholder="Current Location"
+                readonly
+            />
+
+        {:else}
+
+            <input
+                bind:value={values[field.field_name]}
+            />
+
+        {/if}
 
     </div>
 
-    {#if fields.length===0}
-
-        <div class="empty">
-
-            <div class="icon">📄</div>
-
-            <h3>No fields configured</h3>
-
-            <p>
-
-                Add fields from the toolbox to preview the form.
-
-            </p>
-
-        </div>
-
-    {:else}
-
-        <div class="form">
-
-            {#each fields as field}
-
-                {#if !field.hidden}
-
-                <div class="item">
-
-                    <label>
-
-                        {field.label}
-
-                        {#if field.required}
-
-                            <span>*</span>
-
-                        {/if}
-
-                    </label>
-
-                    {#if field.type==="text"}
-
-                        <input
-                            bind:value={values[field.name]}
-                            placeholder={field.placeholder}
-                            readonly={field.readonly}
-                        />
-
-                    {:else if field.type==="number"}
-
-                        <input
-                            type="number"
-                            bind:value={values[field.name]}
-                            placeholder={field.placeholder}
-                            readonly={field.readonly}
-                        />
-
-                    {:else if field.type==="textarea"}
-
-                        <textarea
-                            rows="3"
-                            bind:value={values[field.name]}
-                            placeholder={field.placeholder}
-                            readonly={field.readonly}
-                        />
-
-                    {:else if field.type==="date"}
-
-                        <input
-                            type="date"
-                            bind:value={values[field.name]}
-                        />
-
-                    {:else if field.type==="time"}
-
-                        <input
-                            type="time"
-                            bind:value={values[field.name]}
-                        />
-
-                    {:else if field.type==="dropdown"}
-
-                        <select
-                            bind:value={values[field.name]}
-                        >
-
-                            <option>
-
-                                Select
-
-                            </option>
-
-                            {#each (field.options_json || "").split(",") as op}
-
-                                {#if op.trim()}
-
-                                    <option>
-
-                                        {op.trim()}
-
-                                    </option>
-
-                                {/if}
-
-                            {/each}
-
-                        </select>
-
-                    {:else if field.type==="formula"}
-
-                        <input
-                            readonly
-                            value={calculateFormula(field)}
-                        />
-
-                    {/if}
-
-                </div>
-
-                {/if}
-
-            {/each}
-
-        </div>
-
     {/if}
 
-</div>
+{/each}
 
 <style>
 

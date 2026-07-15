@@ -1,219 +1,170 @@
-import { json, error } from "@sveltejs/kit";
+import { json } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_URL, SUPABASE_SERVICE_ROLE } from '$env/static/private';
-import type { RequestHandler } from './$types';
+import {
+    VITE_SUPABASE_TEMPLATES_URL,
+    SUPABASE_TEMPLATES_SERVICE_KEY
+} from '$env/static/private';
 
-console.log('URL:', SUPABASE_URL, 'Key exists:', !!SUPABASE_SERVICE_ROLE);
+// TODO: Move to.env - ROTATE THIS KEY NOW
+// const url = 'https://rfckntoqyomqhrkwejrx.supabase.co'
+// const serviceKey = 'eyJhbGciOi...'
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE);
+const supabase = createClient(
+    VITE_SUPABASE_TEMPLATES_URL,
+    SUPABASE_TEMPLATES_SERVICE_KEY,
+    {
+        auth: {
+            persistSession: false,
+            autoRefreshToken: false
+        }
+    }
+);
 
-function getUserFromToken(request: Request) {
-  return {
-    userId: null,
-    role: 'admin'
-  };
+function normalizeTemplate(template: any) {
+    if (!template) return template;
+    if (typeof template.data === 'string') {
+        try {
+            template.data = JSON.parse(template.data);
+        } catch {
+            template.data = {};
+        }
+    }
+    template.data??= {};
+    template.data.fields??= [];
+    return template;
 }
 
-// GET
-export const GET: RequestHandler = async () => {
-  try {
-    const { data: templates, error: templatesError } = await supabase
-     .from('templates')
-     .select('*')
-     .eq('is_active', true)
-     .order('name');
+export async function GET() {
+    try {
+        const { data, error } = await supabase
+           .from('templates')
+           .select('*')
+           .order('created_at', { ascending: false });
 
-    if (templatesError) throw templatesError;
+        if (error) throw error;
 
-    const templatesWithFields = await Promise.all(
-      (templates || []).map(async (t) => {
-        const { data: fields } = await supabase
-         .from('template_fields')
-         .select('*')
-         .eq('template_id', t.id)
-         .order('display_order');
+        const normalized = (data?? []).map(normalizeTemplate);
 
-        return {
-          ...t,
-          fields: fields || []
+        // DEBUG: Check if last_values is coming from DB
+        console.log("GET TEMPLATE");
+        console.log(JSON.stringify(normalized, null, 2));
+
+        return json({
+            success: true,
+            templates: normalized
+        });
+
+    } catch (err: any) {
+        console.error(err);
+        return json({ success: false, error: err.message }, { status: 500 });
+    }
+}
+
+export async function POST({ request }) {
+    try {
+        const body = await request.json();
+
+        if (!body.template_code?.trim()) {
+            return json({ success: false, error: 'Template Code is required.' }, { status: 400 });
+        }
+        if (!body.name?.trim()) {
+            return json({ success: false, error: 'Template Name is required.' }, { status: 400 });
+        }
+
+        const payload = {
+            template_code: body.template_code.trim().toUpperCase(),
+            name: body.name.trim(),
+            description: body.description?? '',
+            category: body.category?? 'General',
+            data: body.data?? { fields: [] }
         };
-      })
-    );
 
-    return json({ success: true, data: templatesWithFields });
+        const { data, error } = await supabase
+           .from('templates')
+           .insert([payload])
+           .select()
+           .single();
 
-  } catch (err: any) {
-    console.error('Template fetch error:', err);
-    throw error(500, err.message || 'Failed to fetch templates');
-  }
-};
+        if (error) {
+            if (error.code === '23505') {
+                return json({ success: false, error: 'Template Code already exists.' }, { status: 409 });
+            }
+            throw error;
+        }
 
-// POST
-export const POST: RequestHandler = async ({ request }) => {
-  try {
-    const { userId, role } = getUserFromToken(request);
-    if (role !== 'admin') throw error(403, 'Only admin can create templates');
+        return json({ success: true, template: normalizeTemplate(data) });
 
-    const body = await request.json();
-    const {
-      template_code, name, department, category, color, version, icon, description, fields
-    } = body;
-
-    if (!template_code || !name) throw error(400, 'Template Code and Name are required');
-    if (!fields || fields.length === 0) throw error(400, 'At least one field is required');
-
-    const { data: existing } = await supabase
-     .from('templates')
-     .select('id')
-     .eq('template_code', template_code)
-     .maybeSingle();
-
-    if (existing) throw error(409, 'Template Code already exists');
-
-    const { data: template, error: templateError } = await supabase
-     .from('templates')
-     .insert({
-        template_code,
-        name,
-        department: department || null,
-        category: category || null,
-        version: version || 1,
-        icon: icon || '📄',
-        description: description || null,
-        color: color || '#2563eb',
-        created_by: userId,
-        is_active: true
-      })
-     .select()
-     .single();
-
-    if (templateError) throw templateError;
-
-    const fieldsToInsert = fields.map((f: any, index: number) => ({
-      template_id: template.id,
-      field_name: f.field_name || f.name || `field_${index + 1}`,
-      field_label: f.field_label || f.label || f.name || `Field ${index + 1}`,
-      field_type: f.field_type || f.type || 'text',
-      placeholder: f.placeholder || null,
-      required: f.required || false,
-      readonly: f.readonly || false,
-      hidden: f.hidden || false,
-      display_order: index + 1,
-      default_value: f.default_value || f.defaultValue || null,
-      formula: f.formula || null,
-      options_json: f.options ? JSON.stringify(f.options) : f.options_json || null,
-      min_value: f.min_value ?? null,
-      max_value: f.max_value ?? null
-    }));
-
-    const { error: fieldsError } = await supabase
-     .from('template_fields')
-     .insert(fieldsToInsert);
-
-    if (fieldsError) {
-      await supabase.from('templates').delete().eq('id', template.id);
-      throw fieldsError;
+    } catch (err: any) {
+        console.error(err);
+        return json({ success: false, error: err.message }, { status: 500 });
     }
+}
 
-    return json({
-      success: true,
-      template_id: template.id,
-      message: 'Template created successfully'
-    }, { status: 201 });
+// FIX: MERGE instead of overwrite
+export async function PUT({ request }) {
+    try {
+        const body = await request.json();
 
-  } catch (err: any) {
-    console.error('Template creation error:', err);
-    if (err.status) throw err;
-    throw error(500, err.message || 'Failed to create template');
-  }
-};
+        // 1. Read existing data first so we don't lose last_values, version, chart etc
+        const { data: existing, error: readError } = await supabase
+           .from("templates")
+           .select("data")
+           .eq("id", body.id)
+           .single();
 
-// PUT
-export const PUT: RequestHandler = async ({ request }) => {
-  try {
-    const { role } = getUserFromToken(request);
-    if (role !== 'admin') throw error(403, 'Only admin can update templates');
+        if (readError) throw readError;
 
-    const body = await request.json();
-    const { id, template_code, name, department, category, color, version, icon, description, fields } = body;
+        // 2. Merge: keep everything from old data, only overwrite department + fields
+        const mergedData = {
+           ...(existing?.data || {}),
+            department: body.department?? existing?.data?.department,
+            fields: body.fields?? existing?.data?.fields
+        };
 
-    if (!id) throw error(400, 'Template ID missing');
-    if (!template_code || !name) throw error(400, 'Template Code and Name are required');
+        const { data, error } = await supabase
+           .from("templates")
+           .update({
+                name: body.name,
+                template_code: body.template_code,
+                description: body.description,
+                data: mergedData,
+                updated_at: new Date().toISOString()
+            })
+           .eq("id", body.id)
+           .select()
+           .single();
 
-    const { data: existing } = await supabase
-     .from('templates')
-     .select('id')
-     .eq('template_code', template_code)
-     .neq('id', id)
-     .maybeSingle();
+        if (error) throw error;
 
-    if (existing) throw error(409, 'Template Code already exists');
+        return json({
+            success: true,
+            template: normalizeTemplate(data)
+        });
 
-    const { error: updateError } = await supabase
-     .from('templates')
-     .update({
-        template_code,
-        name,
-        department: department || null,
-        category: category || null,
-        version: version || 1,
-        icon: icon || '📄',
-        description: description || null,
-        color: color || '#2563eb',
-        updated_at: new Date().toISOString()
-      })
-     .eq('id', id);
-
-    if (updateError) throw updateError;
-
-    await supabase.from('template_fields').delete().eq('template_id', id);
-
-    if (fields && fields.length > 0) {
-      const fieldsToInsert = fields.map((f: any, index: number) => ({
-        template_id: id,
-        field_name: f.field_name || f.name || `field_${index + 1}`,
-        field_label: f.field_label || f.label || f.name || `Field ${index + 1}`,
-        field_type: f.field_type || f.type || 'text',
-        placeholder: f.placeholder || null,
-        required: f.required || false,
-        readonly: f.readonly || false,
-        hidden: f.hidden || false,
-        display_order: index + 1,
-        default_value: f.default_value || f.defaultValue || null,
-        formula: f.formula || null,
-        options_json: f.options ? JSON.stringify(f.options) : f.options_json || null,
-        min_value: f.min_value ?? null,
-        max_value: f.max_value ?? null
-      }));
-
-      const { error: fieldsError } = await supabase.from('template_fields').insert(fieldsToInsert);
-      if (fieldsError) throw fieldsError;
+    } catch (err: any) {
+        console.error("PUT ERROR:", err);
+        return json({ success: false, error: err.message }, { status: 500 });
     }
+}
 
-    return json({ success: true, message: 'Template updated successfully' });
-  } catch (err: any) {
-    console.error('Template update error:', err);
-    if (err.status) throw err;
-    throw error(500, err.message || 'Failed to update template');
-  }
-};
+export async function DELETE({ url }) {
+    try {
+        const id = url.searchParams.get('id');
+        if (!id) {
+            return json({ success: false, error: 'Template id is required.' }, { status: 400 });
+        }
 
-// DELETE
-export const DELETE: RequestHandler = async ({ request, url }) => {
-  try {
-    const { role } = getUserFromToken(request);
-    if (role !== 'admin') throw error(403, 'Only admin can delete templates');
+        const { error } = await supabase
+           .from('templates')
+           .delete()
+           .eq('id', id);
 
-    const id = url.searchParams.get('id');
-    if (!id) throw error(400, 'Missing ID');
+        if (error) throw error;
 
-    const { error: deleteError } = await supabase.from('templates').delete().eq('id', id);
-    if (deleteError) throw deleteError;
+        return json({ success: true });
 
-    return json({ success: true, message: 'Template deleted successfully' });
-  } catch (err: any) {
-    console.error('Template delete error:', err);
-    if (err.status) throw err;
-    throw error(500, err.message || 'Failed to delete template');
-  }
-};
+    } catch (err: any) {
+        console.error(err);
+        return json({ success: false, error: err.message }, { status: 500 });
+    }
+}
