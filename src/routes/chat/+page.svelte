@@ -53,6 +53,7 @@
 
     // NAVIGATION GUARD - prevents double init
     let isInitializing = false;
+let isDataLoaded = false;
     let componentMounted = false;
 
     let dbPromise: any = null;
@@ -419,23 +420,13 @@
     async function initChat() {
         if (isInitializing || !browser) return;
         isInitializing = true;
+        isDataLoaded = false; // ADD THIS
         
         try {
             const userId = getCurrentUserId();
             if (!userId) { goto("/login"); return; }
             
-            // Reset ALL state
-            selectedGroup = null; 
-            selectedContact = null; 
-            selectedRoomId = null; 
-            messages = []; 
-            showEmoji = false;
-            showGroupForm = false;
-            showContactForm = false;
-            showTemplatePopup = false;
-            showTemplateForm = false;
-            
-            // Kill old subscription
+            // Kill old subscription FIRST
             if (subscription) { 
                 try { supabase.removeChannel(subscription); } catch(e){}
                 subscription = null; 
@@ -456,9 +447,22 @@
                 } catch (e) {}
             }
             
+            // Load data
             await Promise.all([loadGroups(), loadContacts()]);
             testNetwork();
-            componentMounted = true;
+            
+            // THEN reset UI state after data is loaded
+            selectedGroup = null; 
+            selectedContact = null; 
+            selectedRoomId = null; 
+            messages = []; 
+            showEmoji = false;
+            showGroupForm = false;
+            showContactForm = false;
+            showTemplatePopup = false;
+            showTemplateForm = false;
+            
+            isDataLoaded = true; // ADD THIS
         } finally {
             isInitializing = false;
         }
@@ -470,7 +474,6 @@
 
     afterNavigate(async () => { 
         await invalidateAll();
-        componentMounted = false;
         await tick();
         await initChat(); 
     });
@@ -542,6 +545,22 @@
 </svelte:boundary>
 {/key}
 
+<!-- Update the template guard -->
+{#key $page.url.pathname}
+<svelte:boundary onerror={(e) => console.error('CHAT CRASH:', e)}>
+    {#if isDataLoaded}
+        <div class="chat-container">
+            <!-- existing template -->
+        </div>
+    {:else if browser && componentMounted}
+        <div class="chat-container">
+            <div style="flex:1; display:flex; justify-content:center; align-items:center;">
+                <p>Loading chat...</p>
+            </div>
+        </div>
+    {/if}
+</svelte:boundary>
+{/key}
 {#if showGroupForm}
 <div class="popup">
     <div class="popup-card">
