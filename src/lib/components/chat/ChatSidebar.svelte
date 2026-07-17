@@ -1,12 +1,35 @@
 <script lang="ts">
-    import { createEventDispatcher } from "svelte";
+    import { createEventDispatcher, onMount } from "svelte";
 
     export let groups: any[] = [];
     export let contacts: any[] = [];
     export let selectedGroup: any = null;
     export let selectedContact: any = null;
+    export let loading = false; // <-- new prop from parent
 
     const dispatch = createEventDispatcher();
+
+    /* -----------------------------
+       DEBUG LOGGER
+    ------------------------------*/
+    const DEBUG = true;
+    function log(step: string, data?: any) {
+        if (!DEBUG) return;
+        const t = performance.now().toFixed(0);
+        console.log(`[SIDEBAR ${t}ms] ${step}`, data?? '');
+    }
+
+    onMount(() => {
+        log('MOUNTED', { groups: groups.length, contacts: contacts.length });
+    });
+
+    $: log('PROPS UPDATE', {
+        groups: groups.length,
+        contacts: contacts.length,
+        loading,
+        selectedGroup: selectedGroup?.id,
+        selectedContact: selectedContact?.id
+    });
 
     let search = "";
     let showMenu = false;
@@ -15,15 +38,17 @@
     let contextType: 'contact' | 'group' | null = null;
 
     $: filteredContacts = contacts.filter((c: any) =>
-     !search ||
+       !search ||
         (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
         (c.mobile || "").includes(search)
     );
 
     $: filteredGroups = groups.filter((g: any) =>
-     !search ||
+       !search ||
         (g.name || "").toLowerCase().includes(search.toLowerCase())
     );
+
+    $: log('FILTER UPDATE', { search, filteredGroups: filteredGroups.length, filteredContacts: filteredContacts.length });
 
     // 2. 9-grid icon: FIXED - Single letter for contacts, 9-grid for groups
     function getGridItems(name: string, members?: any[]) {
@@ -69,11 +94,13 @@
     }
 
     function handleSelectContact(contact: any) {
+        log('SELECT CONTACT CLICK', contact.name);
         dispatch("selectContact", contact);
         showMenu = false;
     }
 
     function handleSelectGroup(group: any) {
+        log('SELECT GROUP CLICK', group.name);
         dispatch("selectGroup", group);
         showMenu = false;
     }
@@ -83,12 +110,14 @@
     let isLongPress = false;
 
     function handleLongPress(item: any, type: 'contact' | 'group') {
+        log('LONG PRESS START', { name: item.name, type });
         isLongPress = false;
         pressTimer = setTimeout(() => {
             isLongPress = true;
             contextItem = item;
             contextType = type;
             showContextMenu = true;
+            log('LONG PRESS TRIGGERED', { name: item.name, type });
         }, 600);
     }
 
@@ -97,6 +126,7 @@
     }
 
     function handleClick(item: any, type: 'contact' | 'group') {
+        log('ROW CLICK', { name: item.name, type, isLongPress });
         if (!isLongPress) {
             if (type === 'contact') handleSelectContact(item);
             else handleSelectGroup(item);
@@ -106,6 +136,7 @@
 
     function handleContextAction(action: string) {
         if (!contextItem ||!contextType) return;
+        log('CONTEXT ACTION', { action, item: contextItem.name, type: contextType });
 
         if (action === 'delete') {
             if (confirm(`Delete ${contextItem.name}?`)) {
@@ -124,11 +155,18 @@
 
     function closeMenu(e: MouseEvent) {
         if (!(e.target as HTMLElement).closest('.menu-wrap')) {
+            if (showMenu) log('CLOSE DROPDOWN MENU');
             showMenu = false;
         }
         if (!(e.target as HTMLElement).closest('.context-popup')) {
+            if (showContextMenu) log('CLOSE CONTEXT MENU');
             showContextMenu = false;
         }
+    }
+
+    function toggleMenu() {
+        showMenu =!showMenu;
+        log('TOGGLE MENU', showMenu);
     }
 </script>
 
@@ -142,11 +180,11 @@
             <span class="title">Chats</span>
         </div>
         <div class="menu-wrap">
-            <button class="icon-btn" on:click|stopPropagation={() => showMenu =!showMenu}>⋮</button>
+            <button class="icon-btn" on:click|stopPropagation={toggleMenu}>⋮</button>
             {#if showMenu}
                 <div class="dropdown">
-                    <button on:click={() => { dispatch("newContact"); showMenu = false; }}>+ Contact</button>
-                    <button on:click={() => { dispatch("newGroup"); showMenu = false; }}>+ Group</button>
+                    <button on:click={() => { log('NEW CONTACT BTN'); dispatch("newContact"); showMenu = false; }}>+ Contact</button>
+                    <button on:click={() => { log('NEW GROUP BTN'); dispatch("newGroup"); showMenu = false; }}>+ Group</button>
                 </div>
             {/if}
         </div>
@@ -155,13 +193,27 @@
     <div class="search">
         <input
             bind:value={search}
+            on:input={() => log('SEARCH INPUT', search)}
             placeholder="Search contact or group..."
         />
     </div>
 
     <!-- COMBINED LIST: Groups + Contacts in single list like Image 1 -->
     <div class="chat-list">
-        {#if filteredGroups.length === 0 && filteredContacts.length === 0}
+        {#if loading}
+            <!-- SKELETON LOADING STATE -->
+            <div class="skeleton-list">
+                {#each Array(8) as _}
+                    <div class="skeleton-row">
+                        <div class="skeleton-avatar"></div>
+                        <div class="skeleton-content">
+                            <div class="skeleton-line w-40"></div>
+                            <div class="skeleton-line w-60"></div>
+                        </div>
+                    </div>
+                {/each}
+            </div>
+        {:else if filteredGroups.length === 0 && filteredContacts.length === 0}
             <div class="empty">No Chats</div>
         {:else}
             <!-- Groups first -->
@@ -258,7 +310,7 @@
         <button on:click={() => handleContextAction('edit')}>Edit</button>
         <button on:click={() => handleContextAction('image')}>Add Image</button>
         <button class="delete" on:click={() => handleContextAction('delete')}>Delete</button>
-        <button on:click={() => showContextMenu = false}>Cancel</button>
+        <button on:click={() => { log('CONTEXT CANCEL'); showContextMenu = false; }}>Cancel</button>
     </div>
 </div>
 {/if}
@@ -356,6 +408,45 @@
     flex: 1;
     overflow-y: auto;
     background: white;
+}
+
+/* SKELETON LOADING */
+.skeleton-list {
+    padding: 8px 0;
+}
+.skeleton-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 16px;
+    gap: 12px;
+}
+.skeleton-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+    flex-shrink: 0;
+}
+.skeleton-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.skeleton-line {
+    height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+}
+.skeleton-line.w-40 { width: 40%; }
+.skeleton-line.w-60 { width: 60%; }
+@keyframes loading {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
 }
 
 /* CHAT ROW: Single line like Image 1 */
