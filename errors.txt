@@ -1,0 +1,3733 @@
+
+> meeting-app@0.1.0 check
+> svelte-kit sync && svelte-check --tsconfig ./tsconfig.json
+
+Loading svelte-check in workspace: c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app
+Getting Svelte diagnostics...
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32mvite.config.js[39m:4:1
+[31mError[39m: Unused '@ts-expect-error' directive. 
+[36m
+[35m// @ts-expect-error process is a nodejs global[36m
+const host = process.env.TAURI_DEV_HOST;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\api.ts[39m:24:33
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36mexport async function getMessages(roomId: string) {
+  const { data, error } = await [35msupabase[36m
+.from('messages')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\api.ts[39m:35:33
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36mexport async function sendMessage(roomId: string, userId: string, content: string) {
+  const { data, error } = await [35msupabase[36m
+.from('messages')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\api.ts[39m:50:10
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36mexport function subscribeToMessages(roomId: string, callback: (msg: any) => void) {
+  return [35msupabase[36m
+.channel(`room:${roomId}`)[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\api.ts[39m:68:30
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36mexport async function getOrCreateUser(mobile: string, name: string) {
+  let { data: user } = await [35msupabase[36m
+.from('users')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\api.ts[39m:75:35
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m  if (!user) {
+    const { data, error } = await [35msupabase[36m
+  .from('users')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\db\database.ts[39m:1:25
+[31mError[39m: Cannot find module '$lib/utils/env' or its corresponding type declarations. 
+[36mimport { isTauri } from [35m"$lib/utils/env"[36m;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\health\buttonHealth.ts[39m:26:3
+[31mError[39m: Cannot find name 'logger'. 
+[36m
+  [35mlogger[36m.log('BUTTON_HEALTH', `Scanned ${list.length} buttons`);
+  return list;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:31:15
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m        status
+    } = await [35msupabase[36m
+        .from("meetings")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:72:30
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {data,error}=await [35msupabase[36m
+        .from("meetings")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:198:25
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {error}=await [35msupabase[36m
+        .from("meetings")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:234:25
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {error}=await [35msupabase[36m
+        .from("meetings")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:269:25
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {error}=await [35msupabase[36m
+        .from("meetings")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:410:9
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+        [35msupabase[36m
+        .from("meetings")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:420:9
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+        [35msupabase[36m
+        .from("users")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:430:9
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+        [35msupabase[36m
+        .from("chat_groups")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:440:9
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+        [35msupabase[36m
+        .from("messages")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:485:30
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {data,error}=await [35msupabase[36m
+        .from("meeting_actions")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:514:30
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {data,error}=await [35msupabase[36m
+        .from("production_reports")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:543:30
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {data,error}=await [35msupabase[36m
+        .from("machine_downtime")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:586:30
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {data,error}=await [35msupabase[36m
+        .from("machine_downtime")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:614:25
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {error}=await [35msupabase[36m
+        .from("machine_downtime")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:641:25
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {error}=await [35msupabase[36m
+        .from("machine_downtime")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:668:25
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {error}=await [35msupabase[36m
+        .from("machine_downtime")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\services\database.ts[39m:700:30
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+    const {data,error}=await [35msupabase[36m
+        .from("machine_downtime")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\health\dbHealth.ts[39m:1:10
+[31mError[39m: Module '"$lib/services/database"' has no exported member 'initDB'. 
+[36mimport { [35minitDB[36m } from "$lib/services/database";
+import { log }from "$lib/debug/logger";[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\health\dbHealth.ts[39m:74:11
+[31mError[39m: Cannot find name 'logger'. 
+[36m  if (!db) {
+    await [35mlogger[36m.error('DB_HEALTH', 'Database not available or failed to initialize');
+    return {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\health\dbHealth.ts[39m:90:15
+[31mError[39m: Cannot find name 'logger'. 
+[36m        results.push({ table, exists: false, created: true });
+        await [35mlogger[36m.log('DB_HEALTH', `Created missing table: ${table}`);
+      } else {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\health\dbHealth.ts[39m:96:13
+[31mError[39m: Cannot find name 'logger'. 
+[36m      results.push({ table, exists: false });
+      await [35mlogger[36m.error('DB_HEALTH', `Error checking/creating table ${table}: ${String(e)}`);
+    }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\health\dbHealth.ts[39m:100:9
+[31mError[39m: Cannot find name 'logger'. 
+[36m
+  await [35mlogger[36m.log('DB_HEALTH', `DB health check completed. Tables: ${JSON.stringify(results)}`);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\health\routeHealth.ts[39m:25:15
+[31mError[39m: Cannot find name 'logger'. 
+[36m        results.push({ route: r, ok: false, status: res ? res.status : undefined });
+        await [35mlogger[36m.warn('ROUTE_HEALTH', `Route failed: ${r} status=${res ? res.status : 'no-response'}`);
+      }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\health\routeHealth.ts[39m:29:13
+[31mError[39m: Cannot find name 'logger'. 
+[36m      results.push({ route: r, ok: false });
+      await [35mlogger[36m.error('ROUTE_HEALTH', `Error checking route ${r}: ${String(e)}`);
+    }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\health\routeHealth.ts[39m:33:9
+[31mError[39m: Cannot find name 'logger'. 
+[36m
+  await [35mlogger[36m.log('ROUTE_HEALTH', `Route health: ${JSON.stringify(results)}`);
+  return results;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:11:25
+[31mError[39m: Property 'meeting' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mmeeting[36m.findMany({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:28:29
+[31mError[39m: Property 'meeting' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+        return await prisma.[35mmeeting[36m.findUnique({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:56:25
+[31mError[39m: Property 'meeting' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mmeeting[36m.create({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:73:25
+[31mError[39m: Property 'meeting' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mmeeting[36m.update({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:93:25
+[31mError[39m: Property 'meeting' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mmeeting[36m.delete({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:115:25
+[31mError[39m: Property 'SIM' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mSIM[36m.findMany({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:137:25
+[31mError[39m: Property 'SIM' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mSIM[36m.findUnique({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:154:25
+[31mError[39m: Property 'SIM' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mSIM[36m.create({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:212:25
+[31mError[39m: Property 'SIM' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mSIM[36m.update({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\database.ts[39m:233:25
+[31mError[39m: Property 'SIM' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mSIM[36m.delete({[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\db.ts[39m:1:22
+[31mError[39m: Could not find a declaration file for module 'better-sqlite3'. 'c:/Users/manir/source/repos/meetingSW/meeting-app0715/meeting-app/node_modules/better-sqlite3/lib/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/better-sqlite3` if it exists or add a new declaration (.d.ts) file containing `declare module 'better-sqlite3';` 
+[36mimport Database from [35m"better-sqlite3"[36m;
+import path from "path";[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\meetingDatabase.ts[39m:6:25
+[31mError[39m: Property 'meeting' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mmeeting[36m.findMany({
+        orderBy: {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\meetingDatabase.ts[39m:17:25
+[31mError[39m: Property 'meeting' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+    return await prisma.[35mmeeting[36m.create({
+        data[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:9:31
+[31mError[39m: Parameter 'name' implicitly has an 'any' type. 
+[36m
+export function recordApiTime([35mname[36m, ms) {
+  metrics.apis[name] = metrics.apis[name] || { calls: 0, total: 0, avg: 0 };[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:9:37
+[31mError[39m: Parameter 'ms' implicitly has an 'any' type. 
+[36m
+export function recordApiTime(name, [35mms[36m) {
+  metrics.apis[name] = metrics.apis[name] || { calls: 0, total: 0, avg: 0 };[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:10:3
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. 
+[36mexport function recordApiTime(name, ms) {
+  [35mmetrics.apis[name][36m = metrics.apis[name] || { calls: 0, total: 0, avg: 0 };
+  metrics.apis[name].calls++;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:10:24
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. 
+[36mexport function recordApiTime(name, ms) {
+  metrics.apis[name] = [35mmetrics.apis[name][36m || { calls: 0, total: 0, avg: 0 };
+  metrics.apis[name].calls++;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:11:3
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. 
+[36m  metrics.apis[name] = metrics.apis[name] || { calls: 0, total: 0, avg: 0 };
+  [35mmetrics.apis[name][36m.calls++;
+  metrics.apis[name].total += ms;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:12:3
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. 
+[36m  metrics.apis[name].calls++;
+  [35mmetrics.apis[name][36m.total += ms;
+  metrics.apis[name].avg = metrics.apis[name].total / metrics.apis[name].calls;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:13:3
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. 
+[36m  metrics.apis[name].total += ms;
+  [35mmetrics.apis[name][36m.avg = metrics.apis[name].total / metrics.apis[name].calls;
+}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:13:28
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. 
+[36m  metrics.apis[name].total += ms;
+  metrics.apis[name].avg = [35mmetrics.apis[name][36m.total / metrics.apis[name].calls;
+}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:13:55
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. 
+[36m  metrics.apis[name].total += ms;
+  metrics.apis[name].avg = metrics.apis[name].total / [35mmetrics.apis[name][36m.calls;
+}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:16:31
+[31mError[39m: Parameter 'sql' implicitly has an 'any' type. 
+[36m
+export function recordDbQuery([35msql[36m, ms) {
+  metrics.db.queries.push({ sql, ms, at: Date.now() });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:16:36
+[31mError[39m: Parameter 'ms' implicitly has an 'any' type. 
+[36m
+export function recordDbQuery(sql, [35mms[36m) {
+  metrics.db.queries.push({ sql, ms, at: Date.now() });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:17:27
+[31mError[39m: Argument of type '{ sql: any; ms: any; at: number; }' is not assignable to parameter of type 'never'. 
+[36mexport function recordDbQuery(sql, ms) {
+  metrics.db.queries.push([35m{ sql, ms, at: Date.now() }[36m);
+}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:27:25
+[31mError[39m: Argument of type '{ ts: number; mem: NodeJS.MemoryUsage | null; }' is not assignable to parameter of type 'never'. 
+[36m    const cpu = process && process.cpuUsage ? process.cpuUsage() : null;
+    metrics.memory.push([35m{ ts: Date.now(), mem }[36m);
+    metrics.cpu.push({ ts: Date.now(), cpu });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\monitoring.ts[39m:28:22
+[31mError[39m: Argument of type '{ ts: number; cpu: NodeJS.CpuUsage | null; }' is not assignable to parameter of type 'never'. 
+[36m    metrics.memory.push({ ts: Date.now(), mem });
+    metrics.cpu.push([35m{ ts: Date.now(), cpu }[36m);
+    // keep last 100 samples[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\rate-limit.ts[39m:6:36
+[31mError[39m: Parameter 'ip' implicitly has an 'any' type. 
+[36m
+export function checkRateLimitByIP([35mip[36m, limit = 60, windowMs = 60 * 1000) {
+  if (!ip) ip = 'unknown';[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\rate-limit.ts[39m:10:36
+[31mError[39m: Parameter 't' implicitly has an 'any' type. 
+[36m  const cutoff = now() - windowMs;
+  entry.times = entry.times.filter([35mt[36m => t > cutoff);
+  if (entry.times.length >= limit) {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\rate-limit.ts[39m:20:38
+[31mError[39m: Parameter 'userKey' implicitly has an 'any' type. 
+[36m
+export function checkRateLimitByUser([35muserKey[36m, limit = 60, windowMs = 60 * 1000) {
+  if (!userKey) userKey = 'anonymous';[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\rate-limit.ts[39m:24:36
+[31mError[39m: Parameter 't' implicitly has an 'any' type. 
+[36m  const cutoff = now() - windowMs;
+  entry.times = entry.times.filter([35mt[36m => t > cutoff);
+  if (entry.times.length >= limit) {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\rate-limit.ts[39m:34:34
+[31mError[39m: Parameter 'request' implicitly has an 'any' type. 
+[36m
+export function getIPFromRequest([35mrequest[36m) {
+  try {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\rate-limit.ts[39m:42:29
+[31mError[39m: Parameter 'details' implicitly has an 'any' type. 
+[36m
+export function recordAbuse([35mdetails[36m) {
+  try {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\server\supabase.ts[39m:3:5
+[31mError[39m: '"$env/static/private"' has no exported member named 'SUPABASE_CHAT_URL'. Did you mean 'VITE_SUPABASE_CHAT_URL'? 
+[36mimport {
+    [35mSUPABASE_CHAT_URL[36m,
+    SUPABASE_CHAT_SERVICE_KEY[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\stores\aiSummary.ts[39m:73:23
+[31mError[39m: Argument of type '{ health: string; executiveSummary: string; production: { target: number; actual: number; good: number; ng: number; achievement: number; yield: number; oee: number; rr: number; downtime: number; }; meetings: { ...; }; ... 5 more ...; loading: false; }' is not assignable to parameter of type '{ loading: boolean; production: { target: number; actual: number; good: number; ng: number; achievement: number; yield: number; oee: number; }; meetings: { today: number; upcoming: number; completed: number; }; actions: { ...; }; issues: never[]; recommendations: never[]; }'.
+  Types of property 'issues' are incompatible.
+    Type 'string[]' is not assignable to type 'never[]'.
+      Type 'string' is not assignable to type 'never'. 
+[36m
+        aiSummary.set([35m{
+
+            loading: false,
+
+            ...result
+
+        }[36m);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\stores\dashboard.ts[39m:72:13
+[31mError[39m: Type 'any[] | never[]' is not assignable to type 'never[]'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'. 
+[36m
+            [35mmeetings[36m,[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\stores\dashboard.ts[39m:74:13
+[31mError[39m: Type 'any[] | never[]' is not assignable to type 'never[]'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'. 
+[36m
+            [35mproduction[36m,[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\stores\dashboard.ts[39m:76:13
+[31mError[39m: Type 'any[] | never[]' is not assignable to type 'never[]'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'. 
+[36m
+            [35mactions[36m,[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\stores\dashboard.ts[39m:82:13
+[31mError[39m: Type 'Date' is not assignable to type 'null'. 
+[36m
+            [35mlastRefresh[36m: new Date()[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\meetings\[id]\+server.ts[39m:9:22
+[31mError[39m: Property 'meeting' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+        await prisma.[35mmeeting[36m.delete({
+            where: {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\meetings\[id]\+server.ts[39m:42:22
+[31mError[39m: Property 'meeting' does not exist on type 'PrismaClient<PrismaClientOptions, never, DefaultArgs>'. 
+[36m
+        await prisma.[35mmeeting[36m.update({
+            where: {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\templates\report\+server.ts[39m:10:21
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m
+        let query = [35msupabase[36m
+          .from('template_reports')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\templates\report\+server.ts[39m:88:60
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m        // 5. Insert template report
+        const { data: report, error: reportError } = await [35msupabase[36m
+          .from('template_reports')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\templates\report\+server.ts[39m:109:43
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m        // 6. Insert message in chat - ✅ FIXED
+        const { error: msgError } = await [35msupabase[36m
+          .from('messages')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\templates\report-view\+server.ts[39m:16:60
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m        // 1. Get report + template info
+        const { data: report, error: reportError } = await [35msupabase[36m
+           .from('template_reports')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\templates\report-view\+server.ts[39m:54:68
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m        try {
+            const { data: fieldsData, error: fieldsError } = await [35msupabase[36m
+               .from('template_fields')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\templates\reports\batch\+server.ts[39m:8:28
+[31mError[39m: 'supabase' is possibly 'null'. 
+[36m    
+    const { data } = await [35msupabase[36m
+        .from('template_reports')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\templates\reports\batch\+server.ts[39m:14:24
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. 
+[36m    const map = {};
+    data?.forEach(r => [35mmap[r.id][36m = r);
+    return json(map);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:88:55
+[31mError[39m: 'user' is possibly 'null'. 
+[36m            user = newUser;
+            console.log('[VERIFY] New user created:', [35muser[36m.id);
+        }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:91:14
+[31mError[39m: 'user' is possibly 'null'. 
+[36m
+        if (![35muser[36m.is_active) {
+            throw error(403, 'Account disabled');[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:98:25
+[31mError[39m: 'user' is possibly 'null'. 
+[36m            {
+                userId: [35muser[36m.id,
+                mobile: user.mobile,[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:99:25
+[31mError[39m: 'user' is possibly 'null'. 
+[36m                userId: user.id,
+                mobile: [35muser[36m.mobile,
+                role: user.role || 'user',[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:100:23
+[31mError[39m: 'user' is possibly 'null'. 
+[36m                mobile: user.mobile,
+                role: [35muser[36m.role || 'user',
+                name: user.name[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:101:23
+[31mError[39m: 'user' is possibly 'null'. 
+[36m                role: user.role || 'user',
+                name: [35muser[36m.name
+            },[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:111:22
+[31mError[39m: 'user' is possibly 'null'. 
+[36m           .update({ last_login: new Date().toISOString() })
+           .eq('id', [35muser[36m.id)
+           .then(({ error }) => {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:116:51
+[31mError[39m: 'user' is possibly 'null'. 
+[36m
+        console.log('[VERIFY] Login successful:', [35muser[36m.mobile);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:122:21
+[31mError[39m: 'user' is possibly 'null'. 
+[36m            user: {
+                id: [35muser[36m.id,
+                mobile: user.mobile,[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:123:25
+[31mError[39m: 'user' is possibly 'null'. 
+[36m                id: user.id,
+                mobile: [35muser[36m.mobile,
+                name: user.name,[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:124:23
+[31mError[39m: 'user' is possibly 'null'. 
+[36m                mobile: user.mobile,
+                name: [35muser[36m.name,
+                role: user.role || 'user'[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\api\verify-otp\+server.ts[39m:125:23
+[31mError[39m: 'user' is possibly 'null'. 
+[36m                name: user.name,
+                role: [35muser[36m.role || 'user'
+            }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\+page.server.ts[39m:16:11
+[31mError[39m: Type 'null' is not assignable to type 'NullableJsonNullValueInput | InputJsonValue | undefined'. 
+[36m          department: data.get('department') as string || null,
+          [35mchart[36m: null,
+          chart_x: data.get('chart_x') as string || null,[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\UseTemplateModal.svelte[39m:205:21
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+                    [35m<label>
+                        {field.label}
+                        {#if field.required}
+                            *
+                        {/if}
+                    </label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\ChatHeader.svelte[39m:4:16
+[33mWarn[39m: Component has unused export property 'title'. If it is for external reference only, please consider using `export const title`
+https://svelte.dev/e/export_let_unused (svelte)
+[36m
+    export let [35mtitle[36m = "";
+    export let subtitle = "";[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\ChatHeader.svelte[39m:7:16
+[33mWarn[39m: Component has unused export property 'avatar'. If it is for external reference only, please consider using `export const avatar`
+https://svelte.dev/e/export_let_unused (svelte)
+[36m    export let typing = false;
+    export let [35mavatar[36m = "";
+    export let isGroup = false;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\ChatInput.svelte[39m:113:9
+[33mWarn[39m: Self-closing HTML tags for non-void elements are ambiguous — use `<textarea ...></textarea>` rather than `<textarea ... />`
+https://svelte.dev/e/element_invalid_self_closing_tag (svelte)
+[36m
+        [35m<textarea
+            bind:value={text}
+            rows="1"
+            placeholder="Type a message"
+            on:keydown={keyDown}
+            disabled={sending}
+        />[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\ChatSidebar.svelte[39m:285:1
+[33mWarn[39m: Unused CSS selector ".header.left"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m/* FIX 1: Added space. Was.header.left now.header.left */
+[35m.header.left[36m{
+    display: flex;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:129:37
+[33mWarn[39m: Non-interactive element `<img>` cannot have interactive role 'button'
+https://svelte.dev/e/a11y_no_noninteractive_element_to_interactive_role (svelte)
+[36m                                    <!-- FIX 2: A11y - role + tabindex + keydown -->
+                                    [35m<img 
+                                        src={url} 
+                                        alt="attachment" 
+                                        class="attachment-image"
+                                        role="button"
+                                        tabindex="0"
+                                        on:click={() => openPreview(url)}
+                                        on:keydown={(e) => handleImageKeydown(e, url)}
+                                        loading="lazy"
+                                    />[36m
+                                    <button[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:155:37
+[33mWarn[39m: `<video>` elements must have a `<track kind="captions">`
+https://svelte.dev/e/a11y_media_has_caption (svelte)
+[36m                                <div class="video-msg">
+                                    [35m<video controls src={url} preload="metadata"></video>[36m
+                                </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:195:5
+[33mWarn[39m: Elements with the 'dialog' interactive role must have a tabindex value
+https://svelte.dev/e/a11y_interactive_supports_focus (svelte)
+[36m{#if previewImage}
+    [35m<div 
+        class="preview-modal" 
+        on:click={closePreview}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Image preview"
+    >
+        <div class="preview-content" on:click|stopPropagation>
+            <button class="close-preview" on:click={closePreview} aria-label="Close preview">×</button>
+            <img src={previewImage} alt="Preview" />
+            <button 
+                class="preview-download"
+                on:click={() => downloadFile(previewImage, getFileName(previewImage))}
+            >
+                Download
+            </button>
+        </div>
+    </div>[36m
+{/if}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:195:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m{#if previewImage}
+    [35m<div 
+        class="preview-modal" 
+        on:click={closePreview}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Image preview"
+    >
+        <div class="preview-content" on:click|stopPropagation>
+            <button class="close-preview" on:click={closePreview} aria-label="Close preview">×</button>
+            <img src={previewImage} alt="Preview" />
+            <button 
+                class="preview-download"
+                on:click={() => downloadFile(previewImage, getFileName(previewImage))}
+            >
+                Download
+            </button>
+        </div>
+    </div>[36m
+{/if}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:202:9
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m    >
+        [35m<div class="preview-content" on:click|stopPropagation>
+            <button class="close-preview" on:click={closePreview} aria-label="Close preview">×</button>
+            <img src={previewImage} alt="Preview" />
+            <button 
+                class="preview-download"
+                on:click={() => downloadFile(previewImage, getFileName(previewImage))}
+            >
+                Download
+            </button>
+        </div>[36m
+    </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:202:9
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m    >
+        [35m<div class="preview-content" on:click|stopPropagation>
+            <button class="close-preview" on:click={closePreview} aria-label="Close preview">×</button>
+            <img src={previewImage} alt="Preview" />
+            <button 
+                class="preview-download"
+                on:click={() => downloadFile(previewImage, getFileName(previewImage))}
+            >
+                Download
+            </button>
+        </div>[36m
+    </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:5:16
+[33mWarn[39m: Component has unused export property 'selectedUser'. If it is for external reference only, please consider using `export const selectedUser`
+https://svelte.dev/e/export_let_unused (svelte)
+[36m    export let messages: any[] = [];
+    export let [35mselectedUser: any[36m = null;
+    export let currentUserId: string = "";[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:6:16
+[33mWarn[39m: Component has unused export property 'currentUserId'. If it is for external reference only, please consider using `export const currentUserId`
+https://svelte.dev/e/export_let_unused (svelte)
+[36m    export let selectedUser: any = null;
+    export let [35mcurrentUserId: string[36m = "";[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:207:46
+[31mError[39m: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'. (ts)
+[36m                class="preview-download"
+                on:click={() => downloadFile([35mpreviewImage[36m, getFileName(previewImage))}
+            >[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\chat\MessageList.svelte[39m:207:72
+[31mError[39m: Argument of type 'string | null' is not assignable to parameter of type 'string'.
+  Type 'null' is not assignable to type 'string'. (ts)
+[36m                class="preview-download"
+                on:click={() => downloadFile(previewImage, getFileName([35mpreviewImage[36m))}
+            >[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\AISummary.svelte[39m:53:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Production Achievement</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\AISummary.svelte[39m:65:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Average Yield</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\AISummary.svelte[39m:77:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Average OEE</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\AISummary.svelte[39m:89:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Pending Actions</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\AISummary.svelte[39m:101:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Overdue</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\AISummary.svelte[39m:113:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Today's Meetings</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:30:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card total"
+        on:click={()=>goto("/meeting-actions")}
+    >
+        <h2>{total}</h2>
+        <p>Total Actions</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:30:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card total"
+        on:click={()=>goto("/meeting-actions")}
+    >
+        <h2>{total}</h2>
+        <p>Total Actions</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:38:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card blue"
+        on:click={()=>openStatus("Pending")}
+    >
+        <h2>{pending}</h2>
+        <p>Pending</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:38:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card blue"
+        on:click={()=>openStatus("Pending")}
+    >
+        <h2>{pending}</h2>
+        <p>Pending</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:46:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card orange"
+        on:click={()=>openStatus("Open")}
+    >
+        <h2>{open}</h2>
+        <p>Open</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:46:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card orange"
+        on:click={()=>openStatus("Open")}
+    >
+        <h2>{open}</h2>
+        <p>Open</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:54:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card green"
+        on:click={()=>openStatus("Completed")}
+    >
+        <h2>{completed}</h2>
+        <p>Completed</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:54:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card green"
+        on:click={()=>openStatus("Completed")}
+    >
+        <h2>{completed}</h2>
+        <p>Completed</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:62:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card red"
+        on:click={()=>openStatus("Overdue")}
+    >
+        <h2>{overdue}</h2>
+        <p>Overdue</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ActionSummary.svelte[39m:62:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card red"
+        on:click={()=>openStatus("Overdue")}
+    >
+        <h2>{overdue}</h2>
+        <p>Overdue</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\DowntimeSummary.svelte[39m:30:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div class="box">
+            [35m<label>Total Minutes</label>[36m
+            <h2>{totalMinutes}</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\DowntimeSummary.svelte[39m:35:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div class="box">
+            [35m<label>Machines</label>[36m
+            <h2>{totalMachines}</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\DowntimeSummary.svelte[39m:40:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div class="box">
+            [35m<label>Highest</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\DowntimeSummary.svelte[39m:2:16
+[31mError[39m: Variable 'downtime' implicitly has type 'any[]' in some locations where its type cannot be determined. (ts)
+[36m<script lang="ts">
+    export let [35mdowntime[36m = [];[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\DowntimeSummary.svelte[39m:5:9
+[31mError[39m: Variable 'downtime' implicitly has an 'any[]' type. (ts)
+[36m    $: totalMinutes =
+        [35mdowntime[36m.reduce(
+            (t, r) => t + Number(r.duration_min || 0),[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\DowntimeSummary.svelte[39m:11:21
+[31mError[39m: Variable 'downtime' implicitly has an 'any[]' type. (ts)
+[36m    $: totalMachines =
+        [...new Set([35mdowntime[36m.map(r => r.machine))].length;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\DowntimeSummary.svelte[39m:15:15
+[31mError[39m: Variable 'downtime' implicitly has an 'any[]' type. (ts)
+[36m        downtime.length
+            ? [35mdowntime[36m.reduce((a, b) =>
+                Number(a.duration_min) >[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:40:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card blue" on:click={()=>open("all")}>
+
+        <h2>{total}</h2>
+
+        <p>Total Meetings</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:40:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card blue" on:click={()=>open("all")}>
+
+        <h2>{total}</h2>
+
+        <p>Total Meetings</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:48:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card green" on:click={()=>open("today")}>
+
+        <h2>{today}</h2>
+
+        <p>Today's Meetings</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:48:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card green" on:click={()=>open("today")}>
+
+        <h2>{today}</h2>
+
+        <p>Today's Meetings</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:56:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card cyan" on:click={()=>open("upcoming")}>
+
+        <h2>{upcoming}</h2>
+
+        <p>Upcoming</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:56:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card cyan" on:click={()=>open("upcoming")}>
+
+        <h2>{upcoming}</h2>
+
+        <p>Upcoming</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:64:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card teal" on:click={()=>open("progress")}>
+
+        <h2>{progress}</h2>
+
+        <p>In Progress</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:64:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card teal" on:click={()=>open("progress")}>
+
+        <h2>{progress}</h2>
+
+        <p>In Progress</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:72:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card gray" on:click={()=>open("completed")}>
+
+        <h2>{completed}</h2>
+
+        <p>Completed</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:72:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card gray" on:click={()=>open("completed")}>
+
+        <h2>{completed}</h2>
+
+        <p>Completed</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:80:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card red" on:click={()=>open("overdue")}>
+
+        <h2>{overdue}</h2>
+
+        <p>Overdue</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:80:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card red" on:click={()=>open("overdue")}>
+
+        <h2>{overdue}</h2>
+
+        <p>Overdue</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:88:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card danger" on:click={()=>open("critical")}>
+
+        <h2>{critical}</h2>
+
+        <p>Critical Priority</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:88:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card danger" on:click={()=>open("critical")}>
+
+        <h2>{critical}</h2>
+
+        <p>Critical Priority</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:96:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card orange" on:click={()=>open("high")}>
+
+        <h2>{high}</h2>
+
+        <p>High Priority</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\MeetingSummary.svelte[39m:96:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card orange" on:click={()=>open("high")}>
+
+        <h2>{high}</h2>
+
+        <p>High Priority</p>
+
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:54:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card blue" on:click={openProduction}>
+        <h2>{totalTarget.toLocaleString()}</h2>
+        <p>Daily Target</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:54:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card blue" on:click={openProduction}>
+        <h2>{totalTarget.toLocaleString()}</h2>
+        <p>Daily Target</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:59:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card green" on:click={openProduction}>
+        <h2>{totalActual.toLocaleString()}</h2>
+        <p>Actual Production</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:59:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card green" on:click={openProduction}>
+        <h2>{totalActual.toLocaleString()}</h2>
+        <p>Actual Production</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:64:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card teal" on:click={openProduction}>
+        <h2>{achievement}%</h2>
+        <p>Achievement</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:64:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card teal" on:click={openProduction}>
+        <h2>{achievement}%</h2>
+        <p>Achievement</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:69:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card cyan" on:click={openProduction}>
+        <h2>{avgYield}%</h2>
+        <p>Yield</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:69:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card cyan" on:click={openProduction}>
+        <h2>{avgYield}%</h2>
+        <p>Yield</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:74:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card orange" on:click={openProduction}>
+        <h2>{totalNG.toLocaleString()}</h2>
+        <p>NG Quantity</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:74:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card orange" on:click={openProduction}>
+        <h2>{totalNG.toLocaleString()}</h2>
+        <p>NG Quantity</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:79:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card purple" on:click={openProduction}>
+        <h2>{avgOEE}%</h2>
+        <p>Average OEE</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:79:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card purple" on:click={openProduction}>
+        <h2>{avgOEE}%</h2>
+        <p>Average OEE</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:84:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card dark" on:click={openProduction}>
+        <h2>{totalGood.toLocaleString()}</h2>
+        <p>Good Quantity</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:84:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card dark" on:click={openProduction}>
+        <h2>{totalGood.toLocaleString()}</h2>
+        <p>Good Quantity</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:89:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div class="card gray" on:click={openProduction}>
+        <h2>{totalDowntime} min</h2>
+        <p>Downtime</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionSummary.svelte[39m:89:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div class="card gray" on:click={openProduction}>
+        <h2>{totalDowntime} min</h2>
+        <p>Downtime</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionTrend.svelte[39m:94:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Total Target</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionTrend.svelte[39m:102:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Total Actual</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionTrend.svelte[39m:110:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Good Qty</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionTrend.svelte[39m:118:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>NG Qty</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionTrend.svelte[39m:126:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Yield</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionTrend.svelte[39m:134:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>OEE</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionTrend.svelte[39m:5:25
+[31mError[39m: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type. (ts)
+[36m    $: last7 = [...production]
+        .sort((a, b) => [35mnew Date(a.date)[36m - new Date(b.date))
+        .slice(-7);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ProductionTrend.svelte[39m:5:44
+[31mError[39m: The right-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type. (ts)
+[36m    $: last7 = [...production]
+        .sort((a, b) => new Date(a.date) - [35mnew Date(b.date)[36m)
+        .slice(-7);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:42:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card blue"
+        on:click={openReports}
+    >
+        <h2>{reports.length}</h2>
+        <p>Production Reports</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:42:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card blue"
+        on:click={openReports}
+    >
+        <h2>{reports.length}</h2>
+        <p>Production Reports</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:50:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card green"
+        on:click={openReports}
+    >
+        <h2>{totalTarget.toLocaleString()}</h2>
+        <p>Total Target</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:50:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card green"
+        on:click={openReports}
+    >
+        <h2>{totalTarget.toLocaleString()}</h2>
+        <p>Total Target</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:58:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card teal"
+        on:click={openReports}
+    >
+        <h2>{totalActual.toLocaleString()}</h2>
+        <p>Total Actual</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:58:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card teal"
+        on:click={openReports}
+    >
+        <h2>{totalActual.toLocaleString()}</h2>
+        <p>Total Actual</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:66:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card orange"
+        on:click={openReports}
+    >
+        <h2>{avgYield}%</h2>
+        <p>Average Yield</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:66:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card orange"
+        on:click={openReports}
+    >
+        <h2>{avgYield}%</h2>
+        <p>Average Yield</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:74:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card red"
+        on:click={openReports}
+    >
+        <h2>{totalNG.toLocaleString()}</h2>
+        <p>NG Quantity</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:74:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card red"
+        on:click={openReports}
+    >
+        <h2>{totalNG.toLocaleString()}</h2>
+        <p>NG Quantity</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:82:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+    [35m<div
+        class="card purple"
+        on:click={openReports}
+    >
+        <h2>{avgOEE}%</h2>
+        <p>Average OEE</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\dashboard\ReportSummary.svelte[39m:82:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+    [35m<div
+        class="card purple"
+        on:click={openReports}
+    >
+        <h2>{avgOEE}%</h2>
+        <p>Average OEE</p>
+    </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\TemplateInputForm.svelte[39m:47:17
+[31mError[39m: No overload matches this call.
+  Overload 1 of 2, '(input: string | URL | Request, init?: RequestInit | undefined): Promise<Response>', gave the following error.
+    Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+      Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+        Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+          Property 'Authorization' is incompatible with index signature.
+            Type 'undefined' is not assignable to type 'string'.
+  Overload 2 of 2, '(input: URL | RequestInfo, init?: RequestInit | undefined): Promise<Response>', gave the following error.
+    Type '{ Authorization: string; } | { Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+      Type '{ Authorization?: undefined; }' is not assignable to type 'HeadersInit | undefined'.
+        Type '{ Authorization?: undefined; }' is not assignable to type 'Record<string, string>'.
+          Property 'Authorization' is incompatible with index signature.
+            Type 'undefined' is not assignable to type 'string'. (ts)
+[36m            const res = await fetch(`/api/templates/fields?template_id=${template.id}`, {
+                [35mheaders[36m: authHeader(),
+                signal: controller.signal[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\TemplateList.svelte[39m:25:43
+[31mError[39m: 'supabaseTemplates' is possibly 'null'. (ts)
+[36m        try {
+            const { data, error } = await [35msupabaseTemplates[36m
+                .from('templates')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\TemplatePopup.svelte[39m:100:1
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+[35m<div class="popup-card" on:click|stopPropagation>
+    <div class="header">
+        <h2>📋 Templates</h2>
+        <button class="close" on:click={() => dispatch('close')} aria-label="Close">✕</button>
+    </div>
+
+    <div class="search">
+        <span>🔍</span>
+        <input bind:value={search} placeholder="Search template by name, code, category..." />
+        <button class="btn-new" on:click={() => dispatch('new')}>+ New</button>
+    </div>
+
+    <div class="list">
+        {#if filtered.length === 0}
+            <p class="empty">
+                {debouncedSearch ? `No templates found for "${debouncedSearch}"` : 'No templates yet. Click + New to create one.'}
+            </p>
+        {:else}
+            {#each filtered as t (t.id)}
+            <div class="row">
+                <div class="info">
+                    <div class="icon">📄</div>
+                    <div class="content">
+                        <div class="name">
+                            {t.name} 
+                            {#if t.template_code}<span class="code">{t.template_code}</span>{/if}
+                        </div>
+                        <div class="meta">Fields: {getFields(t)} • {t.category || 'Uncategorized'}</div>
+                        {#if t.description}<div class="desc">{t.description}</div>{/if}
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="btn-edit" on:click={() => handleEdit(t)}>Edit</button>
+                    <button 
+                        class="btn-del" 
+                        disabled={deletingId === t.id}
+                        on:click={() => deleteTemplate(t.id)}
+                    >
+                        {deletingId === t.id ? '...' : 'Delete'}
+                    </button>
+                    <button class="btn-use" on:click={() => handleUse(t)}>Use</button>
+                </div>
+            </div>
+            {/each}
+        {/if}
+    </div>
+
+    <div class="footer">{filtered.length} of {templates.length} templates</div>
+</div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\TemplatePopup.svelte[39m:100:1
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+[35m<div class="popup-card" on:click|stopPropagation>
+    <div class="header">
+        <h2>📋 Templates</h2>
+        <button class="close" on:click={() => dispatch('close')} aria-label="Close">✕</button>
+    </div>
+
+    <div class="search">
+        <span>🔍</span>
+        <input bind:value={search} placeholder="Search template by name, code, category..." />
+        <button class="btn-new" on:click={() => dispatch('new')}>+ New</button>
+    </div>
+
+    <div class="list">
+        {#if filtered.length === 0}
+            <p class="empty">
+                {debouncedSearch ? `No templates found for "${debouncedSearch}"` : 'No templates yet. Click + New to create one.'}
+            </p>
+        {:else}
+            {#each filtered as t (t.id)}
+            <div class="row">
+                <div class="info">
+                    <div class="icon">📄</div>
+                    <div class="content">
+                        <div class="name">
+                            {t.name} 
+                            {#if t.template_code}<span class="code">{t.template_code}</span>{/if}
+                        </div>
+                        <div class="meta">Fields: {getFields(t)} • {t.category || 'Uncategorized'}</div>
+                        {#if t.description}<div class="desc">{t.description}</div>{/if}
+                    </div>
+                </div>
+                <div class="actions">
+                    <button class="btn-edit" on:click={() => handleEdit(t)}>Edit</button>
+                    <button 
+                        class="btn-del" 
+                        disabled={deletingId === t.id}
+                        on:click={() => deleteTemplate(t.id)}
+                    >
+                        {deletingId === t.id ? '...' : 'Delete'}
+                    </button>
+                    <button class="btn-use" on:click={() => handleUse(t)}>Use</button>
+                </div>
+            </div>
+            {/each}
+        {/if}
+    </div>
+
+    <div class="footer">{filtered.length} of {templates.length} templates</div>
+</div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\TemplatePopup.svelte[39m:132:62
+[31mError[39m: Cannot find name 'handleEdit'. (ts)
+[36m                <div class="actions">
+                    <button class="btn-edit" on:click={() => [35mhandleEdit[36m(t)}>Edit</button>
+                    <button[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\TemplatePopup.svelte[39m:136:41
+[31mError[39m: Cannot find name 'deleteTemplate'. (ts)
+[36m                        disabled={deletingId === t.id}
+                        on:click={() => [35mdeleteTemplate[36m(t.id)}
+                    >[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerFieldTable.svelte[39m:90:13
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+            [35m<div
+                class="row"
+                class:selected={selectedIndex === item.index}
+                on:click={() => select(item.index)}
+            >
+
+                <div>{item.index + 1}</div>
+
+                <div>
+
+                    <strong>
+                        {item.field.label || "Unnamed"}
+                    </strong>
+
+                    <small>
+                        {item.field.field_name}
+                    </small>
+
+                </div>
+
+                <div>
+
+                    <span class="type">
+                        {item.field.field_type}
+                    </span>
+
+                </div>
+
+                <div>
+
+                    {#if item.field.required}
+                        ✅
+                    {:else}
+                        —
+                    {/if}
+
+                </div>
+
+                <div class="actions">
+
+                    <button
+                        title="Duplicate"
+                        on:click|stopPropagation={() => dispatch("duplicate", item.index)}
+                    >
+                        📄
+                    </button>
+
+                    <button
+                        title="Delete"
+                        on:click|stopPropagation={() => remove(item.index)}
+                    >
+                        🗑
+                    </button>
+
+                </div>
+
+            </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerFieldTable.svelte[39m:90:13
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+            [35m<div
+                class="row"
+                class:selected={selectedIndex === item.index}
+                on:click={() => select(item.index)}
+            >
+
+                <div>{item.index + 1}</div>
+
+                <div>
+
+                    <strong>
+                        {item.field.label || "Unnamed"}
+                    </strong>
+
+                    <small>
+                        {item.field.field_name}
+                    </small>
+
+                </div>
+
+                <div>
+
+                    <span class="type">
+                        {item.field.field_type}
+                    </span>
+
+                </div>
+
+                <div>
+
+                    {#if item.field.required}
+                        ✅
+                    {:else}
+                        —
+                    {/if}
+
+                </div>
+
+                <div class="actions">
+
+                    <button
+                        title="Duplicate"
+                        on:click|stopPropagation={() => dispatch("duplicate", item.index)}
+                    >
+                        📄
+                    </button>
+
+                    <button
+                        title="Delete"
+                        on:click|stopPropagation={() => remove(item.index)}
+                    >
+                        🗑
+                    </button>
+
+                </div>
+
+            </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerInfoPanel.svelte[39m:23:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div class="field">
+            [35m<label>Template Code</label>[36m
+            <input[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerInfoPanel.svelte[39m:31:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div class="field">
+            [35m<label>Version</label>[36m
+            <input[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerInfoPanel.svelte[39m:38:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div class="field full">
+            [35m<label>Template Name</label>[36m
+            <input[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerInfoPanel.svelte[39m:46:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div class="field">
+            [35m<label>Department</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerInfoPanel.svelte[39m:62:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Category</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerInfoPanel.svelte[39m:77:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Description</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerInfoPanel.svelte[39m:79:13
+[33mWarn[39m: Self-closing HTML tags for non-void elements are ambiguous — use `<textarea ...></textarea>` rather than `<textarea ... />`
+https://svelte.dev/e/element_invalid_self_closing_tag (svelte)
+[36m
+            [35m<textarea
+                rows="4"
+                bind:value={template.description}
+                placeholder="Short description..."
+            />[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerInfoPanel.svelte[39m:89:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Theme Color</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:41:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+        [35m<label>
+            {field.label}
+            {#if field.required}
+                <span>*</span>
+            {/if}
+        </label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:67:13
+[33mWarn[39m: Self-closing HTML tags for non-void elements are ambiguous — use `<textarea ...></textarea>` rather than `<textarea ... />`
+https://svelte.dev/e/element_invalid_self_closing_tag (svelte)
+[36m
+            [35m<textarea
+                rows="3"
+                bind:value={values[field.field_name]}
+                placeholder={field.placeholder}
+                readonly={field.readonly}
+            />[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:2:16
+[33mWarn[39m: Component has unused export property 'template'. If it is for external reference only, please consider using `export const template`
+https://svelte.dev/e/export_let_unused (svelte)
+[36m<script lang="ts">
+    export let [35mtemplate: any[36m = {};
+    export let fields: any[] = [];[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:163:1
+[33mWarn[39m: Unused CSS selector ".preview"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.preview[36m{[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:173:1
+[33mWarn[39m: Unused CSS selector ".header"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.header[36m{[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:183:1
+[33mWarn[39m: Unused CSS selector ".header h2"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.header h2[36m{[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:191:1
+[33mWarn[39m: Unused CSS selector ".header small"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.header small[36m{[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:197:1
+[33mWarn[39m: Unused CSS selector ".form"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.form[36m{[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:259:1
+[33mWarn[39m: Unused CSS selector ".empty"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.empty[36m{[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:267:1
+[33mWarn[39m: Unused CSS selector ".icon"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.icon[36m{[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:25:18
+[31mError[39m: Parameter '_' implicitly has an 'any' type. (ts)
+[36m                /\{([^}]+)\}/g,
+                ([35m_[36m, key) => Number(values[key] || 0)
+            );[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\DesignerPreview.svelte[39m:25:21
+[31mError[39m: Parameter 'key' implicitly has an 'any' type. (ts)
+[36m                /\{([^}]+)\}/g,
+                (_, [35mkey[36m) => Number(values[key] || 0)
+            );[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:48:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <!-- BASIC -->
+        [35m<label>Label</label>[36m
+        <input type="text" bind:value={field.label} on:input={updateLabel} placeholder="Field Label" />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:51:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+        [35m<label>Field Name</label>[36m
+        <input type="text" bind:value={field.field_name} on:input={update} placeholder="field_name" />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:56:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <!-- FIX 9: METRIC -->
+        [35m<label>Metric Type</label>[36m
+        <select bind:value={field.metric} on:change={update}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:70:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+        [35m<label>Field Type</label>[36m
+        <select bind:value={field.field_type} on:change={update}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:81:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+        [35m<label>Placeholder</label>[36m
+        <input type="text" bind:value={field.placeholder} on:input={update} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:84:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+        [35m<label>Default Value</label>[36m
+        <input type="text" bind:value={field.default_value} on:input={update} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:105:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m            <h4>Number Settings</h4>
+            [35m<label>Minimum Value</label>[36m
+            <input type="number" bind:value={field.min_value} on:input={update} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:108:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+            [35m<label>Maximum Value</label>[36m
+            <input type="number" bind:value={field.max_value} on:input={update} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:254:1
+[33mWarn[39m: Unused CSS selector ".hint code"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.hint code[36m{
+    background:#dbeafe;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:153:32
+[31mError[39m: Cannot find name 'output'. (ts)
+[36m                on:input={update}
+                placeholder="({[35moutput[36m}/{input})*100"
+            ></textarea>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:153:41
+[31mError[39m: Cannot find name 'input'. (ts)
+[36m                on:input={update}
+                placeholder="({output}/{[35minput[36m})*100"
+            ></textarea>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:159:3
+[31mError[39m: Cannot find name 'output'. (ts)
+[36m<pre>
+({[35moutput[36m}/{input})*100
+({retestqty}/{input})*100[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:159:12
+[31mError[39m: Cannot find name 'input'. (ts)
+[36m<pre>
+({output}/{[35minput[36m})*100
+({retestqty}/{input})*100[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:160:3
+[31mError[39m: Cannot find name 'retestqty'. (ts)
+[36m({output}/{input})*100
+({[35mretestqty[36m}/{input})*100
+({failqty}/{input})*100[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:160:15
+[31mError[39m: Cannot find name 'input'. (ts)
+[36m({output}/{input})*100
+({retestqty}/{[35minput[36m})*100
+({failqty}/{input})*100[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:161:3
+[31mError[39m: Cannot find name 'failqty'. (ts)
+[36m({retestqty}/{input})*100
+({[35mfailqty[36m}/{input})*100
+({ntfqty}/{input})*100[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:161:13
+[31mError[39m: Cannot find name 'input'. (ts)
+[36m({retestqty}/{input})*100
+({failqty}/{[35minput[36m})*100
+({ntfqty}/{input})*100[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:162:3
+[31mError[39m: Cannot find name 'ntfqty'. (ts)
+[36m({failqty}/{input})*100
+({[35mntfqty[36m}/{input})*100
+({otqty}/{input})*100[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:162:12
+[31mError[39m: Cannot find name 'input'. (ts)
+[36m({failqty}/{input})*100
+({ntfqty}/{[35minput[36m})*100
+({otqty}/{input})*100[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:163:3
+[31mError[39m: Cannot find name 'otqty'. (ts)
+[36m({ntfqty}/{input})*100
+({[35motqty[36m}/{input})*100
+</pre>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\FieldPropertyPanel.svelte[39m:163:11
+[31mError[39m: Cannot find name 'input'. (ts)
+[36m({ntfqty}/{input})*100
+({otqty}/{[35minput[36m})*100
+</pre>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\TemplateDesigner.svelte[39m:1022:21
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+                    [35m<label>
+                        Reference Template
+                    </label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\TemplateDesigner.svelte[39m:1504:1
+[33mWarn[39m: Unused CSS selector ".field-group input"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.field-group input[36m,
+.field-group select{[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\designer\TemplateDesigner.svelte[39m:1515:1
+[33mWarn[39m: Unused CSS selector ".field-group input:focus"
+https://svelte.dev/e/css_unused_selector (svelte)
+[36m
+[35m.field-group input:focus[36m,
+.field-group select:focus{[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\form\FormRenderer.svelte[39m:155:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>
+    {field.label}
+    {#if field.required}
+        <span class="required">*</span>
+    {/if}
+</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\form\TemplateForm.svelte[39m:135:6
+[31mError[39m: Object literal may only specify known properties, and 'template' does not exist in type '{ fields?: any[] | undefined; values?: Record<string, any> | undefined; }'. (ts)
+[36m            <FormRenderer
+    {[35mtemplate[36m}
+    {fields}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\library\TemplateCard.svelte[39m:11:1
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+[35m<div
+class="card"
+on:click={()=>dispatch("select",item)}
+>
+
+<div class="icon">
+
+{item.icon}
+
+</div>
+
+<h3>
+
+{item.name}
+
+</h3>
+
+<p>
+
+{item.description}
+
+</p>
+
+<span>
+
+{item.category}
+
+</span>
+
+</div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\lib\components\templates\library\TemplateCard.svelte[39m:11:1
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+[35m<div
+class="card"
+on:click={()=>dispatch("select",item)}
+>
+
+<div class="icon">
+
+{item.icon}
+
+</div>
+
+<h3>
+
+{item.name}
+
+</h3>
+
+<p>
+
+{item.description}
+
+</p>
+
+<span>
+
+{item.category}
+
+</span>
+
+</div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:74:35
+[31mError[39m: 'supabaseTemplates' is possibly 'null'. (ts)
+[36m  onMount(async () => {
+    const { data, error } = await [35msupabaseTemplates[36m.from("templates").select('*').order('name');
+    if (error) {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:85:80
+[31mError[39m: Property 'computed' does not exist on type 'TemplateField'. (ts)
+[36m  $: stationOptions = allFields.find(f => f.name.toLowerCase() === "station")?.options || [];
+  $: formFields = allFields.filter(f => f.name.toLowerCase()!== "station" &&!f.[35mcomputed[36m);
+  $: computedFields = allFields.filter(f => f.computed);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:86:47
+[31mError[39m: Property 'computed' does not exist on type 'TemplateField'. (ts)
+[36m  $: formFields = allFields.filter(f => f.name.toLowerCase()!== "station" &&!f.computed);
+  $: computedFields = allFields.filter(f => f.[35mcomputed[36m);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:94:69
+[31mError[39m: Property 'default_value' does not exist on type 'TemplateField'. (ts)
+[36m    formFields.forEach((field) => {
+        newData[field.name] = field.type === 'number'? Number(field.[35mdefault_value[36m) || 0 : field.default_value || '';
+    });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:94:97
+[31mError[39m: Property 'default_value' does not exist on type 'TemplateField'. (ts)
+[36m    formFields.forEach((field) => {
+        newData[field.name] = field.type === 'number'? Number(field.default_value) || 0 : field.[35mdefault_value[36m || '';
+    });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:102:36
+[31mError[39m: Property 'formula' does not exist on type 'TemplateField'. (ts)
+[36m    computedFields.forEach(field => {
+        values[field.name] = field.[35mformula[36m? evaluateFormula(field.formula, {...formData,...values}) : 0;
+    });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:102:67
+[31mError[39m: Property 'formula' does not exist on type 'TemplateField'. (ts)
+[36m    computedFields.forEach(field => {
+        values[field.name] = field.formula? evaluateFormula(field.[35mformula[36m, {...formData,...values}) : 0;
+    });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:146:19
+[31mError[39m: Property 'formula' does not exist on type 'TemplateField'. (ts)
+[36m        calculated[field.name] = evaluateFormula(
+            field.[35mformula[36m || "",
+            {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:184:39
+[31mError[39m: 'supabaseTemplates' is possibly 'null'. (ts)
+[36m
+        const { data, error } = await [35msupabaseTemplates[36m
+            .from("records")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:206:36
+[31mError[39m: Property 'default_value' does not exist on type 'TemplateField'. (ts)
+[36m                field.type === "number"
+                    ? Number(field.[35mdefault_value[36m) || 0
+                    : field.default_value || "";[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:207:29
+[31mError[39m: Property 'default_value' does not exist on type 'TemplateField'. (ts)
+[36m                    ? Number(field.default_value) || 0
+                    : field.[35mdefault_value[36m || "";
+        });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:244:33
+[31mError[39m: Property 'icon' does not exist on type 'Template'. (ts)
+[36m      {#each templates as t}
+        <option value={t.id}>{t.[35micon[36m} {t.name} v{t.data?.version || 1}</option>
+      {/each}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\+page.svelte[39m:290:23
+[31mError[39m: This comparison appears to be unintentional because the types '"text" | "formula"' and '"date"' have no overlap. (ts)
+[36m              <textarea id={field.name} bind:value={formData[field.name]} rows="3" required={field.required}></textarea>
+            {:else if [35mfield.type === 'date'[36m}
+              <input id={field.name} type="date" bind:value={formData[field.name]} required={field.required} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:79:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m<div class="box">
+[35m<label>Target</label>[36m
+<h2>{$aiSummary.production.target}</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:84:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m<div class="box">
+[35m<label>Actual</label>[36m
+<h2>{$aiSummary.production.actual}</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:89:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m<div class="box">
+[35m<label>Achievement</label>[36m
+<h2>{$aiSummary.production.achievement.toFixed(1)}%</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:94:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m<div class="box">
+[35m<label>Yield</label>[36m
+<h2>{$aiSummary.production.yield.toFixed(2)}%</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:99:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m<div class="box">
+[35m<label>OEE</label>[36m
+<h2>{$aiSummary.production.oee.toFixed(2)}%</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:104:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m<div class="box">
+[35m<label>Reject Rate</label>[36m
+<h2>{$aiSummary.production.rr.toFixed(2)}%</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:109:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m<div class="box">
+[35m<label>NG Qty</label>[36m
+<h2>{$aiSummary.production.ng}</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:114:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m<div class="box">
+[35m<label>Downtime</label>[36m
+<h2>{$aiSummary.production.downtime} min</h2>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:134:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Today's Meetings</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:142:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Upcoming</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:150:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Completed</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:172:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Pending</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:180:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Completed</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:188:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Overdue</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:64:22
+[31mError[39m: Property 'executiveSummary' does not exist on type '{ loading: boolean; production: { target: number; actual: number; good: number; ng: number; achievement: number; yield: number; oee: number; }; meetings: { today: number; upcoming: number; completed: number; }; actions: { ...; }; issues: never[]; recommendations: never[]; }'. (ts)
+[36m
+    <pre>{$aiSummary.[35mexecutiveSummary[36m}</pre>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:105:28
+[31mError[39m: Property 'rr' does not exist on type '{ target: number; actual: number; good: number; ng: number; achievement: number; yield: number; oee: number; }'. (ts)
+[36m<label>Reject Rate</label>
+<h2>{$aiSummary.production.[35mrr[36m.toFixed(2)}%</h2>
+</div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\ai-summary\+page.svelte[39m:115:28
+[31mError[39m: Property 'downtime' does not exist on type '{ target: number; actual: number; good: number; ng: number; achievement: number; yield: number; oee: number; }'. (ts)
+[36m<label>Downtime</label>
+<h2>{$aiSummary.production.[35mdowntime[36m} min</h2>
+</div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\analytics\+page.svelte[39m:18:5
+[31mError[39m: Type '{ totalMeetings: number; totalContacts: number; totalGroups: number; totalMessages: number; }' is missing the following properties from type '{ meetings: number; actions: number; closedActions: number; attendance: number; }': meetings, actions, closedActions, attendance (ts)
+[36m  try {
+    [35mdata[36m = await getAnalytics();
+  } catch (err) {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:88:46
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        try {
+            const { data: existing } = await [35mchatDB[36m.from("users").select("id").eq("id", userId).maybeSingle();
+            if (existing) return existing;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:90:43
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m            if (existing) return existing;
+            const { data, error } = await [35mchatDB[36m.from("users").upsert({ id: userId, email, name, mobile }, { onConflict: "id" }).select().single();
+            if (error) throw error;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:114:15
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m    if (presenceChannel) {
+        await [35mchatDB[36m.removeChannel(presenceChannel);
+    }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:117:23
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m
+    presenceChannel = [35mchatDB[36m.channel("online-users", {
+        config: {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:147:67
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m    function isUserOnline(userId: string): boolean { return onlineUsers.has(userId); }
+    async function cleanupRealtime() { if (messagesChannel) await [35mchatDB[36m.removeChannel(messagesChannel); if (presenceChannel) await chatDB.removeChannel(presenceChannel); }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:147:133
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m    function isUserOnline(userId: string): boolean { return onlineUsers.has(userId); }
+    async function cleanupRealtime() { if (messagesChannel) await chatDB.removeChannel(messagesChannel); if (presenceChannel) await [35mchatDB[36m.removeChannel(presenceChannel); }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:157:37
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m            const storagePath = `chat-attachments/${filename}`;
+            const { error } = await [35mchatDB[36m.storage.from("attachments").upload(storagePath, file);
+            if (error) throw error;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:159:30
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m            if (error) throw error;
+            const { data } = [35mchatDB[36m.storage.from("attachments").getPublicUrl(storagePath);
+            return data.publicUrl;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:170:25
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        try {
+            let query = [35mchatDB[36m.from("messages").select("*");
+            query = groupId ? query.eq("group_id", groupId) : query.eq("room_id", roomId);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:175:43
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m            const senderIds = [...new Set((data || []).map(m => m.sender_id))];
+            const { data: users } = await [35mchatDB[36m.from("users").select("id,name,mobile").in("id", senderIds);
+            const userMap = new Map((users || []).map(u => [u.id, u]));[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:183:30
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m    function subscribeToMessages({ roomId, groupId }: { roomId?: string; groupId?: string; }) {
+        if (messagesChannel) [35mchatDB[36m.removeChannel(messagesChannel);
+        const filter = groupId ? `group_id=eq.${groupId}` : `room_id=eq.${roomId}`;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:185:27
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        const filter = groupId ? `group_id=eq.${groupId}` : `room_id=eq.${roomId}`;
+        messagesChannel = [35mchatDB[36m.channel(`chat-${groupId ?? roomId}`)
+            .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter }, async ({ new: newMessage }) => {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:188:48
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m                if (newMessage.sender_id === getCurrentUserId()) return;
+                const { data: sender } = await [35mchatDB[36m.from("users").select("id,name,mobile").eq("id", newMessage.sender_id).single();
+                messages = [...messages, { ...newMessage, users: sender, is_own: false, type: newMessage.template_id ? "template" : newMessage.attachments?.length ? "attachment" : "text", status: newMessage.status ?? "delivered" }];[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:189:29
+[31mError[39m: Type 'ChatMessage | { users: { id: any; name: any; mobile: any; } | null; is_own: false; type: string; status: any; }' is not assignable to type 'ChatMessage'.
+  Type '{ users: { id: any; name: any; mobile: any; } | null; is_own: false; type: string; status: any; }' is missing the following properties from type 'ChatMessage': id, sender_id, created_at (ts)
+[36m                const { data: sender } = await chatDB.from("users").select("id,name,mobile").eq("id", newMessage.sender_id).single();
+                messages = [[35m...messages[36m, { ...newMessage, users: sender, is_own: false, type: newMessage.template_id ? "template" : newMessage.attachments?.length ? "attachment" : "text", status: newMessage.status ?? "delivered" }];
+            })[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:189:59
+[31mError[39m: Type '{ id: any; name: any; mobile: any; } | null' is not assignable to type 'ChatUser | undefined'.
+  Type 'null' is not assignable to type 'ChatUser | undefined'. (ts)
+[36m                const { data: sender } = await chatDB.from("users").select("id,name,mobile").eq("id", newMessage.sender_id).single();
+                messages = [...messages, { ...newMessage, [35musers[36m: sender, is_own: false, type: newMessage.template_id ? "template" : newMessage.attachments?.length ? "attachment" : "text", status: newMessage.status ?? "delivered" }];
+            })[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:202:15
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        const ids = unread.map(m => m.id);
+        await [35mchatDB[36m.from("messages").update({ status: "read" }).in("id", ids);
+        messages = messages.map(m => ids.includes(m.id) ? { ...m, status: "read" } : m);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:217:21
+[31mError[39m: Type 'ChatMessage | { id: string; sender_id: string; receiver_id: string | undefined; room_id: string | undefined; group_id: string | undefined; content: any; attachments: string[]; ... 6 more ...; users: { ...; }; }' is not assignable to type 'ChatMessage'.
+  Type '{ id: string; sender_id: string; receiver_id: string | undefined; room_id: string | undefined; group_id: string | undefined; content: any; attachments: string[]; created_at: string; template_id: any; ... 4 more ...; users: { ...; }; }' is not assignable to type 'ChatMessage'.
+    Types of property 'template_data' are incompatible.
+      Type '{ id: any; name: any; values: any; chart: any; fields: any; } | null' is not assignable to type 'Record<string, unknown> | undefined'.
+        Type 'null' is not assignable to type 'Record<string, unknown> | undefined'. (ts)
+[36m        const tempId = `temp-${Date.now()}`;
+        messages = [[35m...messages[36m, { id: tempId, sender_id: currentUserId, receiver_id: isGroupChat ? undefined : selectedContact?.id, room_id: isGroupChat ? undefined : selectedRoomId ?? undefined, group_id: isGroupChat ? selectedGroupId ?? undefined : undefined, content: content?.trim() || "", attachments: attachmentUrls, created_at: new Date().toISOString(), template_id: template?.id, template_data: templateSnapshot, is_own: true, status: "sending", type: template ? "template" : attachmentUrls.length ? "attachment" : "text", users: { id: currentUserId, name: "You" } }];
+        try {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:217:390
+[31mError[39m: Type '{ id: any; name: any; values: any; chart: any; fields: any; } | null' is not assignable to type 'Record<string, unknown> | undefined'.
+  Type 'null' is not assignable to type 'Record<string, unknown> | undefined'. (ts)
+[36m        const tempId = `temp-${Date.now()}`;
+        messages = [...messages, { id: tempId, sender_id: currentUserId, receiver_id: isGroupChat ? undefined : selectedContact?.id, room_id: isGroupChat ? undefined : selectedRoomId ?? undefined, group_id: isGroupChat ? selectedGroupId ?? undefined : undefined, content: content?.trim() || "", attachments: attachmentUrls, created_at: new Date().toISOString(), template_id: template?.id, [35mtemplate_data[36m: templateSnapshot, is_own: true, status: "sending", type: template ? "template" : attachmentUrls.length ? "attachment" : "text", users: { id: currentUserId, name: "You" } }];
+        try {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:219:43
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        try {
+            const { data, error } = await [35mchatDB[36m.from("messages").insert({ sender_id: currentUserId, receiver_id: isGroupChat ? null : selectedContact?.id, room_id: isGroupChat ? null : selectedRoomId, group_id: isGroupChat ? selectedGroupId : null, content: content?.trim() || null, attachments: attachmentUrls.length ? attachmentUrls : null, template_id: template?.id ?? null, template_data: templateSnapshot, event: "message", extension: "chat", private: !isGroupChat, status: "sent" }).select().single();
+            if (error) throw error;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:229:43
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m            const currentUserId = getCurrentUserId();
+            const { data, error } = await [35mchatDB[36m.from("chat_groups").select(`id,name,description,avatar_url,created_at,created_by,chat_group_members!inner(user_id)`).eq("chat_group_members.user_id", currentUserId).order("created_at", { ascending: false });
+            if (error) throw error; groups = data ?? [];[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:236:43
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        try {
+            const { data, error } = await [35mchatDB[36m.from("chat_group_members").select(`users:user_id(id,name,email,mobile,avatar_url)`).eq("group_id", groupId);
+            if (error) throw error; groupMembers = (data ?? []).map((m: any) => m.users);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:244:43
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m            const currentUserId = getCurrentUserId();
+            const { data, error } = await [35mchatDB[36m.from("rooms").select(`id,user1_id,user2_id,user1:user1_id(id,name,mobile,email,avatar_url),user2:user2_id(id,name,mobile,email,avatar_url)`).or(`user1_id.eq.${currentUserId},user2_id.eq.${currentUserId}`);
+            if (error) throw error;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:262:49
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        if(!contactName.trim()){ alert("Enter Contact Name"); return; }
+        const {data:user,error:userError}=await [35mchatDB[36m.from("users").insert({ id:crypto.randomUUID(), name:contactName, mobile:contactMobile, email:contactEmail }).select().single();
+        if(userError){ console.error(userError); alert(userError.message); return; }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:264:15
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        if(userError){ console.error(userError); alert(userError.message); return; }
+        await [35mchatDB[36m.from("rooms").insert({ user1_id:getCurrentUserId(), user2_id:user.id });
+        showContactForm=false; contactName=""; contactMobile=""; contactEmail=""; department=""; await loadContacts();[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:270:40
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        if(!groupName.trim()){ alert("Enter Group Name"); return; }
+        const {data:group,error}=await [35mchatDB[36m.from("chat_groups").insert({ name:groupName, description:groupDesc, created_by:getCurrentUserId() }).select().single();
+        if(error){ console.error(error); alert(error.message); return; }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:272:15
+[31mError[39m: 'chatDB' is possibly 'null'. (ts)
+[36m        if(error){ console.error(error); alert(error.message); return; }
+        await [35mchatDB[36m.from("chat_group_members").insert({ group_id:group.id, user_id:getCurrentUserId() });
+        groupName=""; groupDesc=""; showGroupForm=false; await loadGroups();[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:303:33
+[31mError[39m: 'templateDB' is possibly 'null'. (ts)
+[36m        const payload = { reference_template_id: template.id, t_code: template.template_code || template.t_code, ts: new Date().toISOString(), shift: values.shift ?? null, station: values.station ?? null, user_name: currentUser?.name ?? "Guest", data: values };
+        const { error } = await [35mtemplateDB[36m.from("records").insert(payload);
+        if (error) { console.error("Insert Error:", error); alert(error.message); return; }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:307:15
+[31mError[39m: 'templateDB' is possibly 'null'. (ts)
+[36m        templateData.last_values = values;
+        await [35mtemplateDB[36m.from("templates").update({ data: templateData }).eq("id", template.id);
+        await sendMessage(new CustomEvent("sendMessage", { detail: { content: `📋 ${template.name}`, template: { ...template, values } }}));[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\chat\+page.svelte[39m:345:17
+[31mError[39m: Object literal may only specify known properties, and '"online"' does not exist in type '{ title?: string | undefined; subtitle?: string | undefined; typing?: boolean | undefined; avatar?: string | undefined; isGroup?: boolean | undefined; memberCount?: number | undefined; }'. (ts)
+[36m                subtitle={selectedContact ? (isUserOnline(selectedContact.id) ? "Online" : "Offline") : `${groupMembers.length} Members`}
+                [35monline[36m={selectedContact ? isUserOnline(selectedContact.id) : false}
+                typing={typing} isGroup={!!selectedGroup} memberCount={groupMembers.length}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:132:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Customer</label>[36m
+				<select bind:value={data.customer}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:143:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Model</label>[36m
+				<input bind:value={data.model} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:147:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Line</label>[36m
+				<input bind:value={data.line} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:151:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Shift</label>[36m
+				<select bind:value={data.shift}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:159:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>UPH</label>[36m
+				<input type="number" bind:value={data.uph} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:163:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Target Qty</label>[36m
+				<input type="number" bind:value={data.target} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:167:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Actual Qty</label>[36m
+				<input type="number" bind:value={data.actual} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:171:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Supervisor</label>[36m
+				<input bind:value={data.supervisor} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:175:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Engineer</label>[36m
+				<input bind:value={data.engineer} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:188:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Yield (%)</label>[36m
+				<input type="number" step="0.01" bind:value={data.yield} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:192:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>RR (%)</label>[36m
+				<input type="number" step="0.01" bind:value={data.rr} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:196:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>FPY (%)</label>[36m
+				<input type="number" step="0.01" bind:value={data.fpy} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:200:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Downtime (Minutes)</label>[36m
+				<input type="number" bind:value={data.downtime} />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:204:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Current Status</label>[36m
+				<select bind:value={data.status}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:224:4
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m		<div>
+			[35m<label>Major Issue</label>[36m
+			<textarea[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:233:4
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m		<div>
+			[35m<label>Action Taken</label>[36m
+			<textarea[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:242:4
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m		<div>
+			[35m<label>Support Required</label>[36m
+			<textarea[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:251:4
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m		<div>
+			[35m<label>Remarks</label>[36m
+			<textarea[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:306:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Priority</label>[36m
+				<select>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:315:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Support Department</label>[36m
+				<select>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\communication\production\+page.svelte[39m:327:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m			<div>
+				[35m<label>Need Approval</label>[36m
+				<select>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:132:9
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+        [35m<div
+            class="card blue clickable"
+            on:click={() => goto("/meeting-list?filter=today")}
+        >
+            <h2>{todayMeetings}</h2>
+            <p>Today's Meetings</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:132:9
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+        [35m<div
+            class="card blue clickable"
+            on:click={() => goto("/meeting-list?filter=today")}
+        >
+            <h2>{todayMeetings}</h2>
+            <p>Today's Meetings</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:140:9
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+        [35m<div
+            class="card green clickable"
+            on:click={() => goto("/meeting-list?filter=upcoming")}
+        >
+            <h2>{upcomingMeetings}</h2>
+            <p>Upcoming Meetings</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:140:9
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+        [35m<div
+            class="card green clickable"
+            on:click={() => goto("/meeting-list?filter=upcoming")}
+        >
+            <h2>{upcomingMeetings}</h2>
+            <p>Upcoming Meetings</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:148:9
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+        [35m<div
+            class="card red clickable"
+            on:click={() => goto("/meeting-actions")}
+        >
+            <h2>{pendingActions}</h2>
+            <p>Pending Actions</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:148:9
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+        [35m<div
+            class="card red clickable"
+            on:click={() => goto("/meeting-actions")}
+        >
+            <h2>{pendingActions}</h2>
+            <p>Pending Actions</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:156:9
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+        [35m<div
+            class="card orange clickable"
+            on:click={() => goto("/report-summary")}
+        >
+            <h2>{totalReports}</h2>
+            <p>Production Reports</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:156:9
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+        [35m<div
+            class="card orange clickable"
+            on:click={() => goto("/report-summary")}
+        >
+            <h2>{totalReports}</h2>
+            <p>Production Reports</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:164:9
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+        [35m<div
+            class="card purple clickable"
+            on:click={() => goto("/machine-downtime")}
+        >
+            <h2>{$machineDowntime.totalMinutes}</h2>
+            <p>Today's Downtime</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:164:9
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+        [35m<div
+            class="card purple clickable"
+            on:click={() => goto("/machine-downtime")}
+        >
+            <h2>{$machineDowntime.totalMinutes}</h2>
+            <p>Today's Downtime</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:172:9
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m
+        [35m<div
+            class="card dark clickable"
+            on:click={() => goto("/ai-summary")}
+        >
+            <h2>🤖</h2>
+            <p>AI Executive Summary</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:172:9
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m
+        [35m<div
+            class="card dark clickable"
+            on:click={() => goto("/ai-summary")}
+        >
+            <h2>🤖</h2>
+            <p>AI Executive Summary</p>
+        </div>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:67:22
+[31mError[39m: Property 'status' does not exist on type 'never'. (ts)
+[36m$: todayMeetings =
+meetings.filter(m=>m.[35mstatus[36m==="Today").length;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:70:22
+[31mError[39m: Property 'status' does not exist on type 'never'. (ts)
+[36m$: upcomingMeetings =
+meetings.filter(m=>m.[35mstatus[36m==="Upcoming").length;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:73:22
+[31mError[39m: Property 'status' does not exist on type 'never'. (ts)
+[36m$: completedMeetings =
+meetings.filter(m=>m.[35mstatus[36m==="Completed").length;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:76:21
+[31mError[39m: Property 'status' does not exist on type 'never'. (ts)
+[36m$: pendingActions =
+actions.filter(a=>a.[35mstatus[36m!=="Completed").length;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:81:37
+[31mError[39m: Property 'target' does not exist on type 'never'. (ts)
+[36m$: totalTarget =
+production.reduce((t,r)=>t+Number(r.[35mtarget[36m||0),0);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:84:37
+[31mError[39m: Property 'actual' does not exist on type 'never'. (ts)
+[36m$: totalActual =
+production.reduce((t,r)=>t+Number(r.[35mactual[36m||0),0);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:87:37
+[31mError[39m: Property 'ng' does not exist on type 'never'. (ts)
+[36m$: totalNG =
+production.reduce((t,r)=>t+Number(r.[35mng[36m||0),0);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\dashboard\+page.svelte[39m:94:19
+[31mError[39m: Property 'yield' does not exist on type 'never'. (ts)
+[36mproduction.reduce(
+(t,r)=>t+Number(r.[35myield[36m||0),0
+)[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\engineering\issues\+page.svelte[39m:155:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>📷 Machine Photo</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\+page.svelte[39m:77:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+        [35m<label>Total Today</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\+page.svelte[39m:85:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+        [35m<label>Machines</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\+page.svelte[39m:93:9
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+        [35m<label>Highest Downtime</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:76:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Date</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:86:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Department</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:104:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Production Line</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:112:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Machine</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:120:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Category</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:144:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Duration</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:154:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Reason</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:161:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Corrective Action</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:172:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Reported By</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:180:1
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+[35m<label>Status</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\[id]\+page.svelte[39m:35:44
+[31mError[39m: Argument of type 'Number' is not assignable to parameter of type 'number'.
+  'number' is a primitive, but 'Number' is a wrapper object. Prefer using 'number' when possible. (ts)
+[36m
+    const row=await getMachineDowntimeById([35mid[36m);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:52:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div>
+            [35m<label>Date</label>[36m
+            <input bind:value={form.report_date} type="date">[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:57:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div>
+            [35m<label>Department</label>[36m
+            <select bind:value={form.department}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:68:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div>
+            [35m<label>Production Line</label>[36m
+            <input bind:value={form.production_line}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:73:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div>
+            [35m<label>Machine</label>[36m
+            <input bind:value={form.machine}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:78:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div>
+            [35m<label>Category</label>[36m
+            <select bind:value={form.category}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:92:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div>
+            [35m<label>Duration (Minutes)</label>[36m
+            <input[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:101:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+    [35m<label>Reason</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:108:5
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m
+    [35m<label>Action Taken</label>[36m[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:118:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div>
+            [35m<label>Reported By</label>[36m
+            <input bind:value={form.reported_by}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\machine-downtime\add\+page.svelte[39m:123:13
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m        <div>
+            [35m<label>Status</label>[36m
+            <select bind:value={form.status}>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:200:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                <div class="form-grid">
+                    <div class="field">[35m<label>Meeting Title *</label>[36m<input type="text" bind:value={title} /></div>
+                    <div class="field"><label>Meeting Type *</label><select bind:value={type}><option value="">Select Type</option>{#each meetingTypes as item}<option value={item}>{item}</option>{/each}</select></div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:201:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>Meeting Title *</label><input type="text" bind:value={title} /></div>
+                    <div class="field">[35m<label>Meeting Type *</label>[36m<select bind:value={type}><option value="">Select Type</option>{#each meetingTypes as item}<option value={item}>{item}</option>{/each}</select></div>
+                    <div class="field"><label>Department</label><select bind:value={department}>{#each departments as item}<option value={item}>{item}</option>{/each}</select></div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:202:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>Meeting Type *</label><select bind:value={type}><option value="">Select Type</option>{#each meetingTypes as item}<option value={item}>{item}</option>{/each}</select></div>
+                    <div class="field">[35m<label>Department</label>[36m<select bind:value={department}>{#each departments as item}<option value={item}>{item}</option>{/each}</select></div>
+                    <div class="field"><label>Priority</label><select bind:value={priority}>{#each priorities as item}<option value={item}>{item}</option>{/each}</select></div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:203:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>Department</label><select bind:value={department}>{#each departments as item}<option value={item}>{item}</option>{/each}</select></div>
+                    <div class="field">[35m<label>Priority</label>[36m<select bind:value={priority}>{#each priorities as item}<option value={item}>{item}</option>{/each}</select></div>
+                </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:210:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                <div class="form-grid">
+                    <div class="field">[35m<label>Meeting Date *</label>[36m<input type="date" bind:value={date} min={new Date().toISOString().split('T')[0]} /></div>
+                    <div class="field"><label>Start Time *</label><input type="time" bind:value={start_time} /></div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:211:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>Meeting Date *</label><input type="date" bind:value={date} min={new Date().toISOString().split('T')[0]} /></div>
+                    <div class="field">[35m<label>Start Time *</label>[36m<input type="time" bind:value={start_time} /></div>
+                    <div class="field"><label>End Time *</label><input type="time" bind:value={end_time} /></div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:212:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>Start Time *</label><input type="time" bind:value={start_time} /></div>
+                    <div class="field">[35m<label>End Time *</label>[36m<input type="time" bind:value={end_time} /></div>
+                    <div class="field"><label>Reminder</label><select bind:value={reminder}><option value="15">15 Minutes</option></select></div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:213:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>End Time *</label><input type="time" bind:value={end_time} /></div>
+                    <div class="field">[35m<label>Reminder</label>[36m<select bind:value={reminder}><option value="15">15 Minutes</option></select></div>
+                </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:220:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                <div class="form-grid">
+                    <div class="field">[35m<label>Meeting Mode</label>[36m<select bind:value={meetingMode}><option value="Offline">Offline</option><option value="Online">Online</option><option value="Hybrid">Hybrid</option></select></div>
+                    <div class="field"><label>Meeting Location *</label><input type="text" bind:value={location} /></div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:221:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>Meeting Mode</label><select bind:value={meetingMode}><option value="Offline">Offline</option><option value="Online">Online</option><option value="Hybrid">Hybrid</option></select></div>
+                    <div class="field">[35m<label>Meeting Location *</label>[36m<input type="text" bind:value={location} /></div>
+                    {#if meetingMode!== "Offline"}<div class="field" style="grid-column:1/3"><label>Meeting Link *</label><input type="url" bind:value={meetingLink} /></div>{/if}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:222:94
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>Meeting Location *</label><input type="text" bind:value={location} /></div>
+                    {#if meetingMode!== "Offline"}<div class="field" style="grid-column:1/3">[35m<label>Meeting Link *</label>[36m<input type="url" bind:value={meetingLink} /></div>{/if}
+                </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:229:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                <div class="form-grid">
+                    <div class="field">[35m<label>Organizer *</label>[36m<input type="text" bind:value={organizer} /></div>
+                    <div class="field"><label>Participants</label><input type="text" bind:value={participants} /><small>Separate multiple names using commas.</small></div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:230:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>Organizer *</label><input type="text" bind:value={organizer} /></div>
+                    <div class="field">[35m<label>Participants</label>[36m<input type="text" bind:value={participants} /><small>Separate multiple names using commas.</small></div>
+                </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:243:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                <div class="form-grid">
+                    <div class="field">[35m<label>Reference File</label>[36m<input type="file" on:change={uploadAttachment} />{#if attachmentUrl}<small>✅ Uploaded</small>{/if}</div>
+                    <div class="field"><label>Reference Number</label><input type="text" bind:value={referenceNo} readonly /></div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:244:40
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m                    <div class="field"><label>Reference File</label><input type="file" on:change={uploadAttachment} />{#if attachmentUrl}<small>✅ Uploaded</small>{/if}</div>
+                    <div class="field">[35m<label>Reference Number</label>[36m<input type="text" bind:value={referenceNo} readonly /></div>
+                </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:88:33
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m        const filename = `meetings/${Date.now()}-${file.name}`;
+        const { error } = await [35msupabase[36m.storage.from("attachments").upload(filename, file);
+        if(error) { alert("Upload failed: " + error.message); return; }[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:90:26
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m        if(error) { alert("Upload failed: " + error.message); return; }
+        const { data } = [35msupabase[36m.storage.from("attachments").getPublicUrl(filename);
+        attachmentUrl = data.publicUrl;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:123:46
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m            // Duplicate Check
+            const { data: existing } = await [35msupabase[36m.from("meetings")
+              .select("id")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\+page.svelte[39m:153:37
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m
+            const { error } = await [35msupabase[36m.from("meetings").insert(payload);
+            if (error) throw error;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\meetings\[id]\+page.svelte[39m:14:25
+[31mError[39m: Cannot find name 'getMeetingById'. (ts)
+[36m        loading = true;
+        meeting = await [35mgetMeetingById[36m(Number(id));
+        loading = false;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:104:13
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. (ts)
+[36m
+        if(![35mbyLine[line][36m){[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:106:13
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. (ts)
+[36m
+            [35mbyLine[line][36m={[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:126:9
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. (ts)
+[36m
+        [35mbyLine[line][36m.target+=Number(r.target||0);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:128:9
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. (ts)
+[36m
+        [35mbyLine[line][36m.actual+=Number(r.actual||0);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:130:9
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. (ts)
+[36m
+        [35mbyLine[line][36m.good+=Number(r.good||0);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:132:9
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. (ts)
+[36m
+        [35mbyLine[line][36m.ng+=Number(r.ng||0);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:134:9
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. (ts)
+[36m
+        [35mbyLine[line][36m.yield+=Number(r.yield||0);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:136:9
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. (ts)
+[36m
+        [35mbyLine[line][36m.oee+=Number(r.oee||0);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:138:9
+[31mError[39m: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'. (ts)
+[36m
+        [35mbyLine[line][36m.count++;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:249:6
+[31mError[39m: 'data' is of type 'unknown'. (ts)
+[36m
+<td>{[35mdata[36m.target.toLocaleString()}</td>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:251:6
+[31mError[39m: 'data' is of type 'unknown'. (ts)
+[36m
+<td>{[35mdata[36m.actual.toLocaleString()}</td>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:253:6
+[31mError[39m: 'data' is of type 'unknown'. (ts)
+[36m
+<td>{[35mdata[36m.good.toLocaleString()}</td>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:255:6
+[31mError[39m: 'data' is of type 'unknown'. (ts)
+[36m
+<td>{[35mdata[36m.ng.toLocaleString()}</td>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:259:3
+[31mError[39m: 'data' is of type 'unknown'. (ts)
+[36m
+{([35mdata[36m.yield/data.count).toFixed(2)}%[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:259:14
+[31mError[39m: 'data' is of type 'unknown'. (ts)
+[36m
+{(data.yield/[35mdata[36m.count).toFixed(2)}%[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:265:3
+[31mError[39m: 'data' is of type 'unknown'. (ts)
+[36m
+{([35mdata[36m.oee/data.count).toFixed(1)}%[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\report-summary\+page.svelte[39m:265:12
+[31mError[39m: 'data' is of type 'unknown'. (ts)
+[36m
+{(data.oee/[35mdata[36m.count).toFixed(1)}%[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:74:45
+[31mError[39m: 'supabaseTemplates' is possibly 'null'. (ts)
+[36m    }
+    const { data, error: fetchErr } = await [35msupabaseTemplates[36m.from('templates').select('*').order('name');
+    if (fetchErr) error = "Failed to fetch templates: " + fetchErr.message;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:80:69
+[31mError[39m: Property 'field_type' does not exist on type 'TemplateField'. (ts)
+[36m        selectedTemplateId = templates[0].id;
+        const numeric = normalizeFields(templates[0]).filter(f => f.[35mfield_type[36m === 'number' || f.field_type === 'formula');
+        if (numeric.length > 0) yField = numeric[0].name;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:80:98
+[31mError[39m: Property 'field_type' does not exist on type 'TemplateField'. (ts)
+[36m        selectedTemplateId = templates[0].id;
+        const numeric = normalizeFields(templates[0]).filter(f => f.field_type === 'number' || f.[35mfield_type[36m === 'formula');
+        if (numeric.length > 0) yField = numeric[0].name;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:87:70
+[31mError[39m: Property 'field_type' does not exist on type 'TemplateField'. (ts)
+[36m  $: availableStations = normalizeFields(selectedTemplate).find(f => f.name.toLowerCase() === 'station')?.options || [];
+  $: numericFields = normalizeFields(selectedTemplate).filter(f => f.[35mfield_type[36m === "number" || f.field_type === "formula");
+  $: if(selectedTemplateId && startDate && endDate && selectedShift) loadRecords();[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:87:99
+[31mError[39m: Property 'field_type' does not exist on type 'TemplateField'. (ts)
+[36m  $: availableStations = normalizeFields(selectedTemplate).find(f => f.name.toLowerCase() === 'station')?.options || [];
+  $: numericFields = normalizeFields(selectedTemplate).filter(f => f.field_type === "number" || f.[35mfield_type[36m === "formula");
+  $: if(selectedTemplateId && startDate && endDate && selectedShift) loadRecords();[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:107:60
+[31mError[39m: 'supabaseTemplates' is possibly 'null'. (ts)
+[36m        // TEST 1: Only filter by t_code first to debug
+        const { data: testData, error: testError } = await [35msupabaseTemplates[36m
+         .from("records")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:122:21
+[31mError[39m: 'supabaseTemplates' is possibly 'null'. (ts)
+[36m        // If Test 1 passed, run full query with all filters
+        let query = [35msupabaseTemplates[36m
+         .from("records")[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:158:29
+[31mError[39m: Property 'field_type' does not exist on type 'TemplateField'. (ts)
+[36m            templateFields
+             .filter(f => f.[35mfield_type[36m === "formula" && f.formula)
+             .forEach(f => {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:158:59
+[31mError[39m: Property 'formula' does not exist on type 'TemplateField'. (ts)
+[36m            templateFields
+             .filter(f => f.field_type === "formula" && f.[35mformula[36m)
+             .forEach(f => {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:160:35
+[31mError[39m: Property 'field_name' does not exist on type 'TemplateField'. (ts)
+[36m             .forEach(f => {
+                    const key = f.[35mfield_name[36m?? f.name;
+                    rowData[key] = evaluateFormula(f.formula, rowData);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:161:54
+[31mError[39m: Property 'formula' does not exist on type 'TemplateField'. (ts)
+[36m                    const key = f.field_name?? f.name;
+                    rowData[key] = evaluateFormula(f.[35mformula[36m, rowData);
+                });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:238:26
+[31mError[39m: Property 'field_name' does not exist on type 'TemplateField'. (ts)
+[36m        "shift",
+    ...fields.map(f => f.[35mfield_name[36m)
+    ]));[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:295:116
+[31mError[39m: Property 'field_name' does not exist on type 'TemplateField'. (ts)
+[36m            <option value="shift">Shift</option>
+            {#each normalizeFields(selectedTemplate).filter(f => (f.type === "text" || f.type === "dropdown") && f.[35mfield_name[36m!== "station" && f.field_name!== "shift") as field}
+                <option value={field.field_name}>{field.label}</option>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:295:145
+[31mError[39m: Property 'field_name' does not exist on type 'TemplateField'. (ts)
+[36m            <option value="shift">Shift</option>
+            {#each normalizeFields(selectedTemplate).filter(f => (f.type === "text" || f.type === "dropdown") && f.field_name!== "station" && f.[35mfield_name[36m!== "shift") as field}
+                <option value={field.field_name}>{field.label}</option>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:296:38
+[31mError[39m: Property 'field_name' does not exist on type 'TemplateField'. (ts)
+[36m            {#each normalizeFields(selectedTemplate).filter(f => (f.type === "text" || f.type === "dropdown") && f.field_name!== "station" && f.field_name!== "shift") as field}
+                <option value={field.[35mfield_name[36m}>{field.label}</option>
+            {/each}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\reports\+page.svelte[39m:328:80
+[31mError[39m: Property 'field_name' does not exist on type 'TemplateField'. (ts)
+[36m                <td>{r.station}</td>
+                {#each normalizeFields(selectedTemplate) as field}<td>{r[field.[35mfield_name[36m]}</td>{/each}
+              </tr>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signin\+page.svelte[39m:127:3
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m{#if showOtpPopup}
+  [35m<div class="overlay" on:click={closeOtpPopup}>
+    <div class="popup" on:click|stopPropagation>
+      <button class="close" on:click={closeOtpPopup}>✕</button>
+
+      {#if step === 'email'}
+        <h2>Enter Email</h2>
+        <p class="subtitle">We'll send you a verification code</p>
+
+        <div class="form-group">
+          <input 
+            type="email" 
+            placeholder="your@email.com" 
+            bind:value={email}
+            disabled={loading}
+            on:keydown={(e) => e.key === 'Enter' && sendOtp()}
+          />
+        </div>
+
+        <button on:click={sendOtp} disabled={loading} class="btn-primary">
+          {loading ? 'Sending...' : 'Send OTP'}
+        </button>
+
+      {:else if step === 'otp'}
+        <h2>Verify OTP</h2>
+        <p class="subtitle">Code sent to {email}</p>
+
+        <div class="form-group">
+          <input 
+            type="text" 
+            placeholder="000000" 
+            bind:value={otp}
+            maxlength="6"
+            disabled={loading}
+            on:keydown={(e) => e.key === 'Enter' && verifyOtp()}
+            class="otp-input"
+          />
+        </div>
+
+        <button on:click={verifyOtp} disabled={loading} class="btn-primary">
+          {loading ? 'Verifying...' : 'Verify & Sign In'}
+        </button>
+
+        <button on:click={resendOtp} disabled={countdown > 0} class="btn-link">
+          {countdown > 0 ? `Resend in ${countdown}s` : 'Resend OTP'}
+        </button>
+
+        <button on:click={() => step = 'email'} class="btn-link">
+          Change Email
+        </button>
+      {/if}
+
+      {#if error}
+        <div class="error">{error}</div>
+      {/if}
+    </div>
+  </div>[36m
+{/if}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signin\+page.svelte[39m:127:3
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m{#if showOtpPopup}
+  [35m<div class="overlay" on:click={closeOtpPopup}>
+    <div class="popup" on:click|stopPropagation>
+      <button class="close" on:click={closeOtpPopup}>✕</button>
+
+      {#if step === 'email'}
+        <h2>Enter Email</h2>
+        <p class="subtitle">We'll send you a verification code</p>
+
+        <div class="form-group">
+          <input 
+            type="email" 
+            placeholder="your@email.com" 
+            bind:value={email}
+            disabled={loading}
+            on:keydown={(e) => e.key === 'Enter' && sendOtp()}
+          />
+        </div>
+
+        <button on:click={sendOtp} disabled={loading} class="btn-primary">
+          {loading ? 'Sending...' : 'Send OTP'}
+        </button>
+
+      {:else if step === 'otp'}
+        <h2>Verify OTP</h2>
+        <p class="subtitle">Code sent to {email}</p>
+
+        <div class="form-group">
+          <input 
+            type="text" 
+            placeholder="000000" 
+            bind:value={otp}
+            maxlength="6"
+            disabled={loading}
+            on:keydown={(e) => e.key === 'Enter' && verifyOtp()}
+            class="otp-input"
+          />
+        </div>
+
+        <button on:click={verifyOtp} disabled={loading} class="btn-primary">
+          {loading ? 'Verifying...' : 'Verify & Sign In'}
+        </button>
+
+        <button on:click={resendOtp} disabled={countdown > 0} class="btn-link">
+          {countdown > 0 ? `Resend in ${countdown}s` : 'Resend OTP'}
+        </button>
+
+        <button on:click={() => step = 'email'} class="btn-link">
+          Change Email
+        </button>
+      {/if}
+
+      {#if error}
+        <div class="error">{error}</div>
+      {/if}
+    </div>
+  </div>[36m
+{/if}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signin\+page.svelte[39m:128:5
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m  <div class="overlay" on:click={closeOtpPopup}>
+    [35m<div class="popup" on:click|stopPropagation>
+      <button class="close" on:click={closeOtpPopup}>✕</button>
+
+      {#if step === 'email'}
+        <h2>Enter Email</h2>
+        <p class="subtitle">We'll send you a verification code</p>
+
+        <div class="form-group">
+          <input 
+            type="email" 
+            placeholder="your@email.com" 
+            bind:value={email}
+            disabled={loading}
+            on:keydown={(e) => e.key === 'Enter' && sendOtp()}
+          />
+        </div>
+
+        <button on:click={sendOtp} disabled={loading} class="btn-primary">
+          {loading ? 'Sending...' : 'Send OTP'}
+        </button>
+
+      {:else if step === 'otp'}
+        <h2>Verify OTP</h2>
+        <p class="subtitle">Code sent to {email}</p>
+
+        <div class="form-group">
+          <input 
+            type="text" 
+            placeholder="000000" 
+            bind:value={otp}
+            maxlength="6"
+            disabled={loading}
+            on:keydown={(e) => e.key === 'Enter' && verifyOtp()}
+            class="otp-input"
+          />
+        </div>
+
+        <button on:click={verifyOtp} disabled={loading} class="btn-primary">
+          {loading ? 'Verifying...' : 'Verify & Sign In'}
+        </button>
+
+        <button on:click={resendOtp} disabled={countdown > 0} class="btn-link">
+          {countdown > 0 ? `Resend in ${countdown}s` : 'Resend OTP'}
+        </button>
+
+        <button on:click={() => step = 'email'} class="btn-link">
+          Change Email
+        </button>
+      {/if}
+
+      {#if error}
+        <div class="error">{error}</div>
+      {/if}
+    </div>[36m
+  </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signin\+page.svelte[39m:128:5
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m  <div class="overlay" on:click={closeOtpPopup}>
+    [35m<div class="popup" on:click|stopPropagation>
+      <button class="close" on:click={closeOtpPopup}>✕</button>
+
+      {#if step === 'email'}
+        <h2>Enter Email</h2>
+        <p class="subtitle">We'll send you a verification code</p>
+
+        <div class="form-group">
+          <input 
+            type="email" 
+            placeholder="your@email.com" 
+            bind:value={email}
+            disabled={loading}
+            on:keydown={(e) => e.key === 'Enter' && sendOtp()}
+          />
+        </div>
+
+        <button on:click={sendOtp} disabled={loading} class="btn-primary">
+          {loading ? 'Sending...' : 'Send OTP'}
+        </button>
+
+      {:else if step === 'otp'}
+        <h2>Verify OTP</h2>
+        <p class="subtitle">Code sent to {email}</p>
+
+        <div class="form-group">
+          <input 
+            type="text" 
+            placeholder="000000" 
+            bind:value={otp}
+            maxlength="6"
+            disabled={loading}
+            on:keydown={(e) => e.key === 'Enter' && verifyOtp()}
+            class="otp-input"
+          />
+        </div>
+
+        <button on:click={verifyOtp} disabled={loading} class="btn-primary">
+          {loading ? 'Verifying...' : 'Verify & Sign In'}
+        </button>
+
+        <button on:click={resendOtp} disabled={countdown > 0} class="btn-link">
+          {countdown > 0 ? `Resend in ${countdown}s` : 'Resend OTP'}
+        </button>
+
+        <button on:click={() => step = 'email'} class="btn-link">
+          Change Email
+        </button>
+      {/if}
+
+      {#if error}
+        <div class="error">{error}</div>
+      {/if}
+    </div>[36m
+  </div>[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signin\+page.svelte[39m:36:38
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m    // Check if user exists in DB first
+    const { data: userData } = await [35msupabase[36m
+      .from('users')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signin\+page.svelte[39m:49:39
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m    // Send OTP
+    const { error: otpError } = await [35msupabase[36m.auth.signInWithOtp({
+      email: email[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signin\+page.svelte[39m:73:48
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m
+    const { data, error: verifyError } = await [35msupabase[36m.auth.verifyOtp({
+      email: email,[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signin\+page.svelte[39m:87:13
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m    if (data.user) {
+      await [35msupabase[36m
+        .from('users')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signup\+page.svelte[39m:60:7
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m    <div class="form-group">
+      [35m<label>Name *</label>[36m
+      <input type="text" bind:value={name} placeholder="John Doe" />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signup\+page.svelte[39m:65:7
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m    <div class="form-group">
+      [35m<label>Email *</label>[36m
+      <input type="email" bind:value={email} placeholder="john@email.com" />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signup\+page.svelte[39m:70:7
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m    <div class="form-group">
+      [35m<label>Phone</label>[36m
+      <input type="tel" bind:value={phone} placeholder="+91 9876543210" />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signup\+page.svelte[39m:75:7
+[33mWarn[39m: A form label must be associated with a control
+https://svelte.dev/e/a11y_label_has_associated_control (svelte)
+[36m    <div class="form-group">
+      [35m<label>Password *</label>[36m
+      <input type="password" bind:value={password} placeholder="Min 6 characters" />[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signup\+page.svelte[39m:23:58
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m      // 1. Create auth user
+      const { data: authData, error: authError } = await [35msupabase[36m.auth.signUp({
+        email,[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\signup\+page.svelte[39m:32:40
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m      // 2. Save all data to users table
+      const { error: dbError } = await [35msupabase[36m
+        .from('users')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\+page.svelte[39m:27:5
+[31mError[39m: Variable 'editingTemplate' implicitly has type 'any' in some locations where its type cannot be determined. (ts)
+[36m    let timeout: any;
+let [35meditingTemplate[36m = null;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\+page.svelte[39m:84:23
+[31mError[39m: Parameter 'template' implicitly has an 'any' type. (ts)
+[36m    })
+function editTemplate([35mtemplate[36m) {[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\+page.svelte[39m:249:15
+[31mError[39m: Variable 'editingTemplate' implicitly has an 'any' type. (ts)
+[36m
+    template={[35meditingTemplate[36m}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\sidebar.svelte[39m:44:17
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m            {#each groups as group}
+                [35m<div 
+                    class="chat-item" 
+                    class:active={selectedId === group.id}
+                    on:click={() => dispatch('select', { ...group, type: 'group' })}
+                >
+                    <div class="avatar group">📁</div>
+                    <div class="chat-info">
+                        <div class="chat-name">{group.name}</div>
+                        <div class="chat-sub">Group</div>
+                    </div>
+                </div>[36m
+            {/each}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\sidebar.svelte[39m:44:17
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m            {#each groups as group}
+                [35m<div 
+                    class="chat-item" 
+                    class:active={selectedId === group.id}
+                    on:click={() => dispatch('select', { ...group, type: 'group' })}
+                >
+                    <div class="avatar group">📁</div>
+                    <div class="chat-info">
+                        <div class="chat-name">{group.name}</div>
+                        <div class="chat-sub">Group</div>
+                    </div>
+                </div>[36m
+            {/each}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\sidebar.svelte[39m:57:17
+[33mWarn[39m: Visible, non-interactive element `<div>` with a click event must be accompanied by a keyboard event handler. Consider whether an interactive element such as `<button type="button">` or `<a>` might be more appropriate
+https://svelte.dev/e/a11y_click_events_have_key_events (svelte)
+[36m            {#each contacts as contact}
+                [35m<div 
+                    class="chat-item" 
+                    class:active={selectedId === contact.room_id}
+                    on:click={() => dispatch('select', contact)}
+                >
+                    <div class="avatar">
+                        {#if contact.avatar_url}<img src={contact.avatar_url} alt=""/>{:else}👤{/if}
+                    </div>
+                    <div class="chat-info">
+                        <div class="chat-name">{contact.name}</div>
+                        <div class="chat-sub">DM</div>
+                    </div>
+                </div>[36m
+            {/each}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\sidebar.svelte[39m:57:17
+[33mWarn[39m: `<div>` with a click handler must have an ARIA role
+https://svelte.dev/e/a11y_no_static_element_interactions (svelte)
+[36m            {#each contacts as contact}
+                [35m<div 
+                    class="chat-item" 
+                    class:active={selectedId === contact.room_id}
+                    on:click={() => dispatch('select', contact)}
+                >
+                    <div class="avatar">
+                        {#if contact.avatar_url}<img src={contact.avatar_url} alt=""/>{:else}👤{/if}
+                    </div>
+                    <div class="chat-info">
+                        <div class="chat-name">{contact.name}</div>
+                        <div class="chat-sub">DM</div>
+                    </div>
+                </div>[36m
+            {/each}[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\sidebar.svelte[39m:4:35
+[31mError[39m: Cannot find module '$lib/stores/chat' or its corresponding type declarations. (ts)
+[36m    import { supabase } from '$lib/supabase';
+    import { currentUserId } from [35m'$lib/stores/chat'[36m;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\sidebar.svelte[39m:14:29
+[31mError[39m: Parameter 'v' implicitly has an 'any' type. (ts)
+[36m    
+    currentUserId.subscribe([35mv[36m => uid = v);[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\sidebar.svelte[39m:20:35
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m
+        const { data: g } = await [35msupabase[36m.from('chat_groups').select('*').eq('created_by', uid).order('created_at', {ascending: false});
+        groups = g || [];[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32msrc\routes\templates\sidebar.svelte[39m:23:35
+[31mError[39m: 'supabase' is possibly 'null'. (ts)
+[36m        
+        const { data: r } = await [35msupabase[36m
+            .from('rooms')[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32mtests\e2e.spec.ts[39m:1:39
+[31mError[39m: Cannot find module '@playwright/test' or its corresponding type declarations. 
+[36mimport { test, expect, request } from [35m'@playwright/test'[36m;[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32mtests\e2e.spec.ts[39m:8:78
+[31mError[39m: Binding element 'page' implicitly has an 'any' type. 
+[36mtest.describe('E2E: Login -> Meeting Create -> Meeting List -> Dashboard', () => {
+  test('register, login, create meeting and verify list/dashboard', async ({ [35mpage[36m, baseURL }) => {
+    const apiContext = await request.newContext({ baseURL });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32mtests\e2e.spec.ts[39m:8:84
+[31mError[39m: Binding element 'baseURL' implicitly has an 'any' type. 
+[36mtest.describe('E2E: Login -> Meeting Create -> Meeting List -> Dashboard', () => {
+  test('register, login, create meeting and verify list/dashboard', async ({ page, [35mbaseURL[36m }) => {
+    const apiContext = await request.newContext({ baseURL });[39m
+
+c:\Users\manir\source\repos\meetingSW\meeting-app0715\meeting-app\[32mtests\playwright.config.ts[39m:1:39
+[31mError[39m: Cannot find module '@playwright/test' or its corresponding type declarations. 
+[36mimport { defineConfig, devices } from [35m'@playwright/test'[36m;[39m
+
+====================================
+[31msvelte-check found 231 errors and 217 warnings in 64 files
+[39m

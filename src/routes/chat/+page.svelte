@@ -105,38 +105,43 @@
     function testNetwork() { lastSync = new Date().toLocaleTimeString(); isOnline = navigator.onLine; }
 
     // ================= PRESENCE =================
-    async function setupPresence() {
-        const userId = getCurrentUserId();
-        if (!userId) return;
-        if (presenceChannel) await chatDB.removeChannel(presenceChannel);
-        
-        presenceChannel = chatDB.channel("online-users", {
-            config: { presence: { key: userId } }
-      );
+    // ================= PRESENCE =================
+async function setupPresence() {
+    const userId = getCurrentUserId();
+    if (!userId) return;
 
-        // FIX 4: Deduplicated. 1 handler for all 3 events
-        const updateOnlineUsers = () => {
-            const state = presenceChannel!.presenceState();
-            onlineUsers = new Set(Object.keys(state));
-        };
-
-        presenceChannel
-            .on("presence", { event: "sync" }, updateOnlineUsers)
-            .on("presence", { event: "join" }, updateOnlineUsers)
-            .on("presence", { event: "leave" }, updateOnlineUsers);
-
-        // FIX 2: subscribe callback is 2nd param, not awaited
-        presenceChannel.subscribe(async (status) => {
-            if (status === "SUBSCRIBED") {
-                // FIX 3: Date must be string for postgres
-                await presenceChannel!.track({
-                    user_id: userId,
-                    online: true,
-                    last_seen: new Date().toISOString()
-                });
-            }
-        });
+    if (presenceChannel) {
+        await chatDB.removeChannel(presenceChannel);
     }
+
+    presenceChannel = chatDB.channel("online-users", {
+        config: {
+            presence: {
+                key: userId
+            }
+        }
+    });
+
+    const updateOnlineUsers = () => {
+        const state = presenceChannel!.presenceState();
+        onlineUsers = new Set(Object.keys(state));
+    };
+
+    presenceChannel
+        .on("presence", { event: "sync" }, updateOnlineUsers)
+        .on("presence", { event: "join" }, updateOnlineUsers)
+        .on("presence", { event: "leave" }, updateOnlineUsers);
+
+    presenceChannel.subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+            await presenceChannel!.track({
+                user_id: userId,
+                online: true,
+                last_seen: new Date().toISOString()
+            });
+        }
+    });
+}
 
     function isUserOnline(userId: string): boolean { return onlineUsers.has(userId); }
     async function cleanupRealtime() { if (messagesChannel) await chatDB.removeChannel(messagesChannel); if (presenceChannel) await chatDB.removeChannel(presenceChannel); }
@@ -300,7 +305,7 @@
         const templateData = structuredClone(template.data || {});
         templateData.last_values = values;
         await templateDB.from("templates").update({ data: templateData }).eq("id", template.id);
-        await sendMessage(new CustomEvent("sendMessage", { detail: { content: `📋 ${template.name}`, template: { ...template, values } }));
+        await sendMessage(new CustomEvent("sendMessage", { detail: { content: `📋 ${template.name}`, template: { ...template, values } }}));
         showTemplateForm = false; selectedTemplate = null;
     }
 
