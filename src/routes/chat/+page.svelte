@@ -112,7 +112,7 @@
         
         presenceChannel = chatDB.channel("online-users", {
             config: { presence: { key: userId } }
-        });
+      );
 
         // FIX 4: Deduplicated. 1 handler for all 3 events
         const updateOnlineUsers = () => {
