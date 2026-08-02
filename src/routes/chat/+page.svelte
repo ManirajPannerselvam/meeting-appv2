@@ -12,6 +12,7 @@
     import TemplateDesigner from "$lib/components/templates/designer/TemplateDesigner.svelte";
 
     import { supabaseChat, supabaseTemplates } from "$lib/supabase";
+    import type { RealtimeChannel } from "@supabase/supabase-js"; // FIX 1: Added import
 
     // ================= DB ALIASES =================
     const chatDB = supabaseChat; // for chat, users, rooms, groups, messages
@@ -109,91 +110,32 @@
         if (!userId) return;
         if (presenceChannel) await chatDB.removeChannel(presenceChannel);
         
-       // ===============================
-// ONLINE USERS PRESENCE
-// ===============================
+        presenceChannel = chatDB.channel("online-users", {
+            config: { presence: { key: userId } }
+        });
 
-if (presenceChannel) {
-    await chatDB.removeChannel(presenceChannel);
-}
+        // FIX 4: Deduplicated. 1 handler for all 3 events
+        const updateOnlineUsers = () => {
+            const state = presenceChannel!.presenceState();
+            onlineUsers = new Set(Object.keys(state));
+        };
 
+        presenceChannel
+            .on("presence", { event: "sync" }, updateOnlineUsers)
+            .on("presence", { event: "join" }, updateOnlineUsers)
+            .on("presence", { event: "leave" }, updateOnlineUsers);
 
-presenceChannel = chatDB.channel(
-    "online-users",
-    {
-        config: {
-            presence: {
-                key: userId
+        // FIX 2: subscribe callback is 2nd param, not awaited
+        presenceChannel.subscribe(async (status) => {
+            if (status === "SUBSCRIBED") {
+                // FIX 3: Date must be string for postgres
+                await presenceChannel!.track({
+                    user_id: userId,
+                    online: true,
+                    last_seen: new Date().toISOString()
+                });
             }
-        }
-    }
-);
-
-
-presenceChannel
-    .on(
-        "presence",
-        {
-            event: "sync"
-        },
-        () => {
-
-            onlineUsers = new Set(
-                Object.keys(
-                    presenceChannel!.presenceState()
-                )
-            );
-
-        }
-    )
-    .on(
-        "presence",
-        {
-            event: "join"
-        },
-        () => {
-
-            onlineUsers = new Set(
-                Object.keys(
-                    presenceChannel!.presenceState()
-                )
-            );
-
-        }
-    )
-    .on(
-        "presence",
-        {
-            event: "leave"
-        },
-        () => {
-
-            onlineUsers = new Set(
-                Object.keys(
-                    presenceChannel!.presenceState()
-                )
-            );
-
-        }
-    );
-
-
-await presenceChannel.subscribe(
-    async (status) => {
-
-        if(status === "SUBSCRIBED"){
-
-            await presenceChannel!.track({
-                user_id:userId,
-                online:true,
-                last_seen:new Date()
-            });
-
-        }
-
-    }
-);
-
+        });
     }
 
     function isUserOnline(userId: string): boolean { return onlineUsers.has(userId); }
@@ -358,7 +300,7 @@ await presenceChannel.subscribe(
         const templateData = structuredClone(template.data || {});
         templateData.last_values = values;
         await templateDB.from("templates").update({ data: templateData }).eq("id", template.id);
-        await sendMessage(new CustomEvent("sendMessage", { detail: { content: `📋 ${template.name}`, template: { ...template, values } } }));
+        await sendMessage(new CustomEvent("sendMessage", { detail: { content: `📋 ${template.name}`, template: { ...template, values } }));
         showTemplateForm = false; selectedTemplate = null;
     }
 
