@@ -109,12 +109,91 @@
         if (!userId) return;
         if (presenceChannel) await chatDB.removeChannel(presenceChannel);
         
-        presenceChannel = chatDB.channel("online-users", { config: { presence: { key: userId } } });
-        presenceChannel
-            .on("presence", { event: "sync" }, () => { onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); })
-            .on("presence", { event: "join" }, ({ key }) => { onlineUsers.add(key); onlineUsers = new Set(onlineUsers); })
-            .on("presence", { event: "leave" }, ({ key }) => { onlineUsers.delete(key); onlineUsers = new Set(onlineUsers); })
-            .subscribe(async (status) => { if (status === "SUBSCRIBED") { await presenceChannel!.track({ user_id: userId, online_at: new Date().toISOString() }); } });
+       // ===============================
+// ONLINE USERS PRESENCE
+// ===============================
+
+if (presenceChannel) {
+    await chatDB.removeChannel(presenceChannel);
+}
+
+
+presenceChannel = chatDB.channel(
+    "online-users",
+    {
+        config: {
+            presence: {
+                key: userId
+            }
+        }
+    }
+);
+
+
+presenceChannel
+    .on(
+        "presence",
+        {
+            event: "sync"
+        },
+        () => {
+
+            onlineUsers = new Set(
+                Object.keys(
+                    presenceChannel!.presenceState()
+                )
+            );
+
+        }
+    )
+    .on(
+        "presence",
+        {
+            event: "join"
+        },
+        () => {
+
+            onlineUsers = new Set(
+                Object.keys(
+                    presenceChannel!.presenceState()
+                )
+            );
+
+        }
+    )
+    .on(
+        "presence",
+        {
+            event: "leave"
+        },
+        () => {
+
+            onlineUsers = new Set(
+                Object.keys(
+                    presenceChannel!.presenceState()
+                )
+            );
+
+        }
+    );
+
+
+await presenceChannel.subscribe(
+    async (status) => {
+
+        if(status === "SUBSCRIBED"){
+
+            await presenceChannel!.track({
+                user_id:userId,
+                online:true,
+                last_seen:new Date()
+            });
+
+        }
+
+    }
+);
+
     }
 
     function isUserOnline(userId: string): boolean { return onlineUsers.has(userId); }
