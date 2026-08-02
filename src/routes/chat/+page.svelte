@@ -109,13 +109,7 @@
         if (!userId) return;
         if (presenceChannel) await chatDB.removeChannel(presenceChannel);
         
-        presenceChannel = chatDB.channel("online-users", {
-    config: {
-        presence: {
-            key: userId
-        }
-    }
-});
+        presenceChannel = chatDB.channel("online-users", { config: { presence: { key: userId } } });
         presenceChannel
             .on("presence", { event: "sync" }, () => { onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); })
             .on("presence", { event: "join" }, ({ key }) => { onlineUsers.add(key); onlineUsers = new Set(onlineUsers); })
