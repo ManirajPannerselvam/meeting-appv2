@@ -1,31 +1,66 @@
 import { json } from "@sveltejs/kit";
-import { initDB } from "$lib/server/database";
+import { prisma } from "$lib/db.server";
 
 /* DELETE */
 export async function DELETE({ params }) {
-  const db = await initDB();
+    try {
+        const id = Number(params.id);
 
-  await db.execute(
-    "DELETE FROM meetings WHERE id = ?",
-    [params.id]
-  );
+        await prisma.meeting.delete({
+            where: {
+                id
+            }
+        });
 
-  return json({ success: true });
+        return json({ success: true });
+
+    } catch (error) {
+        console.error("DELETE meeting error:", error);
+
+        return json(
+            { success: false, error: "Failed to delete meeting" },
+            { status: 500 }
+        );
+    }
 }
+
 
 /* UPDATE */
 export async function PUT({ params, request }) {
-  const db = await initDB();
+    try {
+        const id = Number(params.id);
 
-  const { title, date, type, agenda, location } =
-    await request.json();
+        const {
+            title,
+            date,
+            type,
+            agenda,
+            location
+        } = await request.json();
 
-  await db.execute(
-    `UPDATE meetings 
-     SET title=?, date=?, type=?, agenda=?, location=?
-     WHERE id=?`,
-    [title, date, type, agenda, location, params.id]
-  );
 
-  return json({ success: true });
+        await prisma.meeting.update({
+            where: {
+                id
+            },
+            data: {
+                title,
+                date,
+                type,
+                agenda,
+                location
+            }
+        });
+
+
+        return json({ success: true });
+
+    } catch (error) {
+        console.error("UPDATE meeting error:", error);
+
+        return json(
+            { success: false, error: "Failed to update meeting" },
+            { status: 500 }
+        );
+    }
 }

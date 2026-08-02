@@ -1,49 +1,120 @@
 import { json } from "@sveltejs/kit";
-import db from "$lib/server/db";
+import type { RequestHandler } from "./$types";
+import { createClient } from "@supabase/supabase-js";
 
-/* GET */
-export const GET = async () => {
-  try {
-    const rows = db.prepare(
-      "SELECT * FROM meetings ORDER BY id DESC"
-    ).all();
 
-    // Map rows to include compatibility fields 'date' and 'type'
-    const meetings = rows.map((m: any) => ({
-      ...m,
-      date: m.meeting_date,
-      type: m.meeting_type
-    }));
+const supabaseUrl =
+    process.env.VITE_SUPABASE_CHAT_URL;
 
-    return json({ meetings });
-  } catch (err) {
-    console.error(err);
-    return json({ meetings: [] }, { status: 500 });
-  }
-};
 
-/* POST */
-export const POST = async ({ request }) => {
-  try {
-    const body = await request.json();
+const supabaseKey =
+    process.env.VITE_SUPABASE_CHAT_ANON_KEY;
 
-    // Accept both shapes: { date, type } or { meeting_date, meeting_type }
-    const title = body.title || body.name || "";
-    const agenda = body.agenda || "";
-    const meeting_date = body.meeting_date || body.date || null;
-    const meeting_type = body.meeting_type || body.type || null;
-    const location = body.location || null;
 
-    const stmt = db.prepare(`
-      INSERT INTO meetings (title, agenda, meeting_date, meeting_type, location)
-      VALUES (?, ?, ?, ?, ?)
-    `);
 
-    stmt.run(title, agenda, meeting_date, meeting_type, location);
+if(!supabaseUrl){
 
-    return json({ success: true });
-  } catch (err) {
-    console.error("SAVE ERROR:", err);
-    return json({ success: false }, { status: 500 });
-  }
+    console.error(
+        "Missing VITE_SUPABASE_CHAT_URL"
+    );
+
+}
+
+
+if(!supabaseKey){
+
+    console.error(
+        "Missing VITE_SUPABASE_CHAT_ANON_KEY"
+    );
+
+}
+
+
+
+const supabase =
+    createClient(
+        supabaseUrl!,
+        supabaseKey!
+    );
+
+
+
+
+export const GET:RequestHandler = async()=>{
+
+
+    try{
+
+
+        const {
+            data,
+            error
+        } =
+        await supabase
+        .from("meetings")
+        .select("*")
+        .order(
+            "meeting_date",
+            {
+                ascending:false
+            }
+        )
+        .order(
+            "start_time",
+            {
+                ascending:false
+            }
+        );
+
+
+
+        if(error){
+
+
+            console.error(
+                "Supabase meetings error:",
+                error
+            );
+
+
+            return json(
+                {
+                    error:error.message
+                },
+                {
+                    status:500
+                }
+            );
+
+        }
+
+
+
+        return json(
+            data ?? []
+        );
+
+
+    }
+    catch(err:any){
+
+
+        console.error(
+            "API meetings failed:",
+            err
+        );
+
+
+        return json(
+            {
+                error:err.message
+            },
+            {
+                status:500
+            }
+        );
+
+    }
+
+
 };

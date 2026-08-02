@@ -2,114 +2,271 @@ import { writable } from "svelte/store";
 import { browser } from "$app/environment";
 
 import {
-  getMeetings,
-  addMeeting as dbAddMeeting,
-  updateMeeting,
-  deleteMeeting
+    getMeetings,
+    addMeeting as dbAddMeeting,
+    updateMeeting,
+    deleteMeeting,
+    getMeeting
 } from "$lib/services/database";
 
+
 export const meetings = writable<any[]>([]);
+
 
 /* ==========================
    LOAD ALL MEETINGS
 ========================== */
 
-export async function refreshMeetings() {
-  if (!browser) return [];
+export async function refreshMeetings(){
 
-  try {
-    const data = await getMeetings();
+    if(!browser) return [];
 
-    meetings.set(data);
 
-    return data;
-  } catch (err) {
-    console.error("refreshMeetings()", err);
-    meetings.set([]);
-    return [];
-  }
+    try{
+
+        const data =
+            await getMeetings();
+
+
+        meetings.set(data);
+
+
+        return data;
+
+
+    }
+    catch(err){
+
+        console.error(
+            "refreshMeetings()",
+            err
+        );
+
+
+        meetings.set([]);
+
+
+        return [];
+
+    }
+
 }
+
+
+
 
 /* ==========================
    ADD
 ========================== */
 
-export async function addMeeting(data: any) {
+export async function addMeeting(
+    data:any
+){
 
-  const ok = await dbAddMeeting(data);
+    try{
 
-  if (ok) {
-    await refreshMeetings();
-  }
 
-  return ok;
+        const result =
+            await dbAddMeeting(data);
+
+
+
+        await refreshMeetings();
+
+
+
+        return result;
+
+
+
+    }
+    catch(err){
+
+        console.error(
+            "addMeeting()",
+            err
+        );
+
+
+        return null;
+
+    }
+
 }
+
+
+
+
 
 /* ==========================
    UPDATE
 ========================== */
 
-export async function editMeeting(id: number, data: any) {
+export async function editMeeting(
+    id:string | number,
+    data:any
+){
 
-  const ok = await updateMeeting(id, data);
+    try{
 
-  if (ok) {
-    await refreshMeetings();
-  }
 
-  return ok;
+        const result =
+            await updateMeeting(
+                Number(id),
+                data
+            );
+
+
+
+        await refreshMeetings();
+
+
+
+        return result;
+
+
+
+    }
+    catch(err){
+
+        console.error(
+            "editMeeting()",
+            err
+        );
+
+
+        return null;
+
+    }
+
 }
+
+
+
+
 
 /* ==========================
    DELETE
 ========================== */
 
-export async function removeMeeting(id: number) {
+export async function removeMeeting(
+    id:string | number
+){
 
-  const ok = await deleteMeeting(id);
+    try{
 
-  if (ok) {
-    await refreshMeetings();
-  }
 
-  return ok;
+        await deleteMeeting(
+            Number(id)
+        );
+
+
+        await refreshMeetings();
+
+
+
+        return true;
+
+
+
+    }
+    catch(err){
+
+        console.error(
+            "removeMeeting()",
+            err
+        );
+
+
+        return false;
+
+    }
+
 }
+
+
+
+
 
 /* ==========================
    GET BY ID
 ========================== */
 
-export async function getMeetingById(id: number) {
-  if (!browser) return null;
+export async function getMeetingById(
+    id:string | number
+){
 
-  try {
-    const all = await getMeetings();
-    return all.find((m: any) => Number(m.id) === Number(id)) || null;
-  } catch (err) {
-    console.error("getMeetingById()", err);
-    return null;
-  }
+    try{
+
+
+        const data =
+            await getMeeting(
+                Number(id)
+            );
+
+
+        return data;
+
+
+
+    }
+    catch(err){
+
+        console.error(
+            "getMeetingById()",
+            err
+        );
+
+
+        return null;
+
+    }
+
 }
+
+
+
+
 
 /* ==========================
    AUTO REFRESH
 ========================== */
 
-if (browser) {
 
-  window.addEventListener("meetings:updated", async () => {
-    await refreshMeetings();
-  });
+if(browser){
 
-  refreshMeetings();
+
+    window.addEventListener(
+        "meetings:updated",
+        async()=>{
+
+            await refreshMeetings();
+
+        }
+    );
+
+
+
+    refreshMeetings();
 
 }
 
+
+
+
+
 export default {
-  meetings,
-  refreshMeetings,
-  addMeeting,
-  editMeeting,
-  removeMeeting,
-  getMeetingById
+
+    meetings,
+
+    refreshMeetings,
+
+    addMeeting,
+
+    editMeeting,
+
+    removeMeeting,
+
+    getMeetingById
+
 };

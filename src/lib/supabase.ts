@@ -1,75 +1,99 @@
 import { createClient } from "@supabase/supabase-js";
 import { browser } from "$app/environment";
-import { supabaseTemplates } from "$lib/supabase";
 
-// ================================
-// CHAT PROJECT
-// ================================
 
-const chatUrl = import.meta.env.VITE_SUPABASE_CHAT_URL;
-const chatKey = import.meta.env.VITE_SUPABASE_CHAT_ANON_KEY;
-const chatServiceKey = !browser
-    ? process.env.SUPABASE_CHAT_SERVICE_KEY
-    : undefined;
+// =====================================================
+// CHAT DATABASE
+// =====================================================
 
-// ================================
-// TEMPLATE PROJECT
-// ================================
+const chatUrl =
+    import.meta.env.VITE_SUPABASE_CHAT_URL;
 
-const templatesUrl = import.meta.env.VITE_SUPABASE_TEMPLATES_URL;
-const templatesKey = import.meta.env.VITE_SUPABASE_TEMPLATES_ANON_KEY;
-const templatesServiceKey = !browser
-    ? process.env.SUPABASE_TEMPLATES_SERVICE_KEY
-    : undefined;
+const chatAnonKey =
+    import.meta.env.VITE_SUPABASE_CHAT_ANON_KEY;
 
-if (!chatUrl || !chatKey)
-    throw new Error("Missing CHAT Supabase Keys");
 
-if (!templatesUrl || !templatesKey)
-    throw new Error("Missing TEMPLATE Supabase Keys");
+// =====================================================
+// TEMPLATE DATABASE
+// =====================================================
 
-// ================================
-// CHAT CLIENT
-// ================================
+const templatesUrl =
+    import.meta.env.VITE_SUPABASE_TEMPLATES_URL;
 
-export const supabaseChat = createClient(chatUrl, chatKey, {
-    auth: {
-        persistSession: true,
-        autoRefreshToken: true,
-        storageKey: "sb-chat-auth-token"
-    }
-});
+const templatesAnonKey =
+    import.meta.env.VITE_SUPABASE_TEMPLATES_ANON_KEY;
 
-// ================================
-// TEMPLATE CLIENT
-// ================================
 
-export const supabaseTemplates = createClient(
-    templatesUrl,
-    templatesKey,
-    {
-        auth: {
-            persistSession: true,
-            autoRefreshToken: true,
-            storageKey: "sb-template-auth-token"
-        }
-    }
-);
-if (browser) {
-    (window as any).supabaseTemplates = supabaseTemplates;
+
+// =====================================================
+// VALIDATION
+// =====================================================
+
+if (!chatUrl) {
+
+    console.error(
+        "Missing VITE_SUPABASE_CHAT_URL"
+    );
+
 }
-// ================================
-// ADMIN CLIENTS
-// ================================
 
-export const supabaseChatAdmin = chatServiceKey
-    ? createClient(chatUrl, chatServiceKey, {
-          auth: { persistSession: false }
-      })
-    : null;
 
-export const supabaseTemplatesAdmin = templatesServiceKey
-    ? createClient(templatesUrl, templatesServiceKey, {
-          auth: { persistSession: false }
-      })
-    : null;
+if (!chatAnonKey) {
+
+    console.error(
+        "Missing VITE_SUPABASE_CHAT_ANON_KEY"
+    );
+
+}
+
+
+
+// =====================================================
+// CHAT CLIENT
+// =====================================================
+
+
+export const supabaseChat =
+    chatUrl && chatAnonKey
+    ?
+    createClient(
+        chatUrl,
+        chatAnonKey,
+        {
+            auth:{
+                persistSession: browser,
+                autoRefreshToken: browser
+            }
+        }
+    )
+    :
+    null;
+
+
+
+// =====================================================
+// TEMPLATE CLIENT
+// =====================================================
+
+
+export const supabaseTemplates =
+    templatesUrl && templatesAnonKey
+    ?
+    createClient(
+        templatesUrl,
+        templatesAnonKey,
+        {
+            auth:{
+                persistSession: browser,
+                autoRefreshToken: browser
+            }
+        }
+    )
+    :
+    null;
+
+
+
+// Default
+export const supabase =
+    supabaseTemplates;
