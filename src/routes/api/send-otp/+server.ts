@@ -1,17 +1,17 @@
 import { json, error } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
-import { VITE_SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY } from '$env/static/private';
+import { SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY } from '$env/static/private';
 import type { RequestHandler } from './$types';
 
 // Verify we're using service_role key
 const keyPayload = JSON.parse(Buffer.from(SUPABASE_CHAT_SERVICE_KEY.split('.')[1], 'base64').toString());
 console.log('[OTP] ENV Check:', {
-    url: VITE_SUPABASE_CHAT_URL? 'LOADED' : 'MISSING',
+    url: SUPABASE_CHAT_URL? 'LOADED' : 'MISSING',
     role: keyPayload.role,
     project: keyPayload.ref
 });
 
-const supabaseAdmin = createClient(VITE_SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY);
+const supabaseAdmin = createClient(SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY);
 
 export const POST: RequestHandler = async ({ request }) => {
     try {

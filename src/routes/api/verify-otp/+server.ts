@@ -1,10 +1,10 @@
 import { json, error } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
-import { VITE_SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY, JWT_SECRET } from '$env/static/private';
+import { SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY, JWT_SECRET } from '$env/static/private';
 import jwt from 'jsonwebtoken';
 import type { RequestHandler } from './$types';
 
-const supabaseAdmin = createClient(VITE_SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY);
+const supabaseAdmin = createClient(SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY);
 
 export const POST: RequestHandler = async ({ request }) => {
     try {

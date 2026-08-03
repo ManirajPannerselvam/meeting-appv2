@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 
 
 const supabaseUrl =
-    process.env.VITE_SUPABASE_CHAT_URL;
+    process.env.SUPABASE_CHAT_URL;
 
 
 const supabaseKey =
