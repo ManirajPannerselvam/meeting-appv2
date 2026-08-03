@@ -318,20 +318,200 @@
 </div>
 
 <style>
-.page { padding: 25px; background: #f8fafc; min-height: 100vh; font-family: system-ui; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-h1 { margin: 0; color: #1e293b; }
-.btn-reports { background: #16a34a; color: white; padding: 10px 16px; border-radius: 8px; font-weight: 600; text-decoration: none; }
-.card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); max-width: 800px; margin: 0 auto; }
-label { display: block; margin-bottom: 6px; font-weight: 600; color: #374151; font-size: 14px; }
-select, input, textarea { width: 100%; padding: 10px; border: 2px solid #e5e7eb; border-radius: 8px; font-size: 14px; margin-bottom: 16px; box-sizing: border-box; }
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.meta { background: #eff6ff; padding: 12px; border-radius: 8px; margin: 16px 0; color: #1e40af; font-size: 14px; }
-.btn-submit { background: #2563eb; color: white; padding: 12px 24px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; width: 100%; margin-top: 8px; font-size: 16px; }
-.btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
-.alert { padding: 12px; border-radius: 8px; margin-top: 16px; text-align: center; font-weight: 600; }
-.alert.success { background: #dcfce7; color: #166534; }
-.alert.error { background: #fee2e2; color: #dc2626; }
-.computed-preview { background: #f0fdf4; border: 1px dashed #16a34a; padding: 12px; border-radius: 8px; margin-bottom: 16px; }
-.computed-row { display: flex; justify-content: space-between; font-size: 14px; margin: 4px 0; }
+.page{
+    padding:20px;
+    background:#f8fafc;
+    min-height:calc(100vh - 60px);
+    font-family:system-ui,sans-serif;
+    box-sizing:border-box;
+}
+
+.header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    margin-bottom:20px;
+    flex-wrap:wrap;
+}
+
+h1{
+    margin:0;
+    color:#1e293b;
+    font-size:28px;
+}
+
+.btn-reports{
+    background:#16a34a;
+    color:white;
+    padding:10px 16px;
+    border-radius:8px;
+    font-weight:600;
+    text-decoration:none;
+    white-space:nowrap;
+}
+
+.card{
+    background:white;
+    padding:24px;
+    border-radius:12px;
+    box-shadow:0 4px 12px rgba(0,0,0,.08);
+    max-width:850px;
+    width:100%;
+    margin:0 auto;
+    box-sizing:border-box;
+}
+
+label{
+    display:block;
+    margin-bottom:6px;
+    font-weight:600;
+    color:#374151;
+    font-size:14px;
+}
+
+select,
+input,
+textarea{
+    width:100%;
+    padding:10px;
+    border:2px solid #e5e7eb;
+    border-radius:8px;
+    font-size:14px;
+    margin-bottom:16px;
+    box-sizing:border-box;
+}
+
+textarea{
+    resize:vertical;
+}
+
+.grid-2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+}
+
+.meta{
+    background:#eff6ff;
+    padding:12px;
+    border-radius:8px;
+    margin:16px 0;
+    color:#1e40af;
+    font-size:14px;
+}
+
+.computed-preview{
+    background:#f0fdf4;
+    border:1px dashed #16a34a;
+    padding:12px;
+    border-radius:8px;
+    margin-bottom:16px;
+}
+
+.computed-row{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    font-size:14px;
+    margin:4px 0;
+    flex-wrap:wrap;
+}
+
+.btn-submit{
+    width:100%;
+    padding:12px;
+    border:none;
+    border-radius:8px;
+    background:#2563eb;
+    color:white;
+    font-weight:700;
+    font-size:16px;
+    cursor:pointer;
+}
+
+.btn-submit:disabled{
+    opacity:.5;
+    cursor:not-allowed;
+}
+
+.alert{
+    padding:12px;
+    border-radius:8px;
+    margin-top:16px;
+    text-align:center;
+    font-weight:600;
+}
+
+.alert.success{
+    background:#dcfce7;
+    color:#166534;
+}
+
+.alert.error{
+    background:#fee2e2;
+    color:#dc2626;
+}
+
+/* ---------- Tablet ---------- */
+
+@media (max-width:900px){
+
+    .page{
+        padding:16px;
+    }
+
+    .card{
+        padding:20px;
+    }
+
+}
+
+/* ---------- Mobile ---------- */
+
+@media (max-width:600px){
+
+    .page{
+        padding:10px;
+    }
+
+    h1{
+        font-size:22px;
+    }
+
+    .header{
+        flex-direction:column;
+        align-items:stretch;
+    }
+
+    .btn-reports{
+        width:100%;
+        text-align:center;
+    }
+
+    .card{
+        padding:16px;
+        border-radius:10px;
+    }
+
+    .grid-2{
+        grid-template-columns:1fr;
+    }
+
+    .computed-row{
+        flex-direction:column;
+        align-items:flex-start;
+    }
+
+    .btn-submit{
+        font-size:15px;
+    }
+
+    input,
+    select,
+    textarea{
+        font-size:16px;
+    }
+
+}
 </style>

@@ -394,21 +394,163 @@ async function setupPresence() {
 {/if}
 
 <style>
-.chat-container{ display:flex; width:100%; height:100vh; overflow:hidden; background:#f8fafc; }
-.chat-area{ flex:1; display:flex; flex-direction:column; overflow:hidden; }
-.loading{ padding:30px; text-align:center; font-size:18px; color:#64748b; }
-.empty{ flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#64748b; background:white; }
-.empty h2{ margin-bottom:10px; color:#334155; }
-.overlay{ position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; justify-content:center; align-items:center; z-index:9999; padding:20px; }
-.popup{ background:white; width:100%; max-width:450px; border-radius:14px; padding:25px; display:flex; flex-direction:column; gap:16px; box-shadow:0 15px 40px rgba(0,0,0,.25); }
-.popup h2{ margin:0; color:#1e293b; font-size:22px; font-weight:600; }
-.popup input, .popup textarea{ width:100%; padding:12px 14px; border:1px solid #d1d5db; border-radius:8px; font-size:14px; outline:none; transition:.2s; }
-.popup textarea{ min-height:100px; resize:vertical; }
-.popup input:focus, .popup textarea:focus{ border-color:#2563eb; box-shadow:0 0 0 3px rgba(37,99,235,.15); }
-.buttons{ display:flex; justify-content:flex-end; gap:12px; margin-top:10px; }
-.buttons button{ padding:10px 20px; border:none; border-radius:8px; cursor:pointer; font-weight:600; transition:.2s; }
-.buttons button:first-child{ background:#2563eb; color:white; }
-.buttons button:first-child:hover{ background:#1d4ed8; }
-.buttons button:last-child{ background:#e5e7eb; color:#111827; }
-.buttons button:last-child:hover{ background:#d1d5db; }
+.chat-container{
+    display:flex;
+    width:100%;
+    height:calc(100vh - 60px);
+    overflow:hidden;
+    background:#f8fafc;
+}
+
+.chat-area{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    min-width:0;
+}
+
+.loading{
+    padding:30px;
+    text-align:center;
+    font-size:18px;
+    color:#64748b;
+}
+
+.empty{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    color:#64748b;
+    background:white;
+    text-align:center;
+    padding:20px;
+}
+
+.empty h2{
+    margin-bottom:10px;
+    color:#334155;
+}
+
+/* ---------------- Popup ---------------- */
+
+.overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.45);
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    z-index:9999;
+    padding:20px;
+}
+
+.popup{
+    background:white;
+    width:100%;
+    max-width:450px;
+    border-radius:14px;
+    padding:25px;
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+    box-shadow:0 15px 40px rgba(0,0,0,.25);
+}
+
+.popup h2{
+    margin:0;
+    color:#1e293b;
+    font-size:22px;
+}
+
+.popup input,
+.popup textarea{
+    width:100%;
+    padding:12px 14px;
+    border:1px solid #d1d5db;
+    border-radius:8px;
+    font-size:14px;
+    outline:none;
+}
+
+.popup textarea{
+    min-height:100px;
+    resize:vertical;
+}
+
+.popup input:focus,
+.popup textarea:focus{
+    border-color:#2563eb;
+    box-shadow:0 0 0 3px rgba(37,99,235,.15);
+}
+
+.buttons{
+    display:flex;
+    justify-content:flex-end;
+    gap:12px;
+}
+
+.buttons button{
+    padding:10px 20px;
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:600;
+}
+
+.buttons button:first-child{
+    background:#2563eb;
+    color:white;
+}
+
+.buttons button:last-child{
+    background:#e5e7eb;
+}
+
+/* ---------------- Tablet ---------------- */
+
+@media (max-width:900px){
+
+    .chat-container{
+        flex-direction:column;
+        height:calc(100vh - 60px);
+    }
+
+    .chat-area{
+        width:100%;
+        min-width:0;
+    }
+
+}
+
+/* ---------------- Mobile ---------------- */
+
+@media (max-width:600px){
+
+    .chat-container{
+        flex-direction:column;
+        height:calc(100vh - 60px);
+    }
+
+    .chat-area{
+        width:100%;
+        min-width:0;
+    }
+
+    .popup{
+        width:95%;
+        padding:18px;
+    }
+
+    .buttons{
+        flex-direction:column;
+    }
+
+    .buttons button{
+        width:100%;
+    }
+
+}
 </style>
