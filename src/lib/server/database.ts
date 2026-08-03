@@ -1,243 +1,125 @@
-import { prisma } from "$lib/db.server";
-
+import { supabase } from "$lib/supabase";
 
 // =====================================
 // MEETINGS
 // =====================================
 
-
 export async function getMeetings() {
+    const { data, error } = await supabase
+        .from("meetings")
+        .select("*")
+        .order("createdAt", { ascending: false });
 
-    return await prisma.meeting.findMany({
-
-        orderBy: {
-            createdAt: "desc"
-        }
-
-    });
-
+    if (error) throw error;
+    return data;
 }
 
+export async function getMeeting(id: number) {
+    const { data, error } = await supabase
+        .from("meetings")
+        .select("*")
+        .eq("id", id)
+        .single();
 
-
-
-export async function getMeeting(id:number) {
-
-    try {
-
-        return await prisma.meeting.findUnique({
-
-            where:{
-                id
-            }
-
-        });
-
-    }
-    catch(error){
-
-        console.error(
-            "getMeeting error:",
-            error
-        );
-
-        return null;
-
-    }
-
+    if (error) return null;
+    return data;
 }
 
+export async function addMeeting(data: any) {
+    const { data: meeting, error } = await supabase
+        .from("meetings")
+        .insert(data)
+        .select()
+        .single();
 
-
-
-export async function addMeeting(data:any) {
-
-
-    return await prisma.meeting.create({
-
-        data
-
-    });
-
+    if (error) throw error;
+    return meeting;
 }
 
+export async function updateMeeting(id: number, data: any) {
+    const { data: meeting, error } = await supabase
+        .from("meetings")
+        .update(data)
+        .eq("id", id)
+        .select()
+        .single();
 
-
-
-
-export async function updateMeeting(
-    id:number,
-    data:any
-){
-
-    return await prisma.meeting.update({
-
-        where:{
-            id
-        },
-
-        data
-
-    });
-
+    if (error) throw error;
+    return meeting;
 }
 
+export async function deleteMeeting(id: number) {
+    const { error } = await supabase
+        .from("meetings")
+        .delete()
+        .eq("id", id);
 
-
-
-
-export async function deleteMeeting(
-    id:number
-){
-
-    return await prisma.meeting.delete({
-
-        where:{
-            id
-
-        }
-
-    });
-
+    if (error) throw error;
 }
-
-
-
 
 // =====================================
 // SIM INVENTORY
 // =====================================
 
+export async function getSIMs() {
+    const { data, error } = await supabase
+        .from("sim_inventory")
+        .select("*")
+        .order("createdAt", { ascending: false });
 
-export async function getSIMs(){
-
-
-    return await prisma.SIM.findMany({
-
-        orderBy:{
-
-            createdAt:"desc"
-
-        }
-
-    });
-
-
+    if (error) throw error;
+    return data;
 }
 
+export async function getSIM(id: string) {
+    const { data, error } = await supabase
+        .from("sim_inventory")
+        .select("*")
+        .eq("id", id)
+        .single();
 
-
-
-
-export async function getSIM(
-    id:string
-){
-
-
-    return await prisma.SIM.findUnique({
-
-        where:{
-            id
-        }
-
-    });
-
-
+    if (error) return null;
+    return data;
 }
 
+export async function saveSIM(sim: any) {
+    const { data, error } = await supabase
+        .from("sim_inventory")
+        .insert({
+            simNumber: sim.sim_number,
+            operatorName: sim.operator_name,
+            circle: sim.circle,
+            planName: sim.plan_name,
+            monthlyCost: Number(sim.monthly_cost ?? 0),
+            assignedDevice: sim.assigned_device,
+            owner: sim.owner,
+            status: sim.status ?? "Available",
+            remarks: sim.remarks
+        })
+        .select()
+        .single();
 
-
-
-export async function saveSIM(sim:any){
-
-
-    return await prisma.SIM.create({
-
-        data:{
-
-
-            simNumber:
-                sim.sim_number,
-
-
-            operatorName:
-                sim.operator_name,
-
-
-            circle:
-                sim.circle,
-
-
-            planName:
-                sim.plan_name,
-
-
-            monthlyCost:
-                Number(sim.monthly_cost ?? 0),
-
-
-            assignedDevice:
-                sim.assigned_device,
-
-
-            owner:
-                sim.owner,
-
-
-            status:
-                sim.status ?? "Available",
-
-
-            remarks:
-                sim.remarks
-
-
-        }
-
-    });
-
-
+    if (error) throw error;
+    return data;
 }
 
+export async function updateSIM(id: string, data: any) {
+    const { data: sim, error } = await supabase
+        .from("sim_inventory")
+        .update(data)
+        .eq("id", id)
+        .select()
+        .single();
 
-
-
-
-export async function updateSIM(
-    id:string,
-    data:any
-){
-
-
-    return await prisma.SIM.update({
-
-        where:{
-            id
-        },
-
-        data
-
-    });
-
-
+    if (error) throw error;
+    return sim;
 }
 
+export async function deleteSIM(id: string) {
+    const { error } = await supabase
+        .from("sim_inventory")
+        .delete()
+        .eq("id", id);
 
-
-
-export async function deleteSIM(
-    id:string
-){
-
-
-    return await prisma.SIM.delete({
-
-        where:{
-            id
-
-        }
-
-    });
-
-
+    if (error) throw error;
 }

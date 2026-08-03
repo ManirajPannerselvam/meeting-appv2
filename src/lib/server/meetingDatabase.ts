@@ -1,21 +1,22 @@
-import { prisma } from "$lib/db.server";
-
+import { supabase } from "$lib/supabase";
 
 export async function getMeetings() {
+    const { data, error } = await supabase
+        .from("meetings")
+        .select("*")
+        .order("createdAt", { ascending: false });
 
-    return await prisma.meeting.findMany({
-        orderBy: {
-            createdAt: "desc"
-        }
-    });
-
+    if (error) throw error;
+    return data;
 }
 
+export async function createMeeting(data: any) {
+    const { data: meeting, error } = await supabase
+        .from("meetings")
+        .insert(data)
+        .select()
+        .single();
 
-export async function createMeeting(data:any) {
-
-    return await prisma.meeting.create({
-        data
-    });
-
+    if (error) throw error;
+    return meeting;
 }

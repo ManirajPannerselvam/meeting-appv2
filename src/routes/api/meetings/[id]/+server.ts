@@ -1,16 +1,17 @@
 import { json } from "@sveltejs/kit";
-import { prisma } from "$lib/db.server";
+import { supabase } from "$lib/supabase";
 
 /* DELETE */
 export async function DELETE({ params }) {
     try {
         const id = Number(params.id);
 
-        await prisma.meeting.delete({
-            where: {
-                id
-            }
-        });
+        const { error } = await supabase
+            .from("meetings")
+            .delete()
+            .eq("id", id);
+
+        if (error) throw error;
 
         return json({ success: true });
 
@@ -18,12 +19,16 @@ export async function DELETE({ params }) {
         console.error("DELETE meeting error:", error);
 
         return json(
-            { success: false, error: "Failed to delete meeting" },
-            { status: 500 }
+            {
+                success: false,
+                error: "Failed to delete meeting"
+            },
+            {
+                status: 500
+            }
         );
     }
 }
-
 
 /* UPDATE */
 export async function PUT({ params, request }) {
@@ -38,20 +43,18 @@ export async function PUT({ params, request }) {
             location
         } = await request.json();
 
-
-        await prisma.meeting.update({
-            where: {
-                id
-            },
-            data: {
+        const { error } = await supabase
+            .from("meetings")
+            .update({
                 title,
                 date,
                 type,
                 agenda,
                 location
-            }
-        });
+            })
+            .eq("id", id);
 
+        if (error) throw error;
 
         return json({ success: true });
 
@@ -59,8 +62,13 @@ export async function PUT({ params, request }) {
         console.error("UPDATE meeting error:", error);
 
         return json(
-            { success: false, error: "Failed to update meeting" },
-            { status: 500 }
+            {
+                success: false,
+                error: "Failed to update meeting"
+            },
+            {
+                status: 500
+            }
         );
     }
 }
