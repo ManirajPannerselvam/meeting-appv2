@@ -1,10 +1,18 @@
 import { createServerClient } from '@supabase/ssr'
 import { type Handle } from '@sveltejs/kit'
 import { sequence } from '@sveltejs/kit/hooks'
-import { PUBLIC_SUPABASE_CHAT_URL, PUBLIC_SUPABASE_CHAT_ANON_KEY } from '$env/static/public'
+import { env } from '$env/dynamic/public'
 
 const supabase: Handle = async ({ event, resolve }) => {
-	event.locals.supabase = createServerClient(PUBLIC_SUPABASE_CHAT_URL, PUBLIC_SUPABASE_CHAT_ANON_KEY, {
+	const supabaseUrl = env.PUBLIC_SUPABASE_CHAT_URL || env.PUBLIC_SUPABASE_URL
+	const supabaseAnonKey = env.PUBLIC_SUPABASE_CHAT_ANON_KEY || env.PUBLIC_SUPABASE_ANON_KEY
+
+	if (!supabaseUrl ||!supabaseAnonKey) {
+		console.error('Missing Supabase env');
+		return resolve(event);
+	}
+
+	event.locals.supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
 		cookies: {
 			getAll() {
 				return event.cookies.getAll();
@@ -23,13 +31,11 @@ const supabase: Handle = async ({ event, resolve }) => {
 			error
 		} = await event.locals.supabase.auth.getSession();
 
-		if (error) throw error; // catch bad refresh token
+		if (error) throw error;
 
 		event.locals.user = session?.user?? null;
 	} catch (error: any) {
 		console.log('[Hook] Auth error - clearing supabase cookies:', error.message);
-
-		// Delete all sb- cookies so user can login fresh
 		event.cookies.getAll().forEach((c) => {
 			if (c.name.startsWith('sb-')) {
 				event.cookies.delete(c.name, { path: '/' });
