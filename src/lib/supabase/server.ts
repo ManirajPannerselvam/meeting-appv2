@@ -12,12 +12,7 @@ import {
 
 import type { RequestEvent } from '@sveltejs/kit';
 
-import {
-	PUBLIC_SUPABASE_CHAT_URL,
-	PUBLIC_SUPABASE_CHAT_ANON_KEY,
-	PUBLIC_SUPABASE_TEMPLATES_URL,
-	PUBLIC_SUPABASE_TEMPLATES_ANON_KEY
-} from '$env/static/public';
+import { env } from '$env/dynamic/public';
 
 function createClient(
 	event: RequestEvent,
@@ -53,22 +48,28 @@ function createClient(
 }
 
 export function getSupabaseServer(event: RequestEvent) {
-	if (!PUBLIC_SUPABASE_CHAT_URL || !PUBLIC_SUPABASE_CHAT_ANON_KEY) {
+	const url = env.PUBLIC_SUPABASE_CHAT_URL || env.PUBLIC_SUPABASE_URL;
+	const anonKey = env.PUBLIC_SUPABASE_CHAT_ANON_KEY || env.PUBLIC_SUPABASE_ANON_KEY;
+
+	if (!url || !anonKey) {
 		throw new Error('Missing PUBLIC_SUPABASE_CHAT_URL or PUBLIC_SUPABASE_CHAT_ANON_KEY.');
 	}
 
-	const supabase = createClient(event, PUBLIC_SUPABASE_CHAT_URL, PUBLIC_SUPABASE_CHAT_ANON_KEY);
+	const supabase = createClient(event, url, anonKey);
 
 	return { supabase };
 }
 
 // NEW: separate client for templates/production records
 export function getSupabaseTemplatesServer(event: RequestEvent) {
-	if (!PUBLIC_SUPABASE_TEMPLATES_URL || !PUBLIC_SUPABASE_TEMPLATES_ANON_KEY) {
+	const url = env.PUBLIC_SUPABASE_TEMPLATES_URL || env.PUBLIC_SUPABASE_URL;
+	const anonKey = env.PUBLIC_SUPABASE_TEMPLATES_ANON_KEY || env.PUBLIC_SUPABASE_ANON_KEY;
+
+	if (!url || !anonKey) {
 		throw new Error('Missing PUBLIC_SUPABASE_TEMPLATES_URL or PUBLIC_SUPABASE_TEMPLATES_ANON_KEY.');
 	}
 
-	const supabaseTemplates = createClient(event, PUBLIC_SUPABASE_TEMPLATES_URL, PUBLIC_SUPABASE_TEMPLATES_ANON_KEY);
+	const supabaseTemplates = createClient(event, url, anonKey);
 
 	return { supabaseTemplates };
 }
