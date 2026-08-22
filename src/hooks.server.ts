@@ -5,7 +5,7 @@ import { PUBLIC_SUPABASE_CHAT_URL, PUBLIC_SUPABASE_CHAT_ANON_KEY } from '$env/st
 
 const supabase: Handle = async ({ event, resolve }) => {
 	event.locals.supabase = createServerClient(PUBLIC_SUPABASE_CHAT_URL, PUBLIC_SUPABASE_CHAT_ANON_KEY, {
-	cookies: {
+		cookies: {
 			getAll() {
 				return event.cookies.getAll();
 			},
@@ -14,28 +14,35 @@ const supabase: Handle = async ({ event, resolve }) => {
 					event.cookies.set(name, value, {...options, path: '/' });
 				});
 			}
-	}
+		}
 	});
 
 	try {
-		const { data: { session }, error } = await event.locals.supabase.auth.getSession();
-		
+		const {
+			data: { session },
+			error
+		} = await event.locals.supabase.auth.getSession();
+
 		if (error) throw error; // catch bad refresh token
-		
+
 		event.locals.user = session?.user?? null;
 	} catch (error: any) {
 		console.log('[Hook] Auth error - clearing supabase cookies:', error.message);
-		
-	// Delete all sb- cookies so user can login fresh
-		event.cookies.getAll().forEach(c => {
+
+		// Delete all sb- cookies so user can login fresh
+		event.cookies.getAll().forEach((c) => {
 			if (c.name.startsWith('sb-')) {
 				event.cookies.delete(c.name, { path: '/' });
 			}
-	});
+		});
 		event.locals.user = null;
 	}
 
-	return resolve(event);
+	return resolve(event, {
+		filterSerializedResponseHeaders(name) {
+			return name === 'content-range' || name === 'x-supabase-api-version';
+		}
+	});
 };
 
 export const handle = sequence(supabase);
