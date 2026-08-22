@@ -1,15 +1,17 @@
 import { fail, redirect } from '@sveltejs/kit';
 import { getSupabaseServer } from '$lib/supabase/server';
+import type { Actions } from './$types';
 
-export const actions = {
-	register: async ({ request, cookies, fetch }) => { // <-- name is 'register' to match ?/register
+export const actions: Actions = {
+	register: async (event) => {
+		const { request } = event;
 		const formData = await request.formData();
 		const name = formData.get('name') as string;
 		const phone = formData.get('phone') as string;
 		const email = formData.get('email') as string;
 		const password = formData.get('password') as string;
 
-		const { supabase } = getSupabaseServer({ cookies, fetch });
+		const { supabase } = getSupabaseServer(event);
 
 		const { data, error } = await supabase.auth.signUp({
 			email,

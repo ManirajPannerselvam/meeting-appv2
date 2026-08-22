@@ -7,7 +7,8 @@
 
 import type { RequestHandler } from './$types';
 import { json, error } from '@sveltejs/kit';
-import { writeAuditLog } from '$lib/server/audit'; // FIX: was logAudit
+import { writeAuditLog } from '$lib/server/audit';
+import { supabaseChatServer } from '$lib/server/supabase';
 
 export const POST: RequestHandler = async ({ request }) => {
     try {
@@ -20,14 +21,17 @@ export const POST: RequestHandler = async ({ request }) => {
             new_data?: unknown;
         };
         
-        // Call your existing function
-        await writeAuditLog(body.user_id, {
-            action: body.action,
-            module: body.module,
-            record_id: body.record_id,
-            description: body.description,
-            new_data: body.new_data
-        });
+        // FIX: writeAuditLog needs (supabase, user, log)
+        await writeAuditLog(supabaseChatServer, 
+            body.user_id ? { id: body.user_id } as any : null, 
+            {
+                action: body.action,
+                module: body.module,
+                record_id: body.record_id,
+                description: body.description,
+                new_data: body.new_data
+            }
+        );
         
         return json({ success: true });
     } catch (err: unknown) {

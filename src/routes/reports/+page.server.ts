@@ -1,8 +1,9 @@
 import { fail } from '@sveltejs/kit';
 import { getSupabaseServer } from '$lib/supabase/server';
+import type { PageServerLoad, Actions } from './$types';
 
-export const load = async ({ cookies, fetch, url }) => {
-  const { supabase } = getSupabaseServer({ cookies, fetch });
+export const load: PageServerLoad = async (event) => {
+  const { supabase } = getSupabaseServer(event);
   const { data: { user } } = await supabase.auth.getUser();
 
   if (!user) return { templates: [], records: [], user: null };
@@ -20,8 +21,9 @@ export const load = async ({ cookies, fetch, url }) => {
   return { templates: templates || [], records: records || [], user };
 };
 
-export const actions = {
-  loadRecords: async ({ request, cookies, fetch }) => {
+export const actions: Actions = {
+  loadRecords: async (event) => {
+    const { request } = event;
     const formData = await request.formData();
     const t_code = formData.get('t_code') as string;
     const shift = formData.get('shift') as string;
@@ -29,7 +31,7 @@ export const actions = {
     const end = formData.get('end') as string;
     const stations = formData.getAll('stations') as string[];
 
-    const { supabase } = getSupabaseServer({ cookies, fetch });
+    const { supabase } = getSupabaseServer(event);
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return fail(401, { error: 'Not logged in' });
 

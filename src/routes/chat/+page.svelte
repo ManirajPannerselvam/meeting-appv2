@@ -203,6 +203,10 @@
 	}
 	async function getOrCreateRoom(otherId: string){
 		if(!otherId) return null;
+
+		// rooms_no_self_chat: never query or create a room where both users are the same.
+		const currentUserId = getCurrentUserId();
+		if(!currentUserId || otherId === currentUserId) return null;
 		try{ const { data }=await chatDB.rpc("get_or_create_room",{p_user1:getCurrentUserId(),p_user2:otherId}); const r=Array.isArray(data)?data[0]:data; if(r?.id) return r.id; if(typeof r === 'string') return r; }catch(e){ console.warn("rpc failed", e); }
 		const { data: existing } = await chatDB.from("rooms").select("id").or(`and(user1_id.eq.${getCurrentUserId()},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${getCurrentUserId()})`).maybeSingle();
 		if(existing?.id) return existing.id;
@@ -211,14 +215,24 @@
 		return newRoom?.id || null;
 	}
 	async function handleContactLoad(contact:any){
-		if(contact.id===getCurrentUserId()){ selectedRoomId = null; await loadMessages({roomId:null}); await subscribeToMessages({roomId:null}); return; }
+		const currentUserId = getCurrentUserId();
+		const contactUserId = contact.actual_user_id || contact.id;
+
+		// Saved Messages uses messages where sender_id = receiver_id = current user.
+		// It does not use a rooms row, because rooms_no_self_chat forbids self rooms.
+		if(contactUserId === currentUserId){
+			selectedRoomId = null;
+			await loadMessages({roomId:null});
+			await subscribeToMessages({roomId:null});
+			return;
+		}
 		let roomId = contact.room_id || selectedRoomId;
 		if(!roomId){ roomId = await getOrCreateRoom(contact.actual_user_id||contact.id); if(roomId){ selectedRoomId=roomId; contacts = contacts.map(c=> c.id===contact.id? {...c, room_id: roomId} : c); } }
 		if(roomId){ selectedRoomId=roomId; await loadMessages({roomId}); await subscribeToMessages({roomId}); }
 	}
 	function onSelectGroup(group:any){ selectedContact=null; selectedRoomId=null; selectedGroup={...group}; selectedGroupId=group.id; loadGroupDetails(group.id); }
 	async function loadGroupDetails(groupId:string){ const { data }=await chatDB.from("chat_group_members").select(`users:user_id(id,name,email,avatar_url)`).eq("group_id",groupId); groupMembers=(data?? []).map((m:any)=>m.users).filter(Boolean); await loadMessages({groupId}); await subscribeToMessages({groupId}); }
-	async function handleInvite(event: any){ const { inviteId, action }=event.detail; await chatDB.from('contact_invites').update({status:action}).eq('id',inviteId); if(action==='accepted'){ const inv=contacts.find((c:any)=>c.id===inviteId); const oid=(inv as any)?.actual_user_id||(inv as any)?.invited_by; if(oid) await getOrCreateRoom(oid); } await loadContacts(); }
+	async function handleInvite(event: any){ const { inviteId, action }=event.detail; await chatDB.from('contact_invites').update({status:action}).eq('id',inviteId); if(action==='accepted'){ const inv=contacts.find((c:any)=>c.id===inviteId); const oid=(inv as any)?.actual_user_id||(inv as any)?.invited_by; if(oid && oid !== getCurrentUserId()) await getOrCreateRoom(oid); } await loadContacts(); }
 	async function createContact(){ if(!contactEmail.trim()) return; invitingUser=true; try{ const email=contactEmail.trim().toLowerCase(); await chatDB.from('contact_invites').insert({email, invited_by:getCurrentUserId(), status:'pending', token:crypto.randomUUID()}); showContactForm=false; contactEmail=""; await loadContacts(); } finally{ invitingUser=false; } }
 	async function createGroup(){ if(!groupName.trim()) return; const { data: g }=await chatDB.from("chat_groups").insert({name:groupName.trim(), created_by:getCurrentUserId()}).select().single(); if(g){ await chatDB.from("chat_group_members").insert({group_id:g.id, user_id:getCurrentUserId()}); groupName=""; showGroupForm=false; await loadGroups(); } }
 </script>
