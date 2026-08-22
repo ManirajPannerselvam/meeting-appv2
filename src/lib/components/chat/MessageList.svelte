@@ -1,485 +1,159 @@
 <script lang="ts">
-    import { afterUpdate, onMount } from "svelte";
-    
-    export let messages: any[] = [];
-    export let selectedUser: any = null;
-    export let currentUserId: string = "";
+  export let messages: any[] = [];
+  export let selectedContact: any = null;
+  export let selectedGroup: any = null;
+  export let currentUser: any = null;
+  export let selectedUser: any = null;
 
-    let messagesContainer: HTMLDivElement;
-    let previewImage: string | null = null;
-    let shouldAutoScroll = true;
-    let userScrolledUp = false;
+  import { afterUpdate, createEventDispatcher } from "svelte";
+  const dispatch = createEventDispatcher();
+  let listEl: HTMLDivElement;
 
-    afterUpdate(() => {
-        if (messagesContainer && shouldAutoScroll && !userScrolledUp) {
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        }
-    });
+  $: me = currentUser || selectedUser;
+  $: myId = me?.id || me?.userId || "";
+  let selectedMessages = new Set<string>();
+  let longPressTimer: any = null;
 
-    function handleScroll(e: Event) {
-        const target = e.target as HTMLElement;
-        const isAtBottom = target.scrollHeight - target.scrollTop <= target.clientHeight + 100;
-        userScrolledUp = !isAtBottom;
-        shouldAutoScroll = isAtBottom;
-    }
+  function isMine(m: any){ return m.sender_id === myId; }
+  function getTime(t: string){ if(!t) return ""; return new Date(t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
+  function isSameSenderAsPrev(i: number){
+    if(i===0) return false;
+    const curr = messages[i]; const prev = messages[i-1];
+    if(curr.sender_id!== prev.sender_id) return false;
+    const diff = new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime();
+    return diff < 120000;
+  }
+  function isSameSenderAsNext(i: number){
+    if(i===messages.length-1) return false;
+    const curr = messages[i]; const next = messages[i+1];
+    if(curr.sender_id!== next.sender_id) return false;
+    const diff = new Date(next.created_at).getTime() - new Date(curr.created_at).getTime();
+    return diff < 120000;
+  }
+  function startPress(id: string){ clearTimeout(longPressTimer); longPressTimer = setTimeout(()=> toggleSelect(id), 500); }
+  function endPress(){ clearTimeout(longPressTimer); }
+  function toggleSelect(id: string){
+    if(selectedMessages.has(id)) selectedMessages.delete(id); else selectedMessages.add(id);
+    selectedMessages = new Set(selectedMessages);
+    dispatch("selectMessage", { id, selected: Array.from(selectedMessages) });
+    if(navigator.vibrate) navigator.vibrate(50);
+  }
+  function onClickMessage(id: string){ if(selectedMessages.size>0){ toggleSelect(id); return; } }
+  function parseTags(text: string){ if(!text) return ""; return text.replace(/@(\w+)/g, '<span class="mention">@$1</span>'); }
+  function onTagClick(e: any){ const target = e.target as HTMLElement; if(target.classList.contains('mention')){ dispatch("tagClick", { tag: target.innerText }); } }
 
-    function formatTime(timestamp: string) {
-        return new Date(timestamp).toLocaleTimeString('en-US', {
-            hour: 'numeric',
-            minute: '2-digit'
-        });
-    }
-
-    function isImage(url: string) {
-        return /\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url);
-    }
-
-    function isAudio(url: string) {
-        return /\.(mp3|wav|ogg|webm|m4a)$/i.test(url);
-    }
-
-    function isVideo(url: string) {
-        return /\.(mp4|webm|mov)$/i.test(url);
-    }
-
-    function getFileName(url: string) {
-        try {
-            const path = new URL(url).pathname;
-            return path.split('/').pop()?.split('-').slice(1).join('-') || 'File';
-        } catch {
-            return 'File';
-        }
-    }
-
-    async function downloadFile(url: string, filename: string) {
-        try {
-            const response = await fetch(url);
-            const blob = await response.blob();
-            const blobUrl = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(blobUrl);
-            document.body.removeChild(a);
-        } catch (err) {
-            console.error('Download failed:', err);
-            window.open(url, '_blank');
-        }
-    }
-
-    function openPreview(url: string) {
-        previewImage = url;
-    }
-
-    function closePreview() {
-        previewImage = null;
-    }
-
-    onMount(() => {
-        const handleEsc = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && previewImage) closePreview();
-        };
-        window.addEventListener('keydown', handleEsc);
-        return () => window.removeEventListener('keydown', handleEsc);
-    });
-
-    // FIX 1: Keyboard support for img click
-    function handleImageKeydown(event: KeyboardEvent, url: string) {
-        if (event.key === 'Enter' || event.key === ' ') {
-            event.preventDefault();
-            openPreview(url);
-        }
-    }
+  function isTemplateContent(text:string){ return text?.includes('__TEMPLATE_DATA__'); }
+  function parseTemplate(content:string){
+    try{
+      if(!content?.includes('__TEMPLATE_DATA__')) return null;
+      const jsonStr = content.split('__TEMPLATE_DATA__')[1]?.trim();
+      return JSON.parse(jsonStr);
+    }catch{ return null; }
+  }
+  function getDisplayText(content:string){ if(!content) return ""; return content.split('__TEMPLATE_DATA__')[0]?.trim() || content; }
+  function getValFromText(display:string, key:string){
+    if(!display) return '-';
+    const k1 = key.replace(/_/g, '[ _]'); // match RAT_Input or RAT Input
+    const re = new RegExp(`${k1}\\s*:\\s*([^\\n•]+)`, 'i');
+    const m = display.match(re);
+    return m? m[1].trim() : '-';
+  }
+  afterUpdate(()=>{ if(listEl) listEl.scrollTop = listEl.scrollHeight; });
 </script>
 
-<div class="messages-container" bind:this={messagesContainer} on:scroll={handleScroll}>
-    {#each messages as msg (msg.id)}
-        <div class="message-wrapper" class:own={msg.is_own}>
-            <div class="message-bubble">
-                
-                <!-- Template Message - முதல்ல check பண்ணுங்க -->
-                {#if msg.type === 'template' && msg.template_data}
-                    <div class="template-message">
-                        <div class="template-name">📋 {msg.template_data.name || 'Template'}</div>
-                        {#each Object.entries(msg.template_data.values || {}) as [key, value]}
-                            <div class="template-field">
-                                <span class="field-label">{key}:</span>
-                                <span class="field-value">{value || '-'}</span>
-                            </div>
-                        {/each}
-                    </div>
-                    {#if msg.content}
-                        <div class="message-text mt-2">{msg.content}</div>
-                    {/if}
-                
-                <!-- Text content -->
-                {:else if msg.content}
-                    <div class="message-text">{msg.content}</div>
-                {/if}
+<div class="message-list" bind:this={listEl}>
+  {#if messages.length === 0}
+    <div class="empty"><p>No messages yet</p><span>Say hello</span></div>
+  {:else}
+    {#each messages as m, i (m.id)}
+      {@const mine = isMine(m)}
+      {@const groupedPrev = isSameSenderAsPrev(i)}
+      {@const groupedNext = isSameSenderAsNext(i)}
+      {@const selected = selectedMessages.has(m.id)}
+      {@const isTpl = isTemplateContent(m.content)}
+      {@const tmpl = parseTemplate(m.content)}
+      {@const display = getDisplayText(m.content)}
 
-                <!-- Attachments -->
-                {#if msg.attachments && msg.attachments.length > 0}
-                    <div class="attachments">
-                        {#each msg.attachments as url}
-                            {#if isImage(url)}
-                                <div class="attachment-wrapper">
-                                    <!-- FIX 2: A11y - role + tabindex + keydown -->
-                                    <img 
-                                        src={url} 
-                                        alt="attachment" 
-                                        class="attachment-image"
-                                        role="button"
-                                        tabindex="0"
-                                        on:click={() => openPreview(url)}
-                                        on:keydown={(e) => handleImageKeydown(e, url)}
-                                        loading="lazy"
-                                    />
-                                    <button 
-                                        class="download-btn"
-                                        on:click|stopPropagation={() => downloadFile(url, getFileName(url))}
-                                        title="Download"
-                                        aria-label="Download image"
-                                    >
-                                        ⬇️
-                                    </button>
-                                </div>
-                            {:else if isAudio(url)}
-                                <div class="voice-msg">
-                                    <audio controls src={url} preload="metadata"></audio>
-                                </div>
-                            {:else if isVideo(url)}
-                                <!-- ADDED: Video support -->
-                                <div class="video-msg">
-                                    <video controls src={url} preload="metadata"></video>
-                                </div>
-                            {:else}
-                                <div class="attachment-file-wrapper">
-                                    <a href={url} target="_blank" rel="noopener noreferrer" class="attachment-file">
-                                        📎 {getFileName(url)}
-                                    </a>
-                                    <button 
-                                        class="download-btn-file"
-                                        on:click={() => downloadFile(url, getFileName(url))}
-                                        title="Download"
-                                        aria-label="Download file"
-                                    >
-                                        ⬇️
-                                    </button>
-                                </div>
-                            {/if}
-                        {/each}
-                    </div>
-                {/if}
+      <div class="msg-row" class:mine={mine} class:grouped-prev={groupedPrev} class:grouped-next={groupedNext} class:selected={selected}
+        on:mousedown={()=>startPress(m.id)} on:mouseup={endPress} on:mouseleave={endPress}
+        on:touchstart={()=>startPress(m.id)} on:touchend={endPress}
+        on:click={()=>onClickMessage(m.id)} role="button" tabindex="0"
+      >
+        {#if !groupedPrev}
+          {#if selectedGroup &&!mine}<div class="sender-name">{m.sender_name || 'User'}</div>{/if}
+        {/if}
+        <div class="bubble-wrap">
+          {#if !mine && groupedPrev}<div class="thread-line"></div>{/if}
+          <div class="bubble" class:tail={!groupedNext} class:template-bubble={isTpl}>
+            {#if m.reply_to}
+              <div class="reply-box"><div class="reply-line"></div><div class="reply-text">{m.reply_to.content || 'Reply'}</div></div>
+            {/if}
 
-                <!-- Timestamp + status -->
-                <div class="message-meta">
-                    <span class="time">{formatTime(msg.created_at)}</span>
-                    {#if msg.is_own}
-                        <span class="status">
-                            {#if msg.status === 'sending'}🕐{/if}
-                            {#if msg.status === 'sent'}✓{/if}
-                            {#if msg.status === 'delivered'}✓✓{/if}
-                            {#if msg.status === 'read' || msg.read_at}<span class="read">✓✓</span>{/if}
-                        </span>
-                    {/if}
+            {#if isTpl}
+              {@const v = tmpl?.values || {}}
+              <div class="template-card">
+                <div class="tpl-title">📋 {tmpl?.template_name || 'RAT YIELD'}</div>
+                <div class="tpl-rows">
+                  <div class="tpl-row"><span>Shift:</span><span>{v.Shift || getValFromText(display,'Shift')}</span></div>
+                  <div class="tpl-row"><span>Station:</span><span>{v.Station || getValFromText(display,'Station')}</span></div>
+                  <div class="tpl-row"><span>RAT Input:</span><span>{v.RAT_Input || v['RAT Input'] || getValFromText(display,'RAT_Input')}</span></div>
+                  <div class="tpl-row"><span>RAT Output:</span><span>{v.RAT_Output || v['RAT Output'] || getValFromText(display,'RAT_Output')}</span></div>
+                  <div class="tpl-row"><span>RAT Yield:</span><span>{v.RAT_Yield || getValFromText(display,'RAT_Yield')}</span></div>
                 </div>
-            </div>
+              </div>
+              <div class="tpl-footer">*{tmpl?.template_name || 'RAT YIELD'}* `{v.Station || getValFromText(display,'Station')}`</div>
+            {:else if m.content}
+              <div class="text" on:click={onTagClick} on:keydown={()=>{}} role="button" tabindex="-1">{@html parseTags(display)}</div>
+            {/if}
+            <div class="meta"><span class="time">{getTime(m.created_at)}</span>{#if mine}{#if m.status==='read'}<span class="ticks read">✓✓</span>{:else if m.status==='delivered'}<span class="ticks">✓✓</span>{:else}<span class="ticks single">✓</span>{/if}{/if}</div>
+          </div>
         </div>
+      </div>
     {/each}
+  {/if}
 </div>
 
-<!-- Image Preview Modal -->
-{#if previewImage}
-    <div 
-        class="preview-modal" 
-        on:click={closePreview}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Image preview"
-    >
-        <div class="preview-content" on:click|stopPropagation>
-            <button class="close-preview" on:click={closePreview} aria-label="Close preview">×</button>
-            <img src={previewImage} alt="Preview" />
-            <button 
-                class="preview-download"
-                on:click={() => downloadFile(previewImage, getFileName(previewImage))}
-            >
-                Download
-            </button>
-        </div>
-    </div>
+{#if selectedMessages.size>0}
+  <div class="action-bar">
+    <span>{selectedMessages.size} selected</span>
+    <button on:click={()=>{ dispatch("replyTo", { ids: Array.from(selectedMessages) }); selectedMessages=new Set(); }}>Reply</button>
+    <button on:click={()=>{ dispatch("forward", { ids: Array.from(selectedMessages) }); selectedMessages=new Set(); }}>Forward</button>
+    <button on:click={()=>selectedMessages=new Set()}>✕</button>
+  </div>
 {/if}
 
 <style>
-.messages-container {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px;
-    background: #efeae2;
-}
-
-.message-wrapper {
-    display: flex;
-    margin-bottom: 12px;
-}
-
-.message-wrapper.own {
-    justify-content: flex-end;
-}
-
-.message-bubble {
-    max-width: 65%;
-    padding: 8px 12px;
-    border-radius: 8px;
-    background: white;
-    box-shadow: 0 1px 2px rgba(0,0,0,.08);
-}
-
-/* FIX 3: CSS Selector fix - space இல்ல */
-.message-wrapper.own .message-bubble {
-    background: #d9fdd3;
-}
-
-.message-text {
-    font-size: 15px;
-    line-height: 1.4;
-    word-wrap: break-word;
-    white-space: pre-wrap;
-}
-
-.mt-2 {
-    margin-top: 8px;
-}
-
-.attachments {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 8px;
-}
-
-.attachment-wrapper {
-    position: relative;
-    display: inline-block;
-}
-
-.attachment-image {
-    max-width: 300px;
-    max-height: 300px;
-    border-radius: 8px;
-    cursor: pointer;
-    display: block;
-}
-
-.attachment-image:hover, .attachment-image:focus {
-    opacity: 0.9;
-    outline: 2px solid #00a884;
-}
-
-.download-btn {
-    position: absolute;
-    bottom: 8px;
-    right: 8px;
-    width: 32px;
-    height: 32px;
-    border: none;
-    border-radius: 50%;
-    background: rgba(0,0,0,0.6);
-    color: white;
-    cursor: pointer;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.attachment-wrapper:hover .download-btn,
-.attachment-wrapper:focus-within .download-btn {
-    opacity: 1;
-}
-
-.attachment-file-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.attachment-file {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: #f0f2f5;
-    border-radius: 8px;
-    text-decoration: none;
-    color: #111b21;
-    font-size: 14px;
-}
-
-.attachment-file:hover {
-    background: #e9edef;
-}
-
-.download-btn-file {
-    width: 32px;
-    height: 32px;
-    border: none;
-    border-radius: 50%;
-    background: #f0f2f5;
-    cursor: pointer;
-    font-size: 16px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.download-btn-file:hover {
-    background: #e9edef;
-}
-
-.voice-msg audio, .video-msg video {
-    width: 100%;
-    max-width: 280px;
-    margin-top: 4px;
-}
-
-.video-msg video {
-    max-height: 300px;
-    border-radius: 8px;
-}
-
-.template-message {
-    background: #fff3cd;
-    border: 1px solid #ffc107;
-    border-radius: 8px;
-    padding: 12px;
-    margin-top: 4px;
-}
-
-.message-wrapper.own .template-message {
-    background: #dbeafe;
-    border-color: #93c5fd;
-}
-
-.template-name {
-    font-weight: 600;
-    margin-bottom: 8px;
-    font-size: 14px;
-    color: #1f2937;
-}
-
-.template-field {
-    font-size: 13px;
-    margin: 4px 0;
-    display: flex;
-    gap: 4px;
-}
-
-.field-label {
-    font-weight: 500;
-    color: #667781;
-    text-transform: capitalize;
-}
-
-.field-value {
-    color: #111b21;
-    word-break: break-word;
-}
-
-.message-meta {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 4px;
-    margin-top: 4px;
-    font-size: 11px;
-    color: #667781;
-}
-
-.status {
-    font-size: 14px;
-}
-
-.status .read {
-    color: #53bdeb;
-}
-
-/* Preview Modal */
-.preview-modal {
-    position: fixed;
-    inset: 0;
-    background: rgba(0,0,0,0.9);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 10000;
-    cursor: pointer;
-}
-
-.preview-content {
-    position: relative;
-    max-width: 90vw;
-    max-height: 90vh;
-    cursor: default;
-}
-
-.preview-content img {
-    max-width: 100%;
-    max-height: 85vh;
-    display: block;
-    border-radius: 8px;
-}
-
-.close-preview {
-    position: absolute;
-    top: -40px;
-    right: 0;
-    width: 40px;
-    height: 40px;
-    border: none;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.2);
-    color: white;
-    font-size: 28px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.close-preview:hover {
-    background: rgba(255,255,255,0.3);
-}
-
-.preview-download {
-    position: absolute;
-    bottom: -50px;
-    left: 50%;
-    transform: translateX(-50%);
-    padding: 10px 24px;
-    border: none;
-    border-radius: 24px;
-    background: #00a884;
-    color: white;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.preview-download:hover {
-    background: #02916f;
-}
-
-@media(max-width:768px) {
-    .message-bubble {
-        max-width: 80%;
-    }
-    .attachment-image, .video-msg video {
-        max-width: 200px;
-    }
-}
+.message-list{ flex:1; overflow-y:auto; padding:20px 12px; background:#0b141a; position:relative; display:flex; flex-direction:column; }
+.empty{ text-align:center; color:#8696a0; margin-top:40%; }
+.msg-row{ display:flex; flex-direction:column; margin-bottom:2px; max-width:78%; position:relative; }
+.msg-row.mine{ align-self:flex-end; margin-left:auto; }
+.msg-row:not(.mine){ align-self:flex-start; }
+.msg-row.selected{ outline:2px solid #00a884; background:rgba(0,168,132,0.15); }
+.sender-name{ font-size:12px; color:#00a884; font-weight:600; margin-left:8px; margin-bottom:2px; }
+.bubble-wrap{ display:flex; position:relative; }
+.thread-line{ width:2px; background:#2a3942; margin:0 8px 0 18px; border-radius:2px; }
+.bubble{ background:#202c33; color:#e9edef; padding:8px 10px 5px; border-radius:18px; border-top-left-radius:0; position:relative; word-break:break-word; min-width:80px; }
+.mine.bubble{ background:#005c4b; border-radius:18px; border-top-right-radius:0; }
+.bubble.tail::after{ content:""; position:absolute; bottom:0; width:12px; height:12px; background:inherit; }
+.mine.bubble.tail::after{ right:-4px; clip-path:polygon(0 0, 0 100%, 100% 100%); }
+:not(.mine).bubble.tail::after{ left:-4px; clip-path:polygon(100% 0, 0 100%, 100% 100%); }
+.reply-box{ display:flex; gap:6px; background:rgba(0,0,0,0.2); border-radius:6px; padding:6px 8px; margin-bottom:6px; }
+.reply-line{ width:3px; background:#00a884; border-radius:2px; }
+.reply-text{ font-size:12px; color:#8696a0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; }
+.text{ font-size:14.5px; line-height:19px; white-space:pre-wrap; }
+:global(.mention){ color:#53bdeb; font-weight:700; background:rgba(83,189,235,0.15); padding:0 4px; border-radius:4px; cursor:pointer; }
+.meta{ display:flex; justify-content:flex-end; gap:6px; margin-top:4px; }
+.time{ font-size:11px; color:#8696a0; }
+.ticks{ font-size:11px; color:#8696a0; }
+.ticks.read{ color:#53bdeb; }
+.action-bar{ position:absolute; bottom:70px; left:50%; transform:translateX(-50%); background:#233138; border:1px solid #2a3942; border-radius:24px; padding:8px 16px; display:flex; gap:12px; align-items:center; color:#e9edef; z-index:10; }
+.action-bar button{ background:#00a884; border:none; color:#111b21; padding:6px 12px; border-radius:16px; font-weight:600; cursor:pointer; font-size:12px; }
+.action-bar button:last-child{ background:#2a3942; color:#e9edef; }
+.template-bubble{ padding:4px!important; background:#005c4b!important; }
+.template-card{ background:#d7e8ff; border-radius:12px; border:1px solid #a8c6f0; overflow:hidden; min-width:230px; color:#111; }
+.tpl-title{ font-weight:800; text-align:center; padding:10px 8px; font-size:14px; border-bottom:1px solid #b9d2f5; }
+.tpl-rows{ padding:8px 12px; font-size:13px; line-height:24px; }
+.tpl-row{ display:flex; justify-content:space-between; gap:12px; }
+.tpl-row span:last-child{ font-weight:700; }
+.tpl-footer{ color:#e9edef; font-weight:700; padding:8px 4px 2px; font-size:14px; }
 </style>

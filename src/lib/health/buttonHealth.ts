@@ -23,7 +23,7 @@ export function scanButtons() {
     return info;
   });
 
-  logger.log('BUTTON_HEALTH', `Scanned ${list.length} buttons`);
+  log('INFO', 'BUTTON_HEALTH', `Scanned ${list.length} buttons`); // FIXED: 3 args
   return list;
 }
 

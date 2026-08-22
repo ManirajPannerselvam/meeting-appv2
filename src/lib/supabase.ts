@@ -1,61 +1,37 @@
-import { createClient } from "@supabase/supabase-js";
 import { browser } from "$app/environment";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-// =====================================================
-// CHAT DATABASE
-// =====================================================
+import {
+	PUBLIC_SUPABASE_CHAT_URL,
+	PUBLIC_SUPABASE_CHAT_ANON_KEY,
+	PUBLIC_SUPABASE_TEMPLATES_URL,
+	PUBLIC_SUPABASE_TEMPLATES_ANON_KEY
+} from "$env/static/public";
 
-const chatUrl = import.meta.env.VITE_SUPABASE_CHAT_URL;
-const chatAnonKey = import.meta.env.VITE_SUPABASE_CHAT_ANON_KEY;
+const authOptions = {
+	auth: {
+		persistSession: browser,
+		autoRefreshToken: browser,
+		detectSessionInUrl: browser,
+	flowType: 'pkce'
+	}
+};
 
-// =====================================================
-// TEMPLATE DATABASE
-// =====================================================
-
-const templatesUrl = import.meta.env.VITE_SUPABASE_TEMPLATES_URL;
-const templatesAnonKey = import.meta.env.VITE_SUPABASE_TEMPLATES_ANON_KEY;
-
-// =====================================================
-// VALIDATION
-// =====================================================
-
-if (!chatUrl || !chatAnonKey) {
-    throw new Error("Missing Chat Supabase environment variables");
-}
-
-if (!templatesUrl || !templatesAnonKey) {
-    throw new Error("Missing Template Supabase environment variables");
-}
-
-// =====================================================
-// CHAT CLIENT
-// =====================================================
-
-export const supabaseChat = createClient(
-    chatUrl,
-    chatAnonKey,
-    {
-        auth: {
-            persistSession: browser,
-            autoRefreshToken: browser
-        }
-    }
+// 1. MAIN CLIENT: USE THIS FOR LOGIN + REGISTER + AUTH + RECORDS + MEETINGS + CHAT
+export const supabase: SupabaseClient = createClient(
+	PUBLIC_SUPABASE_CHAT_URL,  // CHAT project
+	PUBLIC_SUPABASE_CHAT_ANON_KEY,
+	authOptions
 );
 
-// =====================================================
-// TEMPLATE CLIENT
-// =====================================================
+// 2. ALIAS: For old code that uses supabaseChat
+export const supabaseChat: SupabaseClient = supabase;
 
-export const supabaseTemplates = createClient(
-    templatesUrl,
-    templatesAnonKey,
-    {
-        auth: {
-            persistSession: browser,
-            autoRefreshToken: browser
-        }
-    }
+// 3. TEMPLATES CLIENT: USE THIS ONLY FOR READING TEMPLATES - NO AUTH
+export const supabaseTemplates: SupabaseClient = createClient(
+	PUBLIC_SUPABASE_TEMPLATES_URL,
+	PUBLIC_SUPABASE_TEMPLATES_ANON_KEY,
+	{ auth: { persistSession: false } }
 );
 
-// Default client (Templates DB)
-export const supabase = supabaseTemplates;
+export default supabase;

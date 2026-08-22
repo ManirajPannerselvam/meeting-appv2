@@ -1,719 +1,721 @@
-import { supabaseChat } from "$lib/supabase";
+import {
+	supabaseChat,
+	supabaseTemplates
+} from "$lib/supabase/client";
 
 const supabase = supabaseChat;
 
 const GUEST_USER_ID = "guest-user-001";
 
+// =====================================================
+// TYPES
+// =====================================================
+
+export interface ProductionRecord {
+	id: number;
+	reference_template_id: string;
+	t_code: string;
+	ts: string;
+	shift: string | null;
+	station: string | null;
+	user_name: string | null;
+	data: Record<string, any>;
+	created_at: string;
+}
 
 // =====================================================
 // AUTH
 // =====================================================
 
-function getCurrentUserId(){
-
-    return GUEST_USER_ID;
-
+function getCurrentUserId(): string {
+	return GUEST_USER_ID;
 }
 
+// =====================================================
+// HELPER
+// =====================================================
 
+function notifyUpdate(
+	event: string = "meetings:updated"
+): void {
+	if (typeof window !== "undefined") {
+		window.dispatchEvent(
+			new CustomEvent(event)
+		);
+	}
+}
 
 // =====================================================
 // MEETINGS
 // =====================================================
 
+export async function getMeetings() {
+	const { data, error, status } = await supabase
+		.from("meetings")
+		.select("*")
+		.order("meeting_date", {
+			ascending: false
+		})
+		.order("start_time", {
+			ascending: false
+		});
 
-export async function getMeetings(){
+	console.log("Meetings status:", status);
 
-    const {
-        data,
-        error,
-        status
-    } = await supabase
-        .from("meetings")
-        .select("*")
-        .order("meeting_date", {
-            ascending:false
-        })
-        .order("start_time", {
-            ascending:false
-        });
+	if (error) {
+		console.error(
+			"[Meetings] Load failed:",
+			error
+		);
 
+		throw new Error(error.message);
+	}
 
-    console.log(
-        "Meetings status:",
-        status
-    );
-
-
-    if(error){
-
-        console.error(
-            "Supabase meetings error:",
-            error
-        );
-
-        throw new Error(
-            error.message
-        );
-
-    }
-
-
-    return data ?? [];
-
+	return data ?? [];
 }
-
-
 
 export async function getMeeting(
-    id:number
-){
+	id: number
+) {
+	const { data, error } = await supabase
+		.from("meetings")
+		.select("*")
+		.eq("id", id)
+		.single();
 
-    const {data,error}=await supabase
-        .from("meetings")
-        .select("*")
-        .eq("id",id)
-        .single();
+	if (error) {
+		console.error(
+			"[Meeting] Load failed:",
+			error
+		);
 
+		return null;
+	}
 
-    if(error){
-
-        console.error(
-            "getMeeting:",
-            error
-        );
-
-        return null;
-
-    }
-
-
-    return data;
-
+	return data;
 }
-
-
-
 
 export async function addMeeting(
-    data:any
-){
+	data: any
+) {
+	const now = new Date();
 
+	const meetingDateTime = new Date(
+		`${data.meeting_date}T${
+			data.start_time || "00:00"
+		}`
+	);
 
-    const now=new Date();
+	let status = "scheduled";
 
+	if (
+		meetingDateTime.toDateString() ===
+		now.toDateString()
+	) {
+		status = "today";
+	} else if (meetingDateTime < now) {
+		status = "completed";
+	}
 
-    const meetingDateTime =
-        new Date(
-            `${data.meeting_date}T${data.start_time || "00:00"}`
-        );
+	const payload = {
+		title: data.title,
+		type: data.type,
+		department: data.department,
+		priority: data.priority,
+		meeting_date: data.meeting_date,
+		start_time: data.start_time,
+		end_time: data.end_time,
+		location: data.location,
+		organizer: data.organizer,
 
+		participants: Array.isArray(
+			data.participants
+		)
+			? data.participants
+			: [],
 
-    let status="scheduled";
+		agenda: data.agenda,
+		meeting_objective:
+			data.meeting_objective,
 
+		reference_no:
+			data.reference_no,
 
-    if(
-        meetingDateTime.toDateString()
-        === now.toDateString()
-    ){
+		meeting_mode:
+			data.meeting_mode,
 
-        status="today";
+		meeting_link:
+			data.meeting_link,
 
-    }
-    else if(
-        meetingDateTime < now
-    ){
+		reminder_minutes:
+			data.reminder_minutes ?? 15,
 
-        status="completed";
+		attachment:
+			data.attachment ?? "",
 
-    }
+		status,
 
+		created_by:
+			getCurrentUserId()
+	};
 
+	const { error } = await supabase
+		.from("meetings")
+		.insert([payload]);
 
-    const payload={
+	if (error) {
+		console.error(
+			"[Meeting] Add failed:",
+			error
+		);
 
-        title:data.title,
+		throw error;
+	}
 
-        type:data.type,
+	notifyUpdate(
+		"meetings:updated"
+	);
 
-        department:data.department,
-
-        priority:data.priority,
-
-
-        meeting_date:data.meeting_date,
-
-        start_time:data.start_time,
-
-        end_time:data.end_time,
-
-
-        location:data.location,
-
-        organizer:data.organizer,
-
-
-        participants:
-            Array.isArray(data.participants)
-            ? data.participants
-            : [],
-
-
-
-        agenda:data.agenda,
-
-        meeting_objective:
-            data.meeting_objective,
-
-
-        reference_no:
-            data.reference_no,
-
-
-        meeting_mode:
-            data.meeting_mode,
-
-
-        meeting_link:
-            data.meeting_link,
-
-
-        reminder_minutes:
-            data.reminder_minutes ?? 15,
-
-
-        attachment:
-            data.attachment ?? "",
-
-
-        status,
-
-        created_by:
-            getCurrentUserId()
-
-    };
-
-
-
-    const {error}=await supabase
-        .from("meetings")
-        .insert([payload]);
-
-
-
-    if(error){
-
-        console.error(
-            "addMeeting:",
-            error
-        );
-
-        throw error;
-
-    }
-
-
-
-    notifyUpdate();
-
-
-    return true;
-
+	return true;
 }
-
-
-
-
 
 export async function updateMeeting(
-    id:number,
-    data:any
-){
+	id: number,
+	data: any
+) {
+	const { error } = await supabase
+		.from("meetings")
+		.update(data)
+		.eq("id", id);
 
+	if (error) {
+		console.error(
+			"[Meeting] Update failed:",
+			error
+		);
 
-    const {error}=await supabase
-        .from("meetings")
-        .update(data)
-        .eq("id",id);
+		throw error;
+	}
 
+	notifyUpdate(
+		"meetings:updated"
+	);
 
-
-    if(error){
-
-        console.error(
-            "updateMeeting:",
-            error
-        );
-
-        throw error;
-
-    }
-
-
-    notifyUpdate();
-
-
-    return true;
-
+	return true;
 }
-
-
-
-
 
 export async function deleteMeeting(
-    id:number
-){
+	id: number
+) {
+	const { error } = await supabase
+		.from("meetings")
+		.delete()
+		.eq("id", id);
 
+	if (error) {
+		console.error(
+			"[Meeting] Delete failed:",
+			error
+		);
 
-    const {error}=await supabase
-        .from("meetings")
-        .delete()
-        .eq("id",id);
+		throw error;
+	}
 
+	notifyUpdate(
+		"meetings:updated"
+	);
 
-
-    if(error){
-
-        console.error(
-            "deleteMeeting:",
-            error
-        );
-
-        throw error;
-
-    }
-
-
-    notifyUpdate();
-
-
-    return true;
-
+	return true;
 }
-
-
-
-
-function notifyUpdate(){
-
-    if(
-        typeof window !== "undefined"
-    ){
-
-        window.dispatchEvent(
-            new CustomEvent(
-                "meetings:updated"
-            )
-        );
-
-    }
-
-}
-
-
 
 // =====================================================
 // SIM INVENTORY
-// Prisma handled by API
 // =====================================================
 
+export async function getSIMs() {
+	const response = await fetch(
+		"/api/sims"
+	);
 
-export async function getSIMs(){
+	if (!response.ok) {
+		throw new Error(
+			"Failed to load SIMs"
+		);
+	}
 
-    const res =
-        await fetch(
-            "/api/sims"
-        );
-
-
-    if(!res.ok){
-
-        throw new Error(
-            "Failed to load SIMs"
-        );
-
-    }
-
-
-    return await res.json();
-
+	return await response.json();
 }
-
-
-
 
 export async function saveSIM(
-    sim:any
-){
+	sim: any
+) {
+	const response = await fetch(
+		"/api/sims",
+		{
+			method: "POST",
+			headers: {
+				"Content-Type":
+					"application/json"
+			},
+			body: JSON.stringify(sim)
+		}
+	);
 
+	if (!response.ok) {
+		throw new Error(
+			"Failed to save SIM"
+		);
+	}
 
-    const res =
-        await fetch(
-            "/api/sims",
-            {
-
-                method:"POST",
-
-                headers:{
-
-                    "Content-Type":
-                    "application/json"
-
-                },
-
-                body:
-                    JSON.stringify(sim)
-
-            }
-        );
-
-
-
-    if(!res.ok){
-
-        throw new Error(
-            "Failed to save SIM"
-        );
-
-    }
-
-
-    return await res.json();
-
+	return await response.json();
 }
-
-
 
 // =====================================================
 // ANALYTICS
 // =====================================================
 
+export async function getAnalytics() {
+	const [
+		meetings,
+		rooms,
+		messages,
+		reports
+	] = await Promise.all([
+		supabase
+			.from("meetings")
+			.select("*", {
+				count: "exact",
+				head: true
+			}),
 
-export async function getAnalytics(){
+		supabase
+			.from("chat_rooms")
+			.select("*", {
+				count: "exact",
+				head: true
+			}),
 
+		supabase
+			.from("chat_messages")
+			.select("*", {
+				count: "exact",
+				head: true
+			}),
 
-    const [
+		getProductionReportCount()
+	]);
 
-        meetings,
+	if (meetings.error) {
+		console.error(
+			"[Analytics] Meetings:",
+			meetings.error
+		);
+	}
 
-        users,
+	if (rooms.error) {
+		console.error(
+			"[Analytics] Chat rooms:",
+			rooms.error
+		);
+	}
 
-        groups,
+	if (messages.error) {
+		console.error(
+			"[Analytics] Chat messages:",
+			messages.error
+		);
+	}
 
-        messages
+	return {
+		totalMeetings:
+			meetings.count ?? 0,
 
+		totalContacts:
+			reports,
 
-    ] = await Promise.all([
+		totalGroups:
+			rooms.count ?? 0,
 
-
-        supabase
-        .from("meetings")
-        .select("*",
-        {
-            count:"exact",
-            head:true
-        }),
-
-
-
-        supabase
-        .from("users")
-        .select("*",
-        {
-            count:"exact",
-            head:true
-        }),
-
-
-
-        supabase
-        .from("chat_groups")
-        .select("*",
-        {
-            count:"exact",
-            head:true
-        }),
-
-
-
-        supabase
-        .from("messages")
-        .select("*",
-        {
-            count:"exact",
-            head:true
-        })
-
-    ]);
-
-
-
-    return {
-
-
-        totalMeetings:
-            meetings.count ?? 0,
-
-
-        totalContacts:
-            users.count ?? 0,
-
-
-        totalGroups:
-            groups.count ?? 0,
-
-
-        totalMessages:
-            messages.count ?? 0
-
-
-    };
-
+		totalMessages:
+			messages.count ?? 0
+	};
 }
-
-
 
 // =====================================================
 // ACTIONS
 // =====================================================
 
+export async function getActions() {
+	const { data, error } =
+		await supabase
+			.from("meeting_actions")
+			.select("*");
 
-export async function getActions(){
+	if (error) {
+		console.error(
+			"[Actions] Failed to load:",
+			error
+		);
 
+		return [];
+	}
 
-    const {data,error}=await supabase
-        .from("meeting_actions")
-        .select("*");
-
-
-
-    if(error){
-
-        console.error(error);
-
-        return [];
-
-    }
-
-
-    return data ?? [];
-
+	return data ?? [];
 }
-
-
 
 // =====================================================
 // PRODUCTION REPORT
 // =====================================================
+//
+// CANONICAL SOURCE:
+//
+//     Template / Reporting DB
+//     public.records
+//
+// IMPORTANT:
+//
+// `records` is NOT in the Operations / Chat DB.
+//
+// Therefore all `records` queries MUST use:
+//
+//     supabaseTemplates
+//
+// We intentionally DO NOT query:
+//
+//     public.daily_reports
+//     public.template_reports
+//
+// =====================================================
 
+export async function getProductionReport(): Promise<
+	ProductionRecord[]
+> {
+	try {
+		const { data, error } =
+			await supabaseTemplates
+				.from("records")
+				.select(`
+					id,
+					reference_template_id,
+					t_code,
+					ts,
+					shift,
+					station,
+					user_name,
+					data,
+					created_at
+				`)
+				.order("ts", {
+					ascending: false
+				});
 
-export async function getProductionReport(){
+		if (error) {
+			console.error(
+				"[Production Report] Failed to load records:",
+				error
+			);
 
+			return [];
+		}
 
-    const {data,error}=await supabase
-        .from("production_reports")
-        .select("*");
+		return Array.isArray(data)
+			? (data as ProductionRecord[])
+			: [];
+	} catch (error) {
+		console.error(
+			"[Production Report] Unexpected error:",
+			error
+		);
 
-
-
-    if(error){
-
-        console.error(error);
-
-        return [];
-
-    }
-
-
-    return data ?? [];
-
+		return [];
+	}
 }
 
+// =====================================================
+// PRODUCTION REPORT BY STATION
+// =====================================================
 
+export async function getProductionReportByStation(
+	station: string
+): Promise<ProductionRecord[]> {
+	try {
+		const { data, error } =
+			await supabaseTemplates
+				.from("records")
+				.select(`
+					id,
+					reference_template_id,
+					t_code,
+					ts,
+					shift,
+					station,
+					user_name,
+					data,
+					created_at
+				`)
+				.eq("station", station)
+				.order("ts", {
+					ascending: false
+				});
+
+		if (error) {
+			console.error(
+				"[Production Report] Station query failed:",
+				error
+			);
+
+			return [];
+		}
+
+		return Array.isArray(data)
+			? (data as ProductionRecord[])
+			: [];
+	} catch (error) {
+		console.error(
+			"[Production Report] Station query error:",
+			error
+		);
+
+		return [];
+	}
+}
+
+// =====================================================
+// PRODUCTION REPORT BY ID
+// =====================================================
+
+export async function getProductionReportById(
+	id: number
+): Promise<ProductionRecord | null> {
+	try {
+		const { data, error } =
+			await supabaseTemplates
+				.from("records")
+				.select(`
+					id,
+					reference_template_id,
+					t_code,
+					ts,
+					shift,
+					station,
+					user_name,
+					data,
+					created_at
+				`)
+				.eq("id", id)
+				.single();
+
+		if (error) {
+			console.error(
+				"[Production Report] Record load failed:",
+				error
+			);
+
+			return null;
+		}
+
+		return data as ProductionRecord;
+	} catch (error) {
+		console.error(
+			"[Production Report] Record load error:",
+			error
+		);
+
+		return null;
+	}
+}
+
+// =====================================================
+// PRODUCTION REPORT COUNT
+// =====================================================
+
+export async function getProductionReportCount(): Promise<number> {
+	try {
+		const { count, error } =
+			await supabaseTemplates
+				.from("records")
+				.select("*", {
+					count: "exact",
+					head: true
+				});
+
+		if (error) {
+			console.error(
+				"[Analytics] Production report count failed:",
+				error
+			);
+
+			return 0;
+		}
+
+		return count ?? 0;
+	} catch (error) {
+		console.error(
+			"[Analytics] Production report count failed:",
+			error
+		);
+
+		return 0;
+	}
+}
 
 // =====================================================
 // MACHINE DOWNTIME
 // =====================================================
 
+export async function getMachineDowntime() {
+	const { data, error } =
+		await supabase
+			.from("machine_downtime")
+			.select("*")
+			.order("report_date", {
+				ascending: false
+			})
+			.order("created_at", {
+				ascending: false
+			});
 
-export async function getMachineDowntime(){
+	if (error) {
+		console.error(
+			"[Machine Downtime] Load failed:",
+			error
+		);
 
+		return [];
+	}
 
-    const {data,error}=await supabase
-        .from("machine_downtime")
-        .select("*")
-        .order(
-            "report_date",
-            {
-                ascending:false
-            }
-        )
-        .order(
-            "created_at",
-            {
-                ascending:false
-            }
-        );
-
-
-
-    if(error){
-
-        console.error(
-            "machine downtime:",
-            error
-        );
-
-        return [];
-
-    }
-
-
-    return data ?? [];
-
+	return data ?? [];
 }
-
-
-
-
 
 export async function getMachineDowntimeById(
-    id:number
-){
+	id: number
+) {
+	const { data, error } =
+		await supabase
+			.from("machine_downtime")
+			.select("*")
+			.eq("id", id)
+			.single();
 
+	if (error) {
+		console.error(
+			"[Machine Downtime] Load failed:",
+			error
+		);
 
-    const {data,error}=await supabase
-        .from("machine_downtime")
-        .select("*")
-        .eq("id",id)
-        .single();
+		return null;
+	}
 
-
-
-    if(error){
-
-        return null;
-
-    }
-
-
-    return data;
-
+	return data;
 }
-
-
-
-
 
 export async function addMachineDowntime(
-    item:any
-){
+	item: any
+) {
+	const { error } =
+		await supabase
+			.from("machine_downtime")
+			.insert([item]);
 
+	if (error) {
+		console.error(
+			"[Machine Downtime] Add failed:",
+			error
+		);
 
-    const {error}=await supabase
-        .from("machine_downtime")
-        .insert([item]);
+		throw error;
+	}
 
+	notifyUpdate(
+		"downtime:updated"
+	);
 
-
-    if(error){
-
-        throw error;
-
-    }
-
-
-    return true;
-
+	return true;
 }
-
-
-
-
 
 export async function updateMachineDowntime(
-    id:number,
-    item:any
-){
+	id: number,
+	item: any
+) {
+	const { error } =
+		await supabase
+			.from("machine_downtime")
+			.update(item)
+			.eq("id", id);
 
+	if (error) {
+		console.error(
+			"[Machine Downtime] Update failed:",
+			error
+		);
 
-    const {error}=await supabase
-        .from("machine_downtime")
-        .update(item)
-        .eq("id",id);
+		throw error;
+	}
 
+	notifyUpdate(
+		"downtime:updated"
+	);
 
-
-    if(error){
-
-        throw error;
-
-    }
-
-
-    return true;
-
+	return true;
 }
-
-
-
-
 
 export async function deleteMachineDowntime(
-    id:number
-){
+	id: number
+) {
+	const { error } =
+		await supabase
+			.from("machine_downtime")
+			.delete()
+			.eq("id", id);
 
+	if (error) {
+		console.error(
+			"[Machine Downtime] Delete failed:",
+			error
+		);
 
-    const {error}=await supabase
-        .from("machine_downtime")
-        .delete()
-        .eq("id",id);
+		throw error;
+	}
 
+	notifyUpdate(
+		"downtime:updated"
+	);
 
-
-    if(error){
-
-        throw error;
-
-    }
-
-
-    return true;
-
+	return true;
 }
 
+export async function getTodayDowntime() {
+	const today = new Date()
+		.toISOString()
+		.split("T")[0];
 
+	const { data, error } =
+		await supabase
+			.from("machine_downtime")
+			.select("*")
+			.eq("report_date", today);
 
+	if (error) {
+		console.error(
+			"[Machine Downtime] Today query failed:",
+			error
+		);
 
+		return [];
+	}
 
-export async function getTodayDowntime(){
+	return data ?? [];
+}
 
+// =====================================================
+// DASHBOARD REFRESH
+// =====================================================
 
-    const today =
-        new Date()
-        .toISOString()
-        .split("T")[0];
-
-
-
-    const {data,error}=await supabase
-        .from("machine_downtime")
-        .select("*")
-        .eq(
-            "report_date",
-            today
-        );
-
-
-
-    if(error){
-
-        return [];
-
-    }
-
-
-    return data ?? [];
-
+export async function refreshDashboardData() {
+	return Promise.all([
+		getMeetings(),
+		getActions(),
+		getProductionReport(),
+		getAnalytics()
+	]);
 }

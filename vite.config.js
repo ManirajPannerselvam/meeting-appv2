@@ -1,7 +1,16 @@
+/**
+ * ============================================================
+ * Temple Operations Reporting System
+ * File : vite.config.ts
+ * ============================================================
+ * PURPOSE
+ * Vite + Tauri dev config
+ * ============================================================
+ */
+
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 
-// @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
 export default defineConfig(async () => ({
@@ -12,7 +21,7 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: '0.0.0.0', // இத மாத்துங்க. host || false வேண்டாம்
+    host: '0.0.0.0', // LAN testing ku. host || false use pannadhinga
     hmr: host
       ? {
           protocol: "ws",

@@ -1,467 +1,75 @@
 <script lang="ts">
-    import { createEventDispatcher, onMount } from "svelte";
+  export let contacts: any[] = [];
+  export let groups: any[] = [];
+  export let selectedContact: any = null;
+  export let selectedGroup: any = null;
+  export let onSelectContact: any = ()=>{};
+  export let onSelectGroup: any = ()=>{};
+  export let onNewGroup: any = ()=>{};
+  export let onNewContact: any = ()=>{};
+  export let onLogout: any = ()=>{};
+  export let onHandleInvite: any = ()=>{};
 
-    export let groups: any[] = [];
-    export let contacts: any[] = [];
-    export let selectedGroup: any = null;
-    export let selectedContact: any = null;
-    export let loading = false;
-
-    const dispatch = createEventDispatcher();
-
-    const DEBUG = true;
-    function log(step: string, data?: any) {
-        if (!DEBUG) return;
-        const t = performance.now().toFixed(0);
-        console.log(`[SIDEBAR ${t}ms] ${step}`, data?? '');
-    }
-
-    onMount(() => {
-        log('MOUNTED', { groups: groups.length, contacts: contacts.length });
-    });
-
-    $: log('PROPS UPDATE', {
-        groups: groups.length,
-        contacts: contacts.length,
-        loading,
-        selectedGroup: selectedGroup?.id,
-        selectedContact: selectedContact?.id
-    });
-
-    let search = "";
-    let showMenu = false;
-    let showContextMenu = false;
-    let contextItem: any = null;
-    let contextType: 'contact' | 'group' | null = null;
-
-    $: filteredContacts = contacts.filter((c: any) =>
-      !search ||
-        (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
-        (c.mobile || "").includes(search)
-    );
-
-    $: filteredGroups = groups.filter((g: any) =>
-      !search ||
-        (g.name || "").toLowerCase().includes(search.toLowerCase())
-    );
-
-    $: log('FILTER UPDATE', {
-        search,
-        filteredGroups: filteredGroups.length,
-        filteredContacts: filteredContacts.length
-    });
-
-    function getGridItems(name: string, members?: any[]) {
-        if (members && members.length > 1) {
-            return members.slice(0, 9).map(m => (m.name?.[0] || '?').toUpperCase());
-        }
-        return [(name?.[0] || '?').toUpperCase()];
-    }
-
-    function getColor(index: number) {
-        const hue = (index * 47) % 360;
-        return `hsl(${hue}, 65%, 55%)`;
-    }
-
-    function formatTime(timestamp: string | number) {
-        if (!timestamp) return '';
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diff = now.getTime() - date.getTime();
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-        if (days === 0) {
-            return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        } else if (days === 1) {
-            return 'yesterday';
-        } else if (days < 7) {
-            return date.toLocaleDateString('en-US', { weekday: 'short' });
-        } else {
-            return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-        }
-    }
-
-    function handleSelectContact(contact: any) {
-        log('SELECT CONTACT CLICK', contact.name);
-        dispatch("selectContact", contact);
-        showMenu = false;
-    }
-
-    function handleSelectGroup(group: any) {
-        log('SELECT GROUP CLICK', group.name);
-        dispatch("selectGroup", group);
-        showMenu = false;
-    }
-
-    let pressTimer: any;
-    let isLongPress = false;
-
-    function handleLongPress(item: any, type: 'contact' | 'group') {
-        log('LONG PRESS START', { name: item.name, type });
-        isLongPress = false;
-        pressTimer = setTimeout(() => {
-            isLongPress = true;
-            contextItem = item;
-            contextType = type;
-            showContextMenu = true;
-            log('LONG PRESS TRIGGERED', { name: item.name, type });
-        }, 600);
-    }
-
-    function clearPressTimer() {
-        clearTimeout(pressTimer);
-    }
-
-    function handleClick(item: any, type: 'contact' | 'group') {
-        log('ROW CLICK', { name: item.name, type, isLongPress });
-        if (!isLongPress) {
-            if (type === 'contact') handleSelectContact(item);
-            else handleSelectGroup(item);
-        }
-        isLongPress = false;
-    }
-
-    function handleContextAction(action: string) {
-        if (!contextItem ||!contextType) return; // FIX 2: added space
-        log('CONTEXT ACTION', { action, item: contextItem.name, type: contextType });
-
-        if (action === 'delete') {
-            if (confirm(`Delete ${contextItem.name}?`)) {
-                dispatch(contextType === 'contact'? "deleteContact" : "deleteGroup", contextItem);
-            }
-        } else if (action === 'edit') {
-            dispatch(contextType === 'contact'? "editContact" : "editGroup", contextItem);
-        } else if (action === 'image') {
-            dispatch(contextType === 'contact'? "addContactImage" : "addGroupImage", contextItem);
-        }
-
-        showContextMenu = false;
-        contextItem = null;
-        contextType = null;
-    }
-
-    function closeMenu(e: MouseEvent) {
-        if (!(e.target as HTMLElement).closest('.menu-wrap')) {
-            if (showMenu) log('CLOSE DROPDOWN MENU');
-            showMenu = false;
-        }
-        if (!(e.target as HTMLElement).closest('.context-popup')) {
-            if (showContextMenu) log('CLOSE CONTEXT MENU');
-            showContextMenu = false;
-        }
-    }
-
-    function toggleMenu() {
-        showMenu =!showMenu; // FIX 2: added space
-        log('TOGGLE MENU', showMenu);
-    }
+  let search = ""; let showMainMenu = false; let activeFilter = "All";
+  $: filteredContacts = contacts.filter((c:any)=> c.name?.toLowerCase().includes(search.toLowerCase()) || c.email?.toLowerCase().includes(search.toLowerCase()));
+  $: filteredGroups = groups.filter((g:any)=> g.name?.toLowerCase().includes(search.toLowerCase()));
+  $: displayContacts = activeFilter==='Groups'? [] : filteredContacts;
+  $: displayGroups = activeFilter==='All' || activeFilter==='Groups'? filteredGroups : [];
+  function getInitials(n:string){ return n? n.trim().split(' ').map((x:string)=>x[0]).join('').toUpperCase().slice(0,2) : 'U'; }
 </script>
 
-<svelte:window on:click={closeMenu}/>
-
 <div class="sidebar">
-    <div class="header">
-        <div class="left">
-            <span class="title">Chats</span>
-        </div>
-        <div class="menu-wrap">
-            <button class="icon-btn" on:click|stopPropagation={toggleMenu}>⋮</button>
-            {#if showMenu}
-                <div class="dropdown">
-                    <button on:click={() => { log('NEW CONTACT BTN'); dispatch("newContact"); showMenu = false; }}>+ Contact</button>
-                    <button on:click={() => { log('NEW GROUP BTN'); dispatch("newGroup"); showMenu = false; }}>+ Group</button>
-                </div>
-            {/if}
-        </div>
-    </div>
+  <div class="sidebar-header"><h1>Chat</h1><button class="icon-btn" onclick={(e)=>{e.stopPropagation(); showMainMenu=!showMainMenu}}>⋮</button>{#if showMainMenu}<div class="dropdown"><button onclick={()=>{ showMainMenu=false; onNewGroup(); }}>New group</button><button onclick={()=>{ showMainMenu=false; onNewContact(); }}>New contact</button><button class="logout" onclick={()=>{ showMainMenu=false; onLogout(); }}>Log out</button></div>{/if}</div>
+  <div class="search-wrap"><div class="search-box"><input bind:value={search} placeholder="Search or start a new chat" /></div></div>
+  <div class="filters">{#each ['All','Unread','Favorites','Groups'] as f}<button class:active={activeFilter===f} onclick={()=>activeFilter=f}>{f}</button>{/each}</div>
+  <div class="chat-list">
+    {#each displayGroups as g}
+      <div class="chat-row" class:selected={selectedGroup?.id===g.id} role="button" tabindex="0" onclick={()=>onSelectGroup(g)} onkeydown={(e)=>{ if(e.key==='Enter') onSelectGroup(g)}}>
+        <div class="avatar group">👥</div><div class="info"><div class="top"><span class="name">{g.name}</span></div><span class="sub">Tap to open</span></div>
+      </div>
+    {/each}
+    {#each displayContacts as c}
+      <div class="chat-row" class:selected={selectedContact?.id===c.id} role="button" tabindex="0" onclick={()=>{ if(c.status==='accepted' ||!c.status) onSelectContact(c); }} onkeydown={(e)=>{ if(e.key==='Enter' && (c.status==='accepted' ||!c.status)) onSelectContact(c)}}>
+        <div class="avatar">{getInitials(c.name||c.email)}</div>
+        <div class="info">
+          <div class="top"><span class="name">{c.name||c.email}</span></div>
 
-    <div class="search">
-        <input bind:value={search} on:input={() => log('SEARCH INPUT', search)} placeholder="Search contact or group..." />
-    </div>
-
-    <div class="chat-list">
-        {#if loading}
-            <div class="skeleton-list">
-                {#each Array(8) as _}
-                    <div class="skeleton-row">
-                        <div class="skeleton-avatar"></div>
-                        <div class="skeleton-content">
-                            <div class="skeleton-line w-40"></div>
-                            <div class="skeleton-line w-60"></div>
-                        </div>
-                    </div>
-                {/each}
+          {#if c.status==='pending'}
+            <span class="sub pending">Invite pending</span>
+          {:else if c.status==='invite_received'}
+            <span class="sub">Invitation • {c.email}</span>
+            <div class="invite-actions">
+              <button class="accept" onclick={(e)=>{ e.stopPropagation(); onHandleInvite({detail:{inviteId:c.id, action:'accepted'}}) }}>Accept</button>
+              <button class="reject" onclick={(e)=>{ e.stopPropagation(); onHandleInvite({detail:{inviteId:c.id, action:'rejected'}}) }}>Reject</button>
             </div>
-        {:else if filteredGroups.length === 0 && filteredContacts.length === 0}
-            <div class="empty">No Chats</div>
-        {:else}
-            {#each filteredGroups as group (group.id)}
-                {@const gridItems = getGridItems(group.name, group.members)}
-                <div class="chat-row" class:selected={selectedGroup?.id === group.id}
-                    on:click={() => handleClick(group, 'group')}
-                    on:mousedown={() => handleLongPress(group, 'group')}
-                    on:mouseup={clearPressTimer} on:mouseleave={clearPressTimer}
-                    on:touchstart={() => handleLongPress(group, 'group')} on:touchend={clearPressTimer}
-                    role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleClick(group, 'group')}
-                >
-                    <div class="avatar-wrap">
-                        <div class="avatar-grid" class:single={gridItems.length === 1}>
-                            {#if gridItems.length === 1}
-                                <div class="mini single-letter" style="background: {getColor(0)}">{gridItems[0]}</div>
-                            {:else}
-                                {#each gridItems as initial, i}<div class="mini" style="background: {getColor(i)}">{initial}</div>{/each}
-                                {#each Array(9 - gridItems.length) as _, i}<div class="mini empty"></div>{/each}
-                            {/if}
-                        </div>
-                        {#if group.unread}<div class="badge">{group.unread > 99? '99+' : group.unread}</div>{/if}
-                    </div>
-                    <div class="content">
-                        <div class="name">{group.name}</div>
-                        <div class="msg">{group.lastMsg || group.description || 'Group Chat'}</div>
-                    </div>
-                    <div class="time">{formatTime(group.time || group.updated_at || group.created_at)}</div>
-                </div>
-            {/each}
-
-            {#each filteredContacts as contact (contact.id)}
-                {@const gridItems = getGridItems(contact.name)}
-                <div class="chat-row" class:selected={selectedContact?.id === contact.id}
-                    on:click={() => handleClick(contact, 'contact')}
-                    on:mousedown={() => handleLongPress(contact, 'contact')}
-                    on:mouseup={clearPressTimer} on:mouseleave={clearPressTimer}
-                    on:touchstart={() => handleLongPress(contact, 'contact')} on:touchend={clearPressTimer}
-                    role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && handleClick(contact, 'contact')}
-                >
-                    <div class="avatar-wrap">
-                        <div class="avatar-grid single">
-                            <div class="mini single-letter" style="background: {getColor(0)}">{gridItems[0]}</div>
-                        </div>
-                        {#if contact.unread}<div class="badge">{contact.unread > 99? '99+' : contact.unread}</div>{/if}
-                    </div>
-                    <div class="content">
-                        <div class="name">{contact.name}</div>
-                        <div class="msg">{contact.lastMsg || contact.mobile || contact.email || ''}</div>
-                    </div>
-                    <div class="time">{formatTime(contact.time || contact.updated_at)}</div>
-                </div>
-            {/each}
-        {/if}
-    </div>
+          {:else}
+            <span class="sub">Tap to chat</span>
+          {/if}
+        </div>
+      </div>
+    {/each}
+    {#if displayContacts.length===0 && displayGroups.length===0}
+      <div class="no-chat">No chats found</div>
+    {/if}
+  </div>
 </div>
-
-{#if showContextMenu && contextItem}
-<div class="context-overlay">
-    <div class="context-popup">
-        <div class="context-title">{contextItem.name}</div>
-        <button on:click={() => handleContextAction('edit')}>Edit</button>
-        <button on:click={() => handleContextAction('image')}>Add Image</button>
-        <button class="delete" on:click={() => handleContextAction('delete')}>Delete</button>
-        <button on:click={() => { log('CONTEXT CANCEL'); showContextMenu = false; }}>Cancel</button>
-    </div>
-</div>
-{/if}
 
 <style>
-.sidebar{
-    display:flex;
-    flex-direction:column;
-    height:100%;
-    background:#fff;
-}
-
-.header{
-    background: #3b82f6;
-    color: white;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-}
-
-/* FIX 1: Added space. Was.header.left now.header.left */
-.header.left{
-    display: flex;
-    gap: 12px;
-    font-size: 14px;
-    align-items: center;
-}
-
-.title{ font-size: 18px; font-weight: 600; }
-
-.icon-btn{
-    background: none;
-    border: none;
-    color: white;
-    font-size: 20px;
-    padding: 4px 8px;
-    cursor: pointer;
-}
-
-.menu-wrap{ position: relative; }
-
-.dropdown{
-    position: absolute;
-    right: 0;
-    top: 32px;
-    background: white;
-    color: #333;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    min-width: 150px;
-    z-index: 50;
-}
-
-.dropdown button{
-    display: block;
-    width: 100%;
-    text-align: left;
-    color: #333;
-    padding: 12px 16px;
-    font-size: 16px;
-    background: none;
-    border: none;
-    cursor: pointer;
-}
-
-.dropdown button:hover{ background: #f5f5f5; }
-
-.search{ padding:10px 16px; background: white; }
-.search input{
-    width:100%;
-    padding:10px;
-    border-radius:8px;
-    border:1px solid #ddd;
-    box-sizing:border-box;
-    font-size: 14px;
-}
-
-.chat-list{ flex: 1; overflow-y: auto; background: white; }
-
-/* SKELETON */
-.skeleton-list { padding: 8px 0; }
-.skeleton-row { display: flex; align-items: center; padding: 10px 16px; gap: 12px; }
-.skeleton-avatar {
-    width: 48px; height: 48px; border-radius: 8px;
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-    background-size: 200% 100%; animation: loading 1.5s infinite; flex-shrink: 0;
-}
-.skeleton-content { flex: 1; display: flex; flex-direction: column; gap: 8px; }
-.skeleton-line {
-    height: 14px; border-radius: 4px;
-    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
-    background-size: 200% 100%; animation: loading 1.5s infinite;
-}
-.skeleton-line.w-40 { width: 40%; }
-.skeleton-line.w-60 { width: 60%; }
-@keyframes loading { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-
-.chat-row{
-    display: flex;
-    align-items: center;
-    padding: 10px 16px;
-    gap: 12px;
-    border-bottom: 1px solid #f0f0f0;
-    cursor: pointer;
-    transition:.1s;
-    user-select: none;
-    -webkit-tap-highlight-color: transparent;
-}
-.chat-row:active{ background: #f5f5f5; }
-.chat-row.selected{ background: #e5f3ff; }
-
-.avatar-wrap{ position: relative; flex-shrink: 0; }
-.avatar-grid{
-    width: 48px; height: 48px;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    grid-template-rows: repeat(3, 1fr);
-    gap: 1px;
-    border-radius: 8px;
-    overflow: hidden;
-    background: #e5e7eb;
-}
-.avatar-grid.single{ grid-template-columns: 1fr; grid-template-rows: 1fr; }
-
-.mini{
-    color: white;
-    font-size: 10px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-transform: uppercase;
-}
-.mini.single-letter{ font-size: 20px; }
-.mini.empty{ background: #e5e7eb!important; }
-
-.badge{
-    position: absolute;
-    top: -4px; right: -4px;
-    background: #ef4444;
-    color: white;
-    border-radius: 12px;
-    padding: 2px 6px;
-    font-size: 11px;
-    font-weight: 600;
-    min-width: 18px; height: 18px;
-    display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-.content{ flex: 1; min-width: 0; }
-.name{
-    font-size: 16px;
-    font-weight: 500;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: #111b21;
-    margin-bottom: 2px;
-}
-.msg{
-    font-size: 14px;
-    color: #667781;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-.time{
-    font-size: 12px;
-    color: #667781;
-    flex-shrink: 0;
-    align-self: flex-start;
-    margin-top: 2px;
-}
-
-.empty{ padding: 40px 15px; color: #999; text-align: center; }
-
-.context-overlay{
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.4);
-    display: flex; justify-content: center; align-items: center;
-    z-index: 1000;
-}
-.context-popup{
-    background: white;
-    border-radius: 12px;
-    min-width: 250px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.2);
-}
-.context-title{ padding: 16px; font-weight: 600; border-bottom: 1px solid #eee; color: #111; }
-.context-popup button{
-    display: block;
-    width: 100%;
-    padding: 14px 16px;
-    text-align: left;
-    background: none;
-    border: none;
-    font-size: 16px;
-    cursor: pointer;
-    color: #333;
-}
-.context-popup button:hover{ background: #f5f5f5; }
-.context-popup button.delete{ color: #ef4444; }
+.sidebar{ width:410px; height:100vh; background:#111b21; border-right:1px solid #222d34; display:flex; flex-direction:column; position:relative; }
+.sidebar-header{ height:64px; background:#202c33; display:flex; justify-content:space-between; align-items:center; padding:0 20px; color:#fff; }
+.sidebar-header h1{ margin:0; font-size:20px; }
+.icon-btn{ background:transparent; border:none; color:#aebac1; font-size:22px; cursor:pointer; }
+.dropdown{ position:absolute; right:10px; top:50px; background:#233138; border-radius:8px; z-index:99; overflow:hidden; box-shadow:0 8px 20px rgba(0,0,0,0.5); }
+.dropdown button{ display:block; width:100%; background:transparent; border:none; color:#fff; padding:12px 16px; text-align:left; cursor:pointer; }
+.dropdown button:hover{ background:#2a3942; }
+.search-wrap{ padding:10px; }.search-box{ background:#202c33; border-radius:8px; padding:8px 12px; }.search-box input{ background:transparent; border:none; color:#fff; width:100%; outline:none; }
+.filters{ display:flex; gap:6px; padding:6px 12px; }.filters button{ background:#1f2c34; color:#8696a0; border:none; border-radius:20px; padding:6px 12px; font-size:13px; cursor:pointer; }.filters button.active{ background:#0a332c; color:#00a884; }
+.chat-list{ flex:1; overflow-y:auto; }
+.chat-row{ display:flex; align-items:center; padding:0 12px; cursor:pointer; }.chat-row:hover{ background:#202c33; }.chat-row.selected{ background:#2a3942; }
+.avatar{ width:49px; height:49px; border-radius:50%; background:#3a4a54; color:#fff; display:flex; align-items:center; justify-content:center; margin:8px 12px 8px 0; font-weight:600; flex-shrink:0; }.avatar.group{ background:#00a884; }
+.info{ flex:1; border-top:1px solid #222d34; padding:12px 0; min-width:0; }.name{ color:#e9edef; font-size:16px; }.sub{ color:#8696a0; font-size:13px; display:block; margin-top:2px; }.sub.pending{ color:#f1c40f; }
+.invite-actions{ display:flex; gap:8px; margin-top:6px; }
+.accept{ background:#00a884; color:#111b21; border:none; border-radius:16px; padding:5px 12px; font-size:12px; font-weight:700; cursor:pointer; }
+.reject{ background:#2a3942; color:#e9edef; border:none; border-radius:16px; padding:5px 12px; font-size:12px; cursor:pointer; }
+.no-chat{ color:#8696a0; text-align:center; padding:30px; font-size:14px; }
 </style>

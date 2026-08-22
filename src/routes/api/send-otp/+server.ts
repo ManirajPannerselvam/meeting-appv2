@@ -1,15 +1,25 @@
 import { json, error } from '@sveltejs/kit';
 import { createClient } from '@supabase/supabase-js';
-import { SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY } from '$env/static/private';
+import { PUBLIC_SUPABASE_CHAT_URL } from '$env/static/public';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
-// Verify we're using service_role key
-const keyPayload = JSON.parse(Buffer.from(SUPABASE_CHAT_SERVICE_KEY.split('.')[1], 'base64').toString());
-console.log('[OTP] ENV Check:', {
-    url: SUPABASE_CHAT_URL? 'LOADED' : 'MISSING',
-    role: keyPayload.role,
-    project: keyPayload.ref
-});
+const SUPABASE_CHAT_URL = PUBLIC_SUPABASE_CHAT_URL;
+const SUPABASE_CHAT_SERVICE_KEY = env.SUPABASE_CHAT_SERVICE_KEY || env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_CHAT_SERVICE_KEY || env.SUPABASE_TEMPLATES_SERVICE_KEY;
+
+// Verify we're using service_role key (safe log)
+try {
+    if (SUPABASE_CHAT_SERVICE_KEY) {
+        const keyPayload = JSON.parse(Buffer.from(SUPABASE_CHAT_SERVICE_KEY.split('.')[1], 'base64').toString());
+        console.log('[OTP] ENV Check:', {
+            url: SUPABASE_CHAT_URL ? 'LOADED' : 'MISSING',
+            role: keyPayload.role,
+            project: keyPayload.ref
+        });
+    }
+} catch (e) {
+    console.log('[OTP] ENV Check: Could not decode key');
+}
 
 const supabaseAdmin = createClient(SUPABASE_CHAT_URL, SUPABASE_CHAT_SERVICE_KEY);
 

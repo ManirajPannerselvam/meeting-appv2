@@ -111,6 +111,15 @@ a{
 }
 
 /* ---------- Phones ---------- */
+@media (max-width:768px){
+
+    body{
+
+        padding-bottom:75px;
+
+    }
+
+}
 
 @media (max-width:480px){
 

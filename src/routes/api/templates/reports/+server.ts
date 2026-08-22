@@ -1,91 +1,49 @@
+/**
+ * ============================================================
+ * Temple Operations Reporting System
+ * File : src/routes/api/templates/reports/+server.ts
+ * ============================================================
+ * PURPOSE
+ * Bulk fetch template reports by ids
+ * ============================================================
+ */
+
+import type { RequestEvent } from '@sveltejs/kit';
 import { json } from '@sveltejs/kit';
-import { supabaseTemplates } from '$lib/supabase';
+import { supabase } from '$lib/supabase';
 
+type Report = {
+    id: string | number;
+    [key: string]: unknown;
+}
 
-export async function GET({ url, request }) {
+export async function POST({ request }: RequestEvent) {
     try {
-        const date = url.searchParams.get('date');
+        const { ids } = await request.json() as { ids: (string | number)[] };
 
-        if (!date) {
-            return json(
-                { error: 'date param required' },
-                { status: 400 }
-            );
+        if (!ids?.length) {
+            return json({ success: true, data: {} });
         }
-
-
-        // Get user JWT
-        const authHeader = request.headers.get('authorization');
-
-        if (!authHeader) {
-            return json(
-                { error: 'No auth' },
-                { status: 401 }
-            );
-        }
-
-
-        if (!supabaseTemplates) {
-            return json(
-                { error: 'Supabase templates client not configured' },
-                { status: 500 }
-            );
-        }
-
-
-        const { data, error } = await supabaseTemplates
+        
+        const { data, error } = await supabase
             .from('template_reports')
             .select('*')
-            .gte(
-                'created_at',
-                `${date}T00:00:00Z`
-            )
-            .lte(
-                'created_at',
-                `${date}T23:59:59Z`
-            )
-            .order(
-                'created_at',
-                {
-                    ascending: false
-                }
-            );
+            .in('id', ids);
 
+        if (error) throw error;
+        
+        const map: Record<string | number, Report> = {};
+        data?.forEach(r => { 
+            map[r.id] = r 
+        });
 
-        if (error) {
-            console.error(
-                'Supabase error:',
-                error
-            );
+        return json({ success: true, data: map });
 
-            return json(
-                {
-                    error: error.message
-                },
-                {
-                    status: 500
-                }
-            );
-        }
-
-
-        return json(data ?? []);
-
-
-    } catch (e: any) {
-
-        console.error(
-            'Route error:',
-            e
-        );
-
+    } catch (error) {
+        console.error('[Template Reports API] Error:', error);
         return json(
-            {
-                error: e.message
-            },
-            {
-                status: 500
-            }
+            { success: false, error: 'Failed to fetch reports' },
+            { status: 500 }
         );
     }
 }

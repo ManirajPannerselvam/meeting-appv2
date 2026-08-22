@@ -1,15 +1,52 @@
-import { json } from '@sveltejs/kit';
-import { createClient } from '@supabase/supabase-js';
+/**
+ * ============================================================
+ * Temple Operations Reporting System
+ * File        : src/routes/api/sims/+server.ts
+ * ============================================================
+ * PURPOSE
+ *   SIM inventory CRUD endpoints
+ * ============================================================
+ */
 
-const url = 'https://rfckntoqyomqhrkwejrx.supabase.co'
-const serviceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJmY2tudG9xeW9tcWhya3dlanJ4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4NDU1MTE5MSwiZXhwIjoyMTAwMTI3MTkxfQ.6fmknSd05HwdIAEPum6Qp7NKuiYkS0fXwqoNKj9VRhA'
+import type { RequestEvent } from '@sveltejs/kit';
+import { json } from "@sveltejs/kit";
+import { getSIMs, saveSIM } from "$lib/server/database";
 
-const supabase = createClient(url, serviceKey, { auth: { persistSession: false } })
+export interface SIM {
+  id?: number;
+  iccid: string;
+  phone_number: string;
+  provider: string;
+  status: 'Active' | 'Inactive' | 'Damaged' | 'Lost';
+  assigned_to?: string | null;
+  notes?: string | null;
+  created_at?: string;
+}
 
-export async function DELETE({ params }) {
-    const { id } = params;
-    const { error } = await supabase.from('templates').delete().eq('id', id);
-    
-    if (error) return json({ error: error.message }, { status: 500 });
-    return json({ success: true });
+export async function GET() {
+    const sims = await getSIMs();
+    return json(sims);
+}
+
+export async function POST({ request }: RequestEvent) {
+    try {
+        const body = await request.json() as SIM;
+
+        if (!body.iccid || !body.phone_number || !body.provider) {
+            return json(
+                { success: false, error: 'iccid, phone_number and provider are required' },
+                { status: 400 }
+            );
+        }
+
+        const sim = await saveSIM(body);
+        return json({ success: true, data: sim });
+
+    } catch (error) {
+        console.error('[SIM API] POST error:', error);
+        return json(
+            { success: false, error: 'Failed to save SIM' },
+            { status: 500 }
+        );
+    }
 }

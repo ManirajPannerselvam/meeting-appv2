@@ -1,4 +1,4 @@
-import { log }from "$lib/debug/logger";
+import { log } from "$lib/debug/logger";
 
 // Basic runtime route checker - will attempt to fetch each route to verify it loads.
 export async function checkRoutes(routes: string[]) {
@@ -22,15 +22,15 @@ export async function checkRoutes(routes: string[]) {
         results.push({ route: r, ok: true, status: res.status });
       } else {
         results.push({ route: r, ok: false, status: res ? res.status : undefined });
-        await logger.warn('ROUTE_HEALTH', `Route failed: ${r} status=${res ? res.status : 'no-response'}`);
+        await log('WARN', 'ROUTE_HEALTH', `Route failed: ${r} status=${res ? res.status : 'no-response'}`); // FIXED: 3 args
       }
     } catch (e) {
       results.push({ route: r, ok: false });
-      await logger.error('ROUTE_HEALTH', `Error checking route ${r}: ${String(e)}`);
+      await log('ERROR', 'ROUTE_HEALTH', `Error checking route ${r}: ${String(e)}`); // FIXED: 3 args
     }
   }
 
-  await logger.log('ROUTE_HEALTH', `Route health: ${JSON.stringify(results)}`);
+  await log('INFO', 'ROUTE_HEALTH', `Route health: ${JSON.stringify(results)}`); // FIXED: 3 args
   return results;
 }
 
