@@ -53,7 +53,7 @@
   function getDisplayText(content:string){ if(!content) return ""; return content.split('__TEMPLATE_DATA__')[0]?.trim() || content; }
   function getValFromText(display:string, key:string){
     if(!display) return '-';
-    const k1 = key.replace(/_/g, '[ _]'); // match RAT_Input or RAT Input
+    const k1 = key.replace(/_/g, '[ _]');
     const re = new RegExp(`${k1}\\s*:\\s*([^\\n•]+)`, 'i');
     const m = display.match(re);
     return m? m[1].trim() : '-';
@@ -92,16 +92,24 @@
             {#if isTpl}
               {@const v = tmpl?.values || {}}
               <div class="template-card">
-                <div class="tpl-title">📋 {tmpl?.template_name || 'RAT YIELD'}</div>
+                <div class="tpl-title">📋 {tmpl?.template_name || 'Production Tracker'}</div>
                 <div class="tpl-rows">
-                  <div class="tpl-row"><span>Shift:</span><span>{v.Shift || getValFromText(display,'Shift')}</span></div>
-                  <div class="tpl-row"><span>Station:</span><span>{v.Station || getValFromText(display,'Station')}</span></div>
-                  <div class="tpl-row"><span>RAT Input:</span><span>{v.RAT_Input || v['RAT Input'] || getValFromText(display,'RAT_Input')}</span></div>
-                  <div class="tpl-row"><span>RAT Output:</span><span>{v.RAT_Output || v['RAT Output'] || getValFromText(display,'RAT_Output')}</span></div>
-                  <div class="tpl-row"><span>RAT Yield:</span><span>{v.RAT_Yield || getValFromText(display,'RAT_Yield')}</span></div>
+                  <div class="tpl-row"><span>Shift:</span><span>{v.shift || v.Shift || getValFromText(display,'Shift') || '-'}</span></div>
+                  <div class="tpl-row"><span>Station:</span><span>{v.station || v.Station || getValFromText(display,'Station') || '-'}</span></div>
+                  <div class="tpl-row"><span>Input:</span><span>{v.input01?? v.Input?? v.RAT_Input?? v['RAT Input']?? getValFromText(display,'Input')?? '-'}</span></div>
+                  <div class="tpl-row"><span>Output:</span><span>{v.output01?? v.Output?? v.RAT_Output?? v['RAT Output']?? getValFromText(display,'Output')?? '-'}</span></div>
+                  <div class="tpl-row"><span>Remark:</span><span>{v.remark01 || v.Remark || getValFromText(display,'Remark') || '-'}</span></div>
+                  {#if (v.input01 || v.Input) && (v.output01 || v.Output)}
+                    {@const inp = Number(v.input01 || v.Input || 0)}
+                    {@const out = Number(v.output01 || v.Output || 0)}
+                    {@const yld = inp > 0? ((out/inp)*100).toFixed(2) : '0'}
+                    <div class="tpl-row" style="border-top:1px solid #b9d2f5; margin-top:4px; padding-top:4px;"><span>Yield:</span><span>{yld}%</span></div>
+                  {:else}
+                    <div class="tpl-row"><span>Yield:</span><span>{v.RAT_Yield || getValFromText(display,'Yield') || '-'}</span></div>
+                  {/if}
                 </div>
               </div>
-              <div class="tpl-footer">*{tmpl?.template_name || 'RAT YIELD'}* `{v.Station || getValFromText(display,'Station')}`</div>
+              <div class="tpl-footer">*{tmpl?.template_name}* `{v.station || v.Station || ''}` - Shift {v.shift || v.Shift || ''}</div>
             {:else if m.content}
               <div class="text" on:click={onTagClick} on:keydown={()=>{}} role="button" tabindex="-1">{@html parseTags(display)}</div>
             {/if}
@@ -113,7 +121,7 @@
   {/if}
 </div>
 
-{#if selectedMessages.size>0}
+{#if selectedMessages.size > 0}
   <div class="action-bar">
     <span>{selectedMessages.size} selected</span>
     <button on:click={()=>{ dispatch("replyTo", { ids: Array.from(selectedMessages) }); selectedMessages=new Set(); }}>Reply</button>

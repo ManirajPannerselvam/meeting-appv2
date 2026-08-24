@@ -1,277 +1,143 @@
 <script lang="ts">
-    import { createEventDispatcher, onMount } from 'svelte';
-    import { browser } from "$app/environment";
+    import { createEventDispatcher } from 'svelte';
     
     export let template: any;
-    
     const dispatch = createEventDispatcher();
     
     let fields: any[] = [];
     let values: Record<string, any> = {};
-    let loading = true;
+    let loading = false;
     let sending = false;
-    let errorMessage = "";
     let currentTemplateId = "";
-    let controller: AbortController | null = null;
 
-    function getToken() {
-        if (!browser) return "";
-        return localStorage.getItem("token") || "";
-    }
-
-    function authHeader() {
-        const t = getToken();
-        return t ? { Authorization: `Bearer ${t}` } : {};
-    }
-
-    // FIX 2: Reload when template changes
+    // Parse fields from template.data (no API call needed)
     $: if (template?.id && template.id !== currentTemplateId) {
         currentTemplateId = template.id;
-        loadFields();
+        loadFromTemplate();
     }
 
-    async function loadFields() {
-        // FIX 3: Abort previous fetch
-        controller?.abort();
-        controller = new AbortController();
-        
+    function loadFromTemplate() {
+        loading = true;
         try {
-            loading = true;
-            errorMessage = "";
-            
-            // FIX 4: Reset values before loading
-            values = {};
-            fields = [];
-
-            const res = await fetch(`/api/templates/fields?template_id=${template.id}`, {
-                headers: authHeader(),
-                signal: controller.signal
-            });
-            
-            if (!res.ok) {
-                throw new Error(`Failed to load: ${res.status}`);
+            let dataObj: any = {};
+            if (typeof template.data === 'string') {
+                try { dataObj = JSON.parse(template.data); } catch { dataObj = {}; }
+            } else {
+                dataObj = template.data || {};
             }
             
-            const data = await res.json();
-            fields = data.data || [];
-            
-            // FIX 5: Safer initialization
+            const raw = dataObj.fields || template.fields || [];
+            fields = raw.map((f:any, i:number) => ({
+                ...f,
+                field_name: (f.field_name || f.name || `field_${i}`).trim(),
+                field_label: f.label || f.field_label || f.field_name || `Field ${i+1}`,
+                label: f.label || f.field_label || f.field_name,
+                field_type: f.field_type || f.type || "text",
+                required: f.required || false,
+                default_value: f.default_value ?? ""
+            }));
+
+            // Init values from last_values
+            const lastValues = dataObj.last_values || {};
+            const init: any = {};
             fields.forEach(f => {
-                const defaultVal = f.default_value;
-                if (f.field_type === "number") {
-                    values[f.field_name] = defaultVal ?? 0;
-                } else {
-                    values[f.field_name] = defaultVal ?? "";
-                }
+                init[f.field_name] = lastValues[f.field_name] ?? f.default_value ?? "";
             });
-            
-        } catch (err: any) {
-            if (err.name === 'AbortError') return;
-            console.error('Load error:', err);
-            errorMessage = "Unable to load template fields.";
-            fields = [];
+            values = init;
+            console.log("LOADED:", fields.map(f=>f.field_name), values);
         } finally {
             loading = false;
         }
     }
 
-    // FIX 8: Disable while submitting + FIX 9: Deep copy
-    async function send() {
-        if (sending) return;
+    function updateValue(field: any, e: Event) {
+        const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+        values = { ...values, [field.field_name]: target.value };
+    }
 
-        // FIX 6: Better validation
-        for (const field of fields) {
-            const value = values[field.field_name];
-            if (
-                field.required &&
-                (value === null || value === undefined || value === "")
-            ) {
-                alert(`${field.field_label} is required`);
+    function send() {
+        if (sending) return;
+        // validation
+        for (const f of fields) {
+            if (f.required && (values[f.field_name] === "" || values[f.field_name] == null)) {
+                alert(`${f.field_label} is required`);
                 return;
             }
         }
-        
         sending = true;
         try {
-            dispatch('send', { 
-                values: structuredClone(values) // FIX 9
+            // FIX: dispatch 'submit' with template + fields + values
+            dispatch('submit', { 
+                template, 
+                fields, 
+                values: JSON.parse(JSON.stringify(values))
             });
+            console.log("DISPATCHED submit:", values);
         } finally {
             sending = false;
         }
     }
 
     function cancel() {
-        controller?.abort();
-        dispatch('cancel');
+        dispatch('close');
     }
-
-    // FIX 1 + 10: Helper for input binding
-    function updateValue(field: any, e: Event) {
-        const target = e.target as HTMLInputElement | HTMLTextAreaElement;
-        const v = target.value;
-        
-        if (field.field_type === 'number') {
-            values[field.field_name] = v === "" ? "" : Number(v);
-        } else {
-            values[field.field_name] = v;
-        }
-    }
-
-    onMount(() => {
-        if (template?.id) loadFields();
-    });
 </script>
 
-<div class="form-container">
-    <h3>{template.icon} {template.name}</h3>
-    <p class="desc">{template.description}</p>
-    
+<div class="form-overlay">
+  <div class="form-header">
+    <h3>📋 {template?.name || 'Report'}</h3>
+    <button class="close" on:click={cancel}>✕</button>
+  </div>
+
+  <div class="form-body">
     {#if loading}
-        <div class="loading">Loading fields...</div>
-    {:else if errorMessage}
-        <div class="error">{errorMessage}</div>
+      <p class="loading">Loading...</p>
     {:else if fields.length === 0}
-        <div class="empty">No fields configured for this template</div>
+      <p class="loading">No fields in template</p>
     {:else}
-        <div class="fields">
-            {#each fields as field}
-                {@const type = field.field_type ?? "text"}
-                <div class="field">
-                    <label for={field.field_name}>
-                        {field.field_label}
-                        {#if field.required}<span class="required">*</span>{/if}
-                    </label>
-                    
-                    <!-- FIX 10: Use type const + FIX 1: Manual binding -->
-                    {#if type === 'textarea'}
-                        <textarea 
-                            id={field.field_name}
-                            value={values[field.field_name] ?? ""}
-                            on:input={(e) => updateValue(field, e)}
-                            placeholder={field.field_label}
-                        ></textarea>
-                    {:else if type === 'select'}
-                        <select
-                            id={field.field_name}
-                            value={values[field.field_name] ?? ""}
-                            on:change={(e) => updateValue(field, e)}
-                        >
-                            <option value="">Select {field.field_label}</option>
-                            {#each field.options || [] as opt}
-                                <option value={opt.value}>{opt.label}</option>
-                            {/each}
-                        </select>
-                    {:else}
-                        <input 
-                            id={field.field_name}
-                            type={type}
-                            value={values[field.field_name] ?? ""}
-                            on:input={(e) => updateValue(field, e)}
-                            placeholder={field.field_label}
-                        />
-                    {/if}
-                </div>
-            {/each}
+      {#each fields as field}
+        {@const type = (field.field_type || "text").toLowerCase()}
+        <div class="field">
+          <label>{field.field_label}{#if field.required}<span class="req">*</span>{/if}</label>
+          
+          {#if type === 'textarea'}
+            <textarea value={values[field.field_name] ?? ""} on:input={(e)=>updateValue(field,e)} placeholder={field.field_label}></textarea>
+          {:else if type === 'dropdown' || type === 'select'}
+            <select value={values[field.field_name] ?? ""} on:change={(e)=>updateValue(field,e)}>
+              <option value="">Select {field.field_label}</option>
+              {#each (Array.isArray(field.options) ? field.options : (()=>{try{return JSON.parse(field.options||"[]")}catch{return []}})()) as opt}
+                <option value={typeof opt === 'string' ? opt : opt.value || opt.label}>{typeof opt === 'string' ? opt : opt.label || opt.value}</option>
+              {/each}
+            </select>
+          {:else if type === 'number'}
+            <input type="text" inputmode="numeric" value={values[field.field_name] ?? ""} on:input={(e)=>updateValue(field,e)} placeholder={field.field_label} />
+          {:else}
+            <input type="text" value={values[field.field_name] ?? ""} on:input={(e)=>updateValue(field,e)} placeholder={field.field_label} />
+          {/if}
         </div>
+      {/each}
     {/if}
-    
-    <div class="actions">
-        <button class="btn-cancel" on:click={cancel} disabled={sending}>Cancel</button>
-        <button class="btn-send" on:click={send} disabled={loading || sending}>
-            {#if sending} Sending... {:else} Send Report {/if}
-        </button>
-    </div>
+  </div>
+
+  <div class="form-footer">
+    <button class="btn-cancel" on:click={cancel} disabled={sending}>Cancel</button>
+    <button class="btn-send" on:click={send} disabled={loading || sending}>{#if sending}Sending...{:else}Send Report{/if}</button>
+  </div>
 </div>
 
 <style>
-    .form-container {
-        background: white;
-        padding: 24px;
-        border-radius: 12px;
-        max-width: 500px;
-        width: 90%;
-    }
-    h3 {
-        margin: 0 0 8px 0;
-        font-size: 20px;
-    }
-    .desc {
-        color: #666;
-        margin: 0 0 20px 0;
-        font-size: 14px;
-    }
-    .loading, .empty {
-        padding: 40px;
-        text-align: center;
-        color: #666;
-    }
-    .error {
-        padding: 16px;
-        text-align: center;
-        color: #dc2626;
-        background: #fee2e2;
-        border-radius: 8px;
-        margin-bottom: 16px;
-    }
-    .fields {
-        display: flex;
-        flex-direction: column;
-        gap: 16px;
-        margin-bottom: 20px;
-    }
-    .field label {
-        display: block;
-        margin-bottom: 6px;
-        font-weight: 500;
-        font-size: 14px;
-    }
-    .required {
-        color: red;
-        margin-left: 4px;
-    }
-    .field input, .field textarea, .field select {
-        width: 100%;
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 6px;
-        font-size: 14px;
-        box-sizing: border-box;
-        font-family: inherit;
-    }
-    .field textarea {
-        min-height: 80px;
-        resize: vertical;
-    }
-    .field select {
-        cursor: pointer;
-    }
-    .actions {
-        display: flex;
-        gap: 10px;
-        justify-content: flex-end;
-    }
-    .actions button {
-        padding: 10px 20px;
-        border: none;
-        border-radius: 6px;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 600;
-    }
-    .btn-cancel {
-        background: #f0f2f5;
-    }
-    .btn-cancel:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
-    .btn-send {
-        background: #2563eb;
-        color: white;
-    }
-    .btn-send:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-    }
+.form-overlay{ width:380px; max-width:95vw; max-height:85vh; background:#111b21; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; border:1px solid #2a3942; }
+.form-header{ display:flex; justify-content:space-between; align-items:center; padding:16px; border-bottom:1px solid #2a3942; background:#202c33; }
+.form-header h3{ color:#e9edef; margin:0; font-size:15px; }
+.close{ background:#2a3942; border:none; color:#e9edef; width:30px; height:30px; border-radius:50%; cursor:pointer; }
+.form-body{ flex:1; overflow-y:auto; padding:14px; display:flex; flex-direction:column; gap:12px; }
+.loading{ color:#8696a0; text-align:center; padding:20px; }
+.field{ display:flex; flex-direction:column; gap:5px; }
+.field label{ color:#8696a0; font-size:12px; font-weight:600; }
+.req{ color:#f15c6d; margin-left:4px; }
+.field input,.field textarea,.field select{ width:100%; padding:10px; background:#2a3942; color:#e9edef; border:1px solid #374045; border-radius:8px; outline:none; }
+.field input:focus,.field textarea:focus,.field select:focus{ border-color:#00a884; }
+.form-footer{ display:flex; gap:10px; padding:14px; border-top:1px solid #2a3942; }
+.btn-cancel{ flex:1; background:#2a3942; color:#e9edef; border:none; padding:11px; border-radius:8px; cursor:pointer; }
+.btn-send{ flex:1; background:#00a884; color:#111b21; border:none; padding:11px; border-radius:8px; font-weight:700; cursor:pointer; }
 </style>

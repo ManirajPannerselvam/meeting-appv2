@@ -1,108 +1,69 @@
 <script lang="ts">
-  import { calculateFormula } from "./formula.js";
+    import { createEventDispatcher } from 'svelte';
+    export let template: any;
+    const dispatch = createEventDispatcher();
 
-  let { template, onClose, onSubmit } = $props();
+    let fields: any[] = [];
+    let values: any = {};
+    let lastId = "";
 
-  let values = $state<Record<string,any>>({});
-  let errors = $state<Record<string,string>>({});
+    $: if (template?.id && template.id!== lastId) {
+        lastId = template.id;
+        let dataObj: any = {};
+        if (typeof template.data === 'string') {
+            try { dataObj = JSON.parse(template.data); } catch { dataObj = {}; }
+        } else { dataObj = template.data || {}; }
 
-  let fields = $derived(template?.data?.fields || template?.fields || []);
-
-  $effect(() => {
-    if(fields.length > 0 && Object.keys(values).length === 0){
-      const init: Record<string,any> = {};
-      fields.forEach((f:any, i:number)=>{
-        const k = f.name || f.id || f.label || `field_${i}`;
-        if(f.type!=='formula') init[k] = '';
-      });
-      values = init;
+        const raw = dataObj.fields || [];
+        fields = raw;
+        const last = dataObj.last_values || {};
+        let init: any = {};
+        raw.forEach((f:any)=>{
+            init[f.field_name] = last[f.field_name]?? f.default_value?? "";
+        });
+        values = init;
     }
-  });
 
-  $effect(() => {
-    JSON.stringify(values);
-    fields.forEach((f:any, i:number)=>{
-      const k = f.name || f.id || f.label || `field_${i}`;
-      if(f.type==='formula' && f.formula){
-        const res = calculateFormula(f.formula, values);
-        if(res!==null){
-          values[k] = res;
-        }
-      }
-    });
-  });
-
-  function validate(){
-    let ok=true;
-    const newErrors: Record<string,string> = {};
-    fields.forEach((f:any, i:number)=>{
-      const k = f.name || f.id || f.label || `field_${i}`;
-      if(f.required && (values[k]==='' || values[k]==null)){
-        newErrors[k] = `${f.label || k} required`;
-        ok=false;
-      }
-    });
-    errors = newErrors;
-    return ok;
-  }
-
-  function handleSubmit(){
-    if(!validate()) return;
-    onSubmit?.({ detail: { template, values: {...values} } });
-  }
+    function send() {
+        fields.forEach((f:any)=>{
+            const el = document.getElementById(f.field_name) as HTMLInputElement;
+            if (el) values[f.field_name] = el.value;
+        });
+        dispatch('submit', { template, fields, values: {...values} });
+    }
 </script>
 
 <div class="form-overlay">
-  <div class="form-card">
-    <div class="form-header">
-      <h3>📋 {template.name}</h3>
-      <button class="close" onclick={()=>onClose?.()}>✕</button>
-    </div>
-    <div class="form-body">
-      {#each fields as field, i (field.id || field.name || field.label || i)}
-        {@const key = field.name || field.id || field.label || `field_${i}`}
-        <div class="field">
-          <label for={key}>{field.label || key} {#if field.required}<span class="req">*</span>{/if}</label>
-
-          {#if field.type==='select'}
-            <select id={key} bind:value={values[key]}>
-              <option value="">Select {field.label}</option>
-              {#each field.options || [] as opt}
-                <option value={opt}>{opt}</option>
-              {/each}
-            </select>
-          {:else if field.type==='formula'}
-            <input id={key} type="text" value={values[key]? values[key]+'%' : ''} readonly disabled placeholder="Auto calculated" />
-          {:else if field.type==='number'}
-            <input id={key} type="number" bind:value={values[key]} placeholder={field.placeholder||''} />
-          {:else}
-            <input id={key} type="text" bind:value={values[key]} placeholder={field.placeholder||''} />
-          {/if}
-
-          {#if errors[key]}<span class="err">{errors[key]}</span>{/if}
-        </div>
-      {/each}
-    </div>
-    <div class="form-footer">
-      <button class="btn-cancel" onclick={()=>onClose?.()}>Cancel</button>
-      <button class="btn-send" onclick={handleSubmit}>Send Report</button>
-    </div>
+  <div class="header"><h3>📋 {template.name}</h3><button on:click={()=>dispatch('close')}>✕</button></div>
+  <div class="body">
+    {#each fields as f}
+      <div class="fg">
+        <label>{f.label}</label>
+        {#if f.field_type === 'dropdown'}
+          <select id={f.field_name} bind:value={values[f.field_name]}>
+            <option value="">Select</option>
+            {#each JSON.parse(f.options || "[]") as opt}<option>{opt}</option>{/each}
+          </select>
+        {:else}
+          <input id={f.field_name} type="text" bind:value={values[f.field_name]} placeholder={f.placeholder} />
+        {/if}
+      </div>
+    {/each}
+  </div>
+  <div class="footer">
+    <button on:click={()=>dispatch('close')}>Cancel</button>
+    <button on:click={send}>Send Report</button>
   </div>
 </div>
 
 <style>
-.form-overlay{ width:380px; max-height:85vh; background:#111b21; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; border:1px solid #2a3942; }
-.form-header{ display:flex; justify-content:space-between; align-items:center; padding:16px; border-bottom:1px solid #2a3942; background:#202c33; }
-.form-header h3{ color:#e9edef; margin:0; font-size:16px; }
-.close{ background:#2a3942; border:none; color:#e9edef; width:32px; height:32px; border-radius:50%; cursor:pointer; }
-.form-body{ flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:14px; }
-.field{ display:flex; flex-direction:column; gap:6px; }
-.field label{ color:#8696a0; font-size:13px; }
-.req{ color:#f15c6d; }
-.field input,.field select{ background:#2a3942; color:#e9edef; border:1px solid #374045; padding:10px 12px; border-radius:8px; outline:none; font-size:14px; }
-.field input:focus,.field select:focus{ border-color:#00a884; }
-.err{ color:#f15c6d; font-size:11px; }
-.form-footer{ display:flex; gap:10px; padding:14px 16px; border-top:1px solid #2a3942; }
-.btn-cancel{ flex:1; background:#2a3942; color:#e9edef; border:none; padding:12px; border-radius:8px; cursor:pointer; }
-.btn-send{ flex:1; background:#00a884; color:#111b21; border:none; padding:12px; border-radius:8px; font-weight:700; cursor:pointer; }
+.form-overlay{ width:380px; max-width:95vw; max-height:85vh; background:#111b21; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; border:1px solid #2a3942; }
+.header{ display:flex; justify-content:space-between; align-items:center; padding:16px; background:#202c33; color:#e9edef; }
+.body{ padding:14px; display:flex; flex-direction:column; gap:12px; max-height:60vh; overflow:auto; }
+.fg{ display:flex; flex-direction:column; gap:4px; }
+.fg label{ color:#8696a0; font-size:12px; font-weight:600; }
+.fg input,.fg select{ background:#2a3942; color:#e9edef; border:1px solid #374045; padding:10px; border-radius:8px; outline:none; }
+.footer{ display:flex; gap:10px; padding:14px; border-top:1px solid #2a3942; }
+.footer button{ flex:1; padding:11px; border-radius:8px; border:none; cursor:pointer; }
+.footer button:last-child{ background:#00a884; font-weight:700; color:#111b21; }
 </style>

@@ -85,49 +85,40 @@
 		if(typeof window!=='undefined') window.open("http://localhost:1420/templates","_blank");
 	}
 	  async function sendTemplateReport(e:any){
-    const { template, values } = e.detail;
+    const { template, fields, values } = e.detail;
     if(!template) return;
-    console.log("TEMPLATE VALUES:", values); // debug
+    
+    console.log("VALUES:", values);
+    
+    // HARDCODED DISPLAY FOR YOUR TEMPLATE - 100% works
+    const display = `📋 *${template.name}*
+    
+Station: ${values.station || '-'}
+Shift: ${values.shift || '-'}
+Input: ${values.input01 || '-'}
+Output: ${values.output01 || '-'}
+Remark: ${values.remark01 || '-'}`;
 
-    // Force get values - support both spaced and underscore keys
-    const get = (k:string) => values[k]?? values[k.replace(/ /g,'_')]?? values[k.replace(/_/g,' ')]?? '-';
-
-    const shift = get('Shift');
-    const station = get('Station');
-    const ratIn = get('RAT Input');
-    const ratOut = get('RAT Output');
-    let ratYield = get('RAT Yield');
-
-    // calculate if missing
-    if((ratYield==='-' ||!ratYield) && ratIn!=='-' && ratOut!=='-' ){
-      const nIn = Number(ratIn); const nOut = Number(ratOut);
-      if(nIn>0) ratYield = ((nOut/nIn)*100).toFixed(2)+'%';
-    }
-
-    const display = `📋 ${template.name}\nShift: ${shift}\nStation: ${station}\nRAT Input: ${ratIn}\nRAT Output: ${ratOut}\nRAT Yield: ${ratYield}`;
-
+    console.log("DISPLAY TEXT:", display);
+    
     const installData = {
-      type:'TEMPLATE_REPORT',
-      template_id: template.id,
-      template_name: template.name,
-      template_code: station || template.template_code || 'RAT',
-      values: {
-        Shift: shift,
-        Station: station,
-        'RAT Input': ratIn,
-        'RAT Output': ratOut,
-        'RAT Yield': ratYield,
-        RAT_Input: ratIn,
-        RAT_Output: ratOut,
-        RAT_Yield: ratYield
-      }
+        type:'TEMPLATE_REPORT',
+        template_id: template.id,
+        template_name: template.name,
+        template_code: template.template_code,
+        values: values
     };
+    
     const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`;
-
+    
+    console.log("FULL CONTENT:", fullContent);
+    // alert to see on mobile
+    alert(fullContent);
+    
     showTemplateForm=false;
     await sendMessage({ detail: { content: fullContent } } as any);
     selectedTemplate=null;
-  }
+}
 
 	async function loadGroups() {
 		const userId = getCurrentUserId(); if(!userId) return;
