@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
- import { supabaseTemplates } from '$lib/supabase';
+  import { supabaseTemplates } from '$lib/supabase';
   import type { Template, TemplateField } from '$lib/types';
 
   let templates: Template[] = [];
@@ -12,6 +12,7 @@
   let shift: string = 'A';
   let station: string = '';
   let loading = false;
+  let loadingTemplates = true;
   let message = '';
   let messageType: 'success' | 'error' = 'success';
   let previousTemplateId = '';
@@ -21,10 +22,6 @@
   let formFields: TemplateField[] = [];
   let computedFields: TemplateField[] = [];
 
-  function slugify(value:string){
-    return value.trim().toLowerCase().replace(/\s+/g,"_").replace(/[^a-z0-9_]/g,"");
-  }
-
   function normalizeFields(template: Template | null): TemplateField[] {
     if (!template) return [];
     return (template.data?.fields || []).map((f: any) => {
@@ -32,10 +29,9 @@
         try {
             options = typeof f.options === 'string'? JSON.parse(f.options || '[]') : (f.options || []);
         } catch { options = []; }
-
         const formula = (f.formula || '').trim();
         return {
-            name: f.field_name || f._key || f.name, // FIX 4: always use field_name
+            name: f.field_name || f._key || f.name,
             label: f.label || f.field_name,
             type: f.field_type || f.type,
             options,
@@ -47,23 +43,22 @@
     });
   }
 
-  // FIX 3: Case insensitive + uses actual field names from row
+  // SAFE formula - no direct eval
   function evaluateFormula(formula: string, values: Record<string, any>): number {
     if (!formula) return 0;
     try {
         let expression = formula;
         Object.entries(values).forEach(([key, value]) => {
             const number = Number(value) || 0;
-            // replace {input}, {Input}, {INPUT}
-            expression = expression.replaceAll(`{${key}}`, number.toString());
-            expression = expression.replaceAll(`{${key.toLowerCase()}}`, number.toString());
-            expression = expression.replaceAll(`{${key.toUpperCase()}}`, number.toString());
+            const regex = new RegExp(`\\{${key}\\}`, 'gi');
+            expression = expression.replace(regex, number.toString());
         });
-        expression = expression.replace(/%/g, '');
-        // eslint-disable-next-line no-eval
-        const result = eval(expression);
+        expression = expression.replace(/[^0-9+\-*/().% ]/g, '').replace(/%/g, '');
+        if(!expression.trim()) return 0;
+        // eslint-disable-next-line no-new-func
+        const result = new Function(`return (${expression})`)();
         if (!isFinite(result)) return 0;
-        return Number(result.toFixed(2));
+        return Number(Number(result).toFixed(2));
     } catch (err) {
         console.error('Formula Error', formula, err);
         return 0;
@@ -71,6 +66,7 @@
   }
 
   onMount(async () => {
+    loadingTemplates = true;
     const { data, error } = await supabaseTemplates.from("templates").select('*').order('name');
     if (error) {
       message = "Failed to load templates: " + error.message;
@@ -78,6 +74,7 @@
     } else {
       templates = data || [];
     }
+    loadingTemplates = false;
   });
 
   $: allFields = normalizeFields(selectedTemplate);
@@ -105,145 +102,72 @@
   }
 
   async function handleSubmit() {
-    if (loading || !selectedTemplate) return;
-
-    // Validate required fields
+    if (loading ||!selectedTemplate) return;
     for (const field of formFields) {
         const value = formData[field.name];
-
-        if (
-            field.required &&
-            (
-                value === "" ||
-                value === null ||
-                value === undefined ||
-                (field.type === "number" && isNaN(Number(value)))
-            )
-        ) {
-            message = `${field.label} is required`;
-            messageType = "error";
-            return;
+        if (field.required && (value === "" || value === null || value === undefined || (field.type === "number" && isNaN(Number(value))))) {
+            message = `${field.label} is required`; messageType = "error"; return;
         }
     }
+    if (stationOptions.length &&!station) { message = "Please select Station"; messageType = "error"; return; }
 
-    if (stationOptions.length && !station) {
-        message = "Please select Station";
-        messageType = "error";
-        return;
-    }
-
-    loading = true;
-    message = "";
-
-    // -------------------------
-    // Calculate formulas
-    // -------------------------
-
+    loading = true; message = "";
     const calculated: Record<string, any> = {};
-
     computedFields.forEach((field) => {
-        calculated[field.name] = evaluateFormula(
-            field.formula || "",
-            {
-                ...formData,
-                ...calculated
-            }
-        );
+        calculated[field.name] = evaluateFormula(field.formula || "", {...formData,...calculated});
     });
 
-    // -------------------------
-    // Payload
-    // -------------------------
-
     const payload = {
-
         reference_template_id: selectedTemplate.id,
-
         t_code: selectedTemplate.template_code,
-
         ts: new Date().toISOString(),
-
-        shift,
-
-        station,
-
+        shift, station,
         user_name: "guest-user-001",
-
-        data: {
-            ...formData,
-            ...calculated
-        }
-
+        data: {...formData,...calculated }
     };
 
-    console.log("INSERT PAYLOAD");
-    console.log(payload);
-
     try {
-
-        const { data, error } = await supabaseTemplates
-            .from("records")
-            .insert([payload])
-            .select();
-
-        if (error) {
-            console.error(error);
-            throw error;
-        }
-
-        console.log("Inserted:", data);
-
-        message = "✅ Saved Successfully";
-        messageType = "success";
-
-        // Reset form
-
+        const { error } = await supabaseTemplates.from("records").insert([payload]).select();
+        if (error) throw error;
+        message = "✅ Saved Successfully"; messageType = "success";
         const cleared: Record<string, any> = {};
-
         formFields.forEach(field => {
-            cleared[field.name] =
-                field.type === "number"
-                    ? Number(field.default_value) || 0
-                    : field.default_value || "";
+            cleared[field.name] = field.type === 'number'? Number(field.default_value) || 0 : field.default_value || "";
         });
-
         formData = cleared;
-
     } catch (err: any) {
-
-        console.error(err);
-
-        message = err.message || "Insert Failed";
-
-        messageType = "error";
-
+        message = err.message || "Insert Failed"; messageType = "error";
     } finally {
-
         loading = false;
-
-        setTimeout(() => {
-            message = "";
-        }, 3000);
-
+        setTimeout(() => message = "", 3000);
     }
 }
-
 </script>
 
 <div class="page">
   <div class="header">
-    <h1>📝 Universal Data Entry</h1>
+    <div class="brand">
+      <img src="/logo.png" alt="VP TIPS" width="42" height="42" class="logo-img" />
+      <div>
+        <h1>VP TIPS</h1>
+        <small>Tracking at Fingertips</small>
+      </div>
+    </div>
     <a href="/reports" class="btn-reports">📊 View Reports →</a>
   </div>
 
   <div class="card">
     <label for="template">Select Template</label>
+    {#if loadingTemplates}
+      <p>Loading templates...</p>
+    {:else}
     <select id="template" bind:value={selectedTemplateId}>
       <option value="">-- Select Template --</option>
       {#each templates as t}
         <option value={t.id}>{t.icon} {t.name} v{t.data?.version || 1}</option>
       {/each}
     </select>
+    {/if}
 
     {#if selectedTemplate}
       <div class="meta">
@@ -255,20 +179,15 @@
         <div>
           <label for="shift">Shift</label>
           <select id="shift" bind:value={shift}>
-            <option value="A">Shift A</option>
-            <option value="B">Shift B</option>
-            <option value="C">Shift C</option>
+            <option value="A">Shift A</option><option value="B">Shift B</option><option value="C">Shift C</option>
           </select>
         </div>
-
         {#if stationOptions.length > 0}
         <div>
           <label for="station">Station</label>
           <select id="station" bind:value={station} required>
             <option value="">-- Select Station --</option>
-            {#each stationOptions as s}
-              <option value={s}>{s}</option>
-            {/each}
+            {#each stationOptions as s}<option value={s}>{s}</option>{/each}
           </select>
         </div>
         {/if}
@@ -299,219 +218,37 @@
           <div class="computed-preview">
             <h4>Calculated Values</h4>
             {#each computedFields as field}
-              <div class="computed-row">
-                <span>{field.label}:</span>
-                <strong>{previewValues[field.name]?? 0}</strong>
-              </div>
+              <div class="computed-row"><span>{field.label}:</span><strong>{previewValues[field.name]?? 0}</strong></div>
             {/each}
           </div>
         {/if}
-
-        <button type="submit" disabled={loading ||!selectedTemplate} class="btn-submit">
-          {loading? 'Saving...' : 'Submit Data'}
-        </button>
+        <button type="submit" disabled={loading ||!selectedTemplate} class="btn-submit">{loading? 'Saving...' : 'Submit Data'}</button>
       </form>
     {/if}
-
     {#if message}<div class="alert {messageType}">{message}</div>{/if}
   </div>
 </div>
 
 <style>
-.page{
-    padding:20px;
-    background:#f8fafc;
-    min-height:calc(100vh - 60px);
-    font-family:system-ui,sans-serif;
-    box-sizing:border-box;
-}
-
-.header{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:12px;
-    margin-bottom:20px;
-    flex-wrap:wrap;
-}
-
-h1{
-    margin:0;
-    color:#1e293b;
-    font-size:28px;
-}
-
-.btn-reports{
-    background:#16a34a;
-    color:white;
-    padding:10px 16px;
-    border-radius:8px;
-    font-weight:600;
-    text-decoration:none;
-    white-space:nowrap;
-}
-
-.card{
-    background:white;
-    padding:24px;
-    border-radius:12px;
-    box-shadow:0 4px 12px rgba(0,0,0,.08);
-    max-width:850px;
-    width:100%;
-    margin:0 auto;
-    box-sizing:border-box;
-}
-
-label{
-    display:block;
-    margin-bottom:6px;
-    font-weight:600;
-    color:#374151;
-    font-size:14px;
-}
-
-select,
-input,
-textarea{
-    width:100%;
-    padding:10px;
-    border:2px solid #e5e7eb;
-    border-radius:8px;
-    font-size:14px;
-    margin-bottom:16px;
-    box-sizing:border-box;
-}
-
-textarea{
-    resize:vertical;
-}
-
-.grid-2{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:16px;
-}
-
-.meta{
-    background:#eff6ff;
-    padding:12px;
-    border-radius:8px;
-    margin:16px 0;
-    color:#1e40af;
-    font-size:14px;
-}
-
-.computed-preview{
-    background:#f0fdf4;
-    border:1px dashed #16a34a;
-    padding:12px;
-    border-radius:8px;
-    margin-bottom:16px;
-}
-
-.computed-row{
-    display:flex;
-    justify-content:space-between;
-    gap:10px;
-    font-size:14px;
-    margin:4px 0;
-    flex-wrap:wrap;
-}
-
-.btn-submit{
-    width:100%;
-    padding:12px;
-    border:none;
-    border-radius:8px;
-    background:#2563eb;
-    color:white;
-    font-weight:700;
-    font-size:16px;
-    cursor:pointer;
-}
-
-.btn-submit:disabled{
-    opacity:.5;
-    cursor:not-allowed;
-}
-
-.alert{
-    padding:12px;
-    border-radius:8px;
-    margin-top:16px;
-    text-align:center;
-    font-weight:600;
-}
-
-.alert.success{
-    background:#dcfce7;
-    color:#166534;
-}
-
-.alert.error{
-    background:#fee2e2;
-    color:#dc2626;
-}
-
-/* ---------- Tablet ---------- */
-
-@media (max-width:900px){
-
-    .page{
-        padding:16px;
-    }
-
-    .card{
-        padding:20px;
-    }
-
-}
-
-/* ---------- Mobile ---------- */
-
-@media (max-width:600px){
-
-    .page{
-        padding:10px;
-    }
-
-    h1{
-        font-size:22px;
-    }
-
-    .header{
-        flex-direction:column;
-        align-items:stretch;
-    }
-
-    .btn-reports{
-        width:100%;
-        text-align:center;
-    }
-
-    .card{
-        padding:16px;
-        border-radius:10px;
-    }
-
-    .grid-2{
-        grid-template-columns:1fr;
-    }
-
-    .computed-row{
-        flex-direction:column;
-        align-items:flex-start;
-    }
-
-    .btn-submit{
-        font-size:15px;
-    }
-
-    input,
-    select,
-    textarea{
-        font-size:16px;
-    }
-
-}
+.page{padding:20px;background:#f8fafc;min-height:100vh;font-family:system-ui,sans-serif;box-sizing:border-box;}
+.header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand h1{margin:0;color:#1e293b;font-size:24px;line-height:1;}
+.brand small{color:#64748b;font-size:12px;font-weight:600;letter-spacing:0.5px;}
+.logo-img{border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.12);}
+h1{margin:0;color:#1e293b;font-size:28px;}
+.btn-reports{background:#16a34a;color:white;padding:10px 16px;border-radius:8px;font-weight:600;text-decoration:none;white-space:nowrap;}
+.card{background:white;padding:24px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08);max-width:850px;width:100%;margin:0 auto;box-sizing:border-box;}
+label{display:block;margin-bottom:6px;font-weight:600;color:#374151;font-size:14px;}
+select,input,textarea{width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;margin-bottom:16px;box-sizing:border-box;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+.meta{background:#eff6ff;padding:12px;border-radius:8px;margin:16px 0;color:#1e40af;font-size:14px;}
+.computed-preview{background:#f0fdf4;border:1px dashed #16a34a;padding:12px;border-radius:8px;margin-bottom:16px;}
+.computed-row{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin:4px 0;flex-wrap:wrap;}
+.btn-submit{width:100%;padding:12px;border:none;border-radius:8px;background:#2563eb;color:white;font-weight:700;font-size:16px;cursor:pointer;}
+.btn-submit:disabled{opacity:.5;cursor:not-allowed;}
+.alert{padding:12px;border-radius:8px;margin-top:16px;text-align:center;font-weight:600;}
+.alert.success{background:#dcfce7;color:#166534;}
+.alert.error{background:#fee2e2;color:#dc2626;}
+@media (max-width:600px){.page{padding:10px;}.grid-2{grid-template-columns:1fr;}.header{flex-direction:column;align-items:stretch;}}
 </style>

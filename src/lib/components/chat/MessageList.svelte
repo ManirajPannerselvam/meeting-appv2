@@ -1,167 +1,155 @@
 <script lang="ts">
-  export let messages: any[] = [];
-  export let selectedContact: any = null;
-  export let selectedGroup: any = null;
-  export let currentUser: any = null;
-  export let selectedUser: any = null;
+  import dayjs from 'dayjs';
 
-  import { afterUpdate, createEventDispatcher } from "svelte";
-  const dispatch = createEventDispatcher();
-  let listEl: HTMLDivElement;
+  let {
+    messages = [],
+    selectedContact = null,
+    selectedGroup = null,
+    currentUserId = null,
+    currentUser = null,
+    selectedUser = null,
+    replyingTo = null,
+    onReply = () => {},
+    onDelete = () => {},
+    onForward = () => {},
+    onLongPress = () => {},
+    onPressEnd = () => {}
+  } = $props();
 
-  $: me = currentUser || selectedUser;
-  $: myId = me?.id || me?.userId || "";
-  let selectedMessages = new Set<string>();
-  let longPressTimer: any = null;
+  let uid = $derived(currentUserId || currentUser?.id || '');
 
-  function isMine(m: any){ return m.sender_id === myId; }
-  function getTime(t: string){ if(!t) return ""; return new Date(t).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }
-  function isSameSenderAsPrev(i: number){
-    if(i===0) return false;
-    const curr = messages[i]; const prev = messages[i-1];
-    if(curr.sender_id!== prev.sender_id) return false;
-    const diff = new Date(curr.created_at).getTime() - new Date(prev.created_at).getTime();
-    return diff < 120000;
+  let groupedMessages = $derived(
+    messages.reduce((acc:any, msg:any, idx:number) => {
+      const prev = messages[idx-1];
+      const isSameSender = prev && prev.sender_id === msg.sender_id;
+      const timeDiff = prev? dayjs(msg.created_at).diff(dayjs(prev.created_at), 'minute') : 10;
+      const groupedPrev = isSameSender && timeDiff < 2;
+      acc.push({...msg, groupedPrev, mine: msg.sender_id === uid });
+      return acc;
+    }, [])
+  );
+
+  function formatTime(ts:string){
+    return dayjs(ts).format('h:mm A');
   }
-  function isSameSenderAsNext(i: number){
-    if(i===messages.length-1) return false;
-    const curr = messages[i]; const next = messages[i+1];
-    if(curr.sender_id!== next.sender_id) return false;
-    const diff = new Date(next.created_at).getTime() - new Date(curr.created_at).getTime();
-    return diff < 120000;
-  }
-  function startPress(id: string){ clearTimeout(longPressTimer); longPressTimer = setTimeout(()=> toggleSelect(id), 500); }
-  function endPress(){ clearTimeout(longPressTimer); }
-  function toggleSelect(id: string){
-    if(selectedMessages.has(id)) selectedMessages.delete(id); else selectedMessages.add(id);
-    selectedMessages = new Set(selectedMessages);
-    dispatch("selectMessage", { id, selected: Array.from(selectedMessages) });
-    if(navigator.vibrate) navigator.vibrate(50);
-  }
-  function onClickMessage(id: string){ if(selectedMessages.size>0){ toggleSelect(id); return; } }
-  function parseTags(text: string){ if(!text) return ""; return text.replace(/@(\w+)/g, '<span class="mention">@$1</span>'); }
-  function onTagClick(e: any){ const target = e.target as HTMLElement; if(target.classList.contains('mention')){ dispatch("tagClick", { tag: target.innerText }); } }
 
-  function isTemplateContent(text:string){ return text?.includes('__TEMPLATE_DATA__'); }
+  function isTemplate(content:string){
+    if(!content) return false;
+    return content.includes('__TEMPLATE_DATA__') || content.includes('TEMPLATE_REPORT');
+  }
+
   function parseTemplate(content:string){
-    try{
-      if(!content?.includes('__TEMPLATE_DATA__')) return null;
-      const jsonStr = content.split('__TEMPLATE_DATA__')[1]?.trim();
-      return JSON.parse(jsonStr);
-    }catch{ return null; }
+    try {
+      if(content.includes('__TEMPLATE_DATA__')){
+        const jsonStr = content.split('__TEMPLATE_DATA__')[1]?.trim();
+        const parsed = JSON.parse(jsonStr);
+        return parsed;
+      }
+      return null;
+    } catch { return null; }
   }
-  function getDisplayText(content:string){ if(!content) return ""; return content.split('__TEMPLATE_DATA__')[0]?.trim() || content; }
-  function getValFromText(display:string, key:string){
-    if(!display) return '-';
-    const k1 = key.replace(/_/g, '[ _]');
-    const re = new RegExp(`${k1}\\s*:\\s*([^\\n•]+)`, 'i');
-    const m = display.match(re);
-    return m? m[1].trim() : '-';
+
+  function getTheme(code:string){
+    if(!code) return { bg:'#e6f0ff', border:'#c7dbff', title:'#0f172a' };
+    if(code.includes('PROD') || code.includes('PRO')) return { bg:'#e6f0ff', border:'#c7dbff', title:'#0f172a' };
+    if(code.includes('MAINT')) return { bg:'#fef3c7', border:'#fde68a', title:'#92400e' };
+    if(code.includes('QUAL')) return { bg:'#dcfce7', border:'#bbf7d0', title:'#166534' };
+    return { bg:'#e6f0ff', border:'#c7dbff', title:'#0f172a' };
   }
-  afterUpdate(()=>{ if(listEl) listEl.scrollTop = listEl.scrollHeight; });
+
+  function getYield(v:any){
+    const inp = Number(v?.input01 || 0);
+    const out = Number(v?.output01 || 0);
+    if(!inp) return '-';
+    return ((out / inp) * 100).toFixed(2) + '%';
+  }
 </script>
 
-<div class="message-list" bind:this={listEl}>
-  {#if messages.length === 0}
-    <div class="empty"><p>No messages yet</p><span>Say hello</span></div>
-  {:else}
-    {#each messages as m, i (m.id)}
-      {@const mine = isMine(m)}
-      {@const groupedPrev = isSameSenderAsPrev(i)}
-      {@const groupedNext = isSameSenderAsNext(i)}
-      {@const selected = selectedMessages.has(m.id)}
-      {@const isTpl = isTemplateContent(m.content)}
-      {@const tmpl = parseTemplate(m.content)}
-      {@const display = getDisplayText(m.content)}
+<div class="message-list">
+  {#each groupedMessages as m}
+    {@const tpl = isTemplate(m.content)? parseTemplate(m.content) : null}
+    {@const vals = tpl?.values || {}}
+    {@const theme = tpl? getTheme(tpl.template_code || tpl.template_name) : null}
 
-      <div class="msg-row" class:mine={mine} class:grouped-prev={groupedPrev} class:grouped-next={groupedNext} class:selected={selected}
-        on:mousedown={()=>startPress(m.id)} on:mouseup={endPress} on:mouseleave={endPress}
-        on:touchstart={()=>startPress(m.id)} on:touchend={endPress}
-        on:click={()=>onClickMessage(m.id)} role="button" tabindex="0"
-      >
-        {#if !groupedPrev}
-          {#if selectedGroup &&!mine}<div class="sender-name">{m.sender_name || 'User'}</div>{/if}
+    <div class="msg-row" class:mine={m.mine} class:grouped={m.groupedPrev}
+         role="button" tabindex="0"
+         oncontextmenu={(e)=>{ e.preventDefault(); onLongPress(m, e); }}
+         ontouchstart={(e)=>onLongPress(m, e)}
+         ontouchend={onPressEnd}
+         onmousedown={(e)=>onLongPress(m, e)}
+         onmouseup={onPressEnd}
+    >
+      {#if !m.groupedPrev}
+        {#if selectedGroup &&!m.mine}
+          <div class="sender-name">{m.sender_name || m.profiles?.name || 'User'}</div>
         {/if}
-        <div class="bubble-wrap">
-          {#if !mine && groupedPrev}<div class="thread-line"></div>{/if}
-          <div class="bubble" class:tail={!groupedNext} class:template-bubble={isTpl}>
-            {#if m.reply_to}
-              <div class="reply-box"><div class="reply-line"></div><div class="reply-text">{m.reply_to.content || 'Reply'}</div></div>
-            {/if}
+      {/if}
 
-            {#if isTpl}
-              {@const v = tmpl?.values || {}}
-              <div class="template-card">
-                <div class="tpl-title">📋 {tmpl?.template_name || 'Production Tracker'}</div>
-                <div class="tpl-rows">
-                  <div class="tpl-row"><span>Shift:</span><span>{v.shift || v.Shift || getValFromText(display,'Shift') || '-'}</span></div>
-                  <div class="tpl-row"><span>Station:</span><span>{v.station || v.Station || getValFromText(display,'Station') || '-'}</span></div>
-                  <div class="tpl-row"><span>Input:</span><span>{v.input01?? v.Input?? v.RAT_Input?? v['RAT Input']?? getValFromText(display,'Input')?? '-'}</span></div>
-                  <div class="tpl-row"><span>Output:</span><span>{v.output01?? v.Output?? v.RAT_Output?? v['RAT Output']?? getValFromText(display,'Output')?? '-'}</span></div>
-                  <div class="tpl-row"><span>Remark:</span><span>{v.remark01 || v.Remark || getValFromText(display,'Remark') || '-'}</span></div>
-                  {#if (v.input01 || v.Input) && (v.output01 || v.Output)}
-                    {@const inp = Number(v.input01 || v.Input || 0)}
-                    {@const out = Number(v.output01 || v.Output || 0)}
-                    {@const yld = inp > 0? ((out/inp)*100).toFixed(2) : '0'}
-                    <div class="tpl-row" style="border-top:1px solid #b9d2f5; margin-top:4px; padding-top:4px;"><span>Yield:</span><span>{yld}%</span></div>
-                  {:else}
-                    <div class="tpl-row"><span>Yield:</span><span>{v.RAT_Yield || getValFromText(display,'Yield') || '-'}</span></div>
-                  {/if}
-                </div>
-              </div>
-              <div class="tpl-footer">*{tmpl?.template_name}* `{v.station || v.Station || ''}` - Shift {v.shift || v.Shift || ''}</div>
-            {:else if m.content}
-              <div class="text" on:click={onTagClick} on:keydown={()=>{}} role="button" tabindex="-1">{@html parseTags(display)}</div>
-            {/if}
-            <div class="meta"><span class="time">{getTime(m.created_at)}</span>{#if mine}{#if m.status==='read'}<span class="ticks read">✓✓</span>{:else if m.status==='delivered'}<span class="ticks">✓✓</span>{:else}<span class="ticks single">✓</span>{/if}{/if}</div>
+      <div class="bubble" class:mine-bubble={m.mine} class:template-bubble={tpl}>
+
+        {#if tpl}
+          <!-- TEMPLATE CARD - YOUR SCREENSHOT STYLE -->
+          <div class="t-card" style="background:{theme.bg}; border: 1px solid {theme.border}">
+            <div class="t-header">
+              <span>📋</span>
+              <b style="color:{theme.title}">{tpl.template_name || 'Production Tracker'}</b>
+            </div>
+            <div class="t-body">
+              {#if vals.shift}<div class="t-row"><span>Shift:</span><b>{vals.shift}</b></div>{/if}
+              {#if vals.station}<div class="t-row"><span>Station:</span><b>{vals.station}</b></div>{/if}
+              <div class="t-row"><span>RAT Input:</span><b>{vals.input01?? '-'}</b></div>
+              <div class="t-row"><span>RAT Output:</span><b>{vals.output01?? '-'}</b></div>
+              <div class="t-row"><span>RAT Yield:</span><b>{vals.yield || getYield(vals)}</b></div>
+              {#if vals.remark01}<div class="t-row remark"><span>Remark:</span><b>{vals.remark01}</b></div>{/if}
+
+              <!-- Show all other values dynamically -->
+              {#each Object.entries(vals) as [k,v]}
+                {#if !['shift','station','input01','output01','yield','remark01'].includes(k)}
+                  <div class="t-row"><span>{k}:</span><b>{v || '-'}</b></div>
+                {/if}
+              {/each}
+            </div>
           </div>
+        {:else}
+          <div class="content">{m.content}</div>
+        {/if}
+
+        <div class="meta">
+          <span class="time">{formatTime(m.created_at)}</span>
+          {#if m.mine}<span class="tick">✓✓</span>{/if}
         </div>
       </div>
-    {/each}
-  {/if}
+    </div>
+  {/each}
 </div>
 
-{#if selectedMessages.size > 0}
-  <div class="action-bar">
-    <span>{selectedMessages.size} selected</span>
-    <button on:click={()=>{ dispatch("replyTo", { ids: Array.from(selectedMessages) }); selectedMessages=new Set(); }}>Reply</button>
-    <button on:click={()=>{ dispatch("forward", { ids: Array.from(selectedMessages) }); selectedMessages=new Set(); }}>Forward</button>
-    <button on:click={()=>selectedMessages=new Set()}>✕</button>
-  </div>
-{/if}
-
 <style>
-.message-list{ flex:1; overflow-y:auto; padding:20px 12px; background:#0b141a; position:relative; display:flex; flex-direction:column; }
-.empty{ text-align:center; color:#8696a0; margin-top:40%; }
-.msg-row{ display:flex; flex-direction:column; margin-bottom:2px; max-width:78%; position:relative; }
-.msg-row.mine{ align-self:flex-end; margin-left:auto; }
-.msg-row:not(.mine){ align-self:flex-start; }
-.msg-row.selected{ outline:2px solid #00a884; background:rgba(0,168,132,0.15); }
-.sender-name{ font-size:12px; color:#00a884; font-weight:600; margin-left:8px; margin-bottom:2px; }
-.bubble-wrap{ display:flex; position:relative; }
-.thread-line{ width:2px; background:#2a3942; margin:0 8px 0 18px; border-radius:2px; }
-.bubble{ background:#202c33; color:#e9edef; padding:8px 10px 5px; border-radius:18px; border-top-left-radius:0; position:relative; word-break:break-word; min-width:80px; }
-.mine.bubble{ background:#005c4b; border-radius:18px; border-top-right-radius:0; }
-.bubble.tail::after{ content:""; position:absolute; bottom:0; width:12px; height:12px; background:inherit; }
-.mine.bubble.tail::after{ right:-4px; clip-path:polygon(0 0, 0 100%, 100% 100%); }
-:not(.mine).bubble.tail::after{ left:-4px; clip-path:polygon(100% 0, 0 100%, 100% 100%); }
-.reply-box{ display:flex; gap:6px; background:rgba(0,0,0,0.2); border-radius:6px; padding:6px 8px; margin-bottom:6px; }
-.reply-line{ width:3px; background:#00a884; border-radius:2px; }
-.reply-text{ font-size:12px; color:#8696a0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px; }
-.text{ font-size:14.5px; line-height:19px; white-space:pre-wrap; }
-:global(.mention){ color:#53bdeb; font-weight:700; background:rgba(83,189,235,0.15); padding:0 4px; border-radius:4px; cursor:pointer; }
-.meta{ display:flex; justify-content:flex-end; gap:6px; margin-top:4px; }
+.message-list{ flex:1; overflow-y:auto; padding:12px 16px; display:flex; flex-direction:column; gap:2px; background:#0b141a; }
+.msg-row{ display:flex; flex-direction:column; max-width:75%; align-self:flex-start; margin-bottom:4px; outline:none; }
+.msg-row.mine{ align-self:flex-end; }
+.msg-row.grouped{ margin-top:-2px; }
+.sender-name{ font-size:12px; font-weight:600; color:#53bdeb; margin:4px 8px 2px; }
+.bubble{ background:#202c33; color:#e9edef; padding:6px 8px 6px 10px; border-radius:8px; border-top-left-radius:0; position:relative; box-shadow:0 1px 0.5px rgba(0,0,0,0.13); min-width:120px; }
+.mine-bubble{ background:#005c4b; border-radius:8px; border-top-right-radius:0; }
+.bubble.template-bubble{ background:#005c4b; padding:6px; }
+.bubble.template-bubble.mine-bubble{ background:#005c4b; }
+.content{ font-size:14.2px; line-height:19px; white-space:pre-wrap; word-break:break-word; }
+
+/* TEMPLATE CARD - EXACT SCREENSHOT */
+.t-card{ border-radius:12px; overflow:hidden; min-width:220px; max-width:300px; }
+.t-header{ display:flex; align-items:center; gap:6px; padding:10px 14px; border-bottom:1px solid rgba(0,0,0,0.08); background:rgba(255,255,255,0.65); }
+.t-header b{ font-size:14px; font-weight:800; }
+.t-body{ padding:10px 14px; display:flex; flex-direction:column; gap:7px; background:transparent; }
+.t-row{ display:flex; justify-content:space-between; align-items:center; gap:16px; }
+.t-row span{ font-size:13px; color:#334155; font-weight:400; }
+.t-row b{ font-size:13px; color:#0f172a; font-weight:700; text-align:right; max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.t-row.remark{ flex-direction:column; align-items:flex-start; gap:2px; margin-top:4px; padding-top:6px; border-top:1px dashed rgba(0,0,0,0.12); }
+.t-row.remark b{ text-align:left; max-width:100%; font-weight:500; white-space:normal; }
+
+.meta{ display:flex; justify-content:flex-end; align-items:center; gap:4px; margin-top:4px; }
+.template-bubble.meta{ padding:0 4px 2px 0; }
+.template-bubble.meta.time{ color:#d1d7db; }
 .time{ font-size:11px; color:#8696a0; }
-.ticks{ font-size:11px; color:#8696a0; }
-.ticks.read{ color:#53bdeb; }
-.action-bar{ position:absolute; bottom:70px; left:50%; transform:translateX(-50%); background:#233138; border:1px solid #2a3942; border-radius:24px; padding:8px 16px; display:flex; gap:12px; align-items:center; color:#e9edef; z-index:10; }
-.action-bar button{ background:#00a884; border:none; color:#111b21; padding:6px 12px; border-radius:16px; font-weight:600; cursor:pointer; font-size:12px; }
-.action-bar button:last-child{ background:#2a3942; color:#e9edef; }
-.template-bubble{ padding:4px!important; background:#005c4b!important; }
-.template-card{ background:#d7e8ff; border-radius:12px; border:1px solid #a8c6f0; overflow:hidden; min-width:230px; color:#111; }
-.tpl-title{ font-weight:800; text-align:center; padding:10px 8px; font-size:14px; border-bottom:1px solid #b9d2f5; }
-.tpl-rows{ padding:8px 12px; font-size:13px; line-height:24px; }
-.tpl-row{ display:flex; justify-content:space-between; gap:12px; }
-.tpl-row span:last-child{ font-weight:700; }
-.tpl-footer{ color:#e9edef; font-weight:700; padding:8px 4px 2px; font-size:14px; }
+.mine-bubble.time{ color:#8696a0; }
+.tick{ font-size:11px; color:#53bdeb; }
 </style>
