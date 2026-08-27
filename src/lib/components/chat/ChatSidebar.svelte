@@ -39,12 +39,20 @@
   let displayContacts = $derived.by(()=>{
     if(activeFilter==='Groups') return [];
     let list = [...filteredContacts];
+    // self on top
     let selfIdx = list.findIndex((c:any)=>c.isSelf);
     if(selfIdx>0){
       const self = list.splice(selfIdx,1)[0];
       list.unshift(self);
     }
-    if(selfIdx===-1){
+    // Unread filter
+    if(activeFilter==='Unread'){
+      list = list.filter((c:any)=> c.unread_count>0);
+    }
+    if(activeFilter==='Favorites'){
+      list = list.filter((c:any)=> c.isFavorite || c.isPinned);
+    }
+    if(selfIdx===-1 && activeFilter==='All'){
       list.sort((a:any,b:any)=>{
         if(a.isSelf) return -1;
         if(b.isSelf) return 1;
@@ -56,18 +64,21 @@
     return list;
   });
 
-  let displayGroups = $derived(activeFilter==='All' || activeFilter==='Groups'? filteredGroups : []);
+  let displayGroups = $derived.by(()=>{
+    if(activeFilter==='All') return filteredGroups;
+    if(activeFilter==='Groups') return filteredGroups;
+    if(activeFilter==='Unread') return filteredGroups.filter((g:any)=> g.unread_count>0);
+    return [];
+  });
 
   function getInitials(n:string){
     return n? n.trim().split(' ').map((x:string)=>x[0]).join('').toUpperCase().slice(0,2) : 'U';
   }
-
   function clickOutside(node: HTMLElement, cb: () => void) {
     const handle = (e: MouseEvent) => { if (!node.contains(e.target as Node)) setTimeout(cb, 10); };
     document.addEventListener('mousedown', handle, true);
     return { destroy() { document.removeEventListener('mousedown', handle, true); } };
   }
-
   function handleContactClick(c:any, e: MouseEvent){
     e.stopPropagation();
     if(showDeleteMenu) { showDeleteMenu = null; return; }
@@ -101,6 +112,8 @@
   }
   function triggerAvatarUpload(c:any, e: MouseEvent){
     e.stopPropagation();
+    // only self can change avatar
+    if(!c.isSelf) return;
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
@@ -153,9 +166,7 @@
     {/each}
   </div>
 
-  <div class="debug" style="padding:4px 12px; color:#8696a0; font-size:11px;">
-    Contacts: {contacts.length} | Showing: {displayContacts.length} | Groups: {groups.length}
-  </div>
+  <!-- removed debug line - it was causing extra space on mobile -->
 
   <div class="chat-list">
     {#each displayGroups as g (g.id)}
@@ -168,7 +179,7 @@
         onkeydown={(e)=>{ if(e.key==='Enter') onSelectGroup(g)}}>
         <div class="avatar group">👥</div>
         <div class="info">
-          <div class="top"><span class="name">{g.name}</span><span class="time">{g.last_time || 'Now'}</span></div>
+          <div class="top"><span class="name">{g.name}</span><span class="time">{g.last_time || ''}</span></div>
           <span class="sub">{g.last_message || 'Tap to open group'}</span>
         </div>
         {#if g.unread_count > 0}<div class="unread-badge">{g.unread_count}</div>{/if}
@@ -215,12 +226,11 @@
       <div class="no-chat">
         <div>🔍</div>
         <p>No chats found</p>
-        <span>Debug: contacts={contacts.length}, search='{search}', filter={activeFilter}</span>
         <button class="accept" style="margin-top:12px" onclick={()=>{search=''; activeFilter='All';}}>Clear filter</button>
       </div>
     {/if}
   </div>
-<div class="bottom-nav">
+  <div class="bottom-nav">
     <button class="b-nav-item active"><span>💬</span><span>Chats</span></button>
   </div>
 </div>
@@ -242,10 +252,11 @@
 .search-icon{ color:#8696a0; font-size:14px; }
 .search-box input{ background:transparent; border:none; color:#d1d7db; width:100%; outline:none; font-size:14px; }
 .search-box input::placeholder{ color:#8696a0; }
-.filters{ display:flex; gap:8px; padding:8px 12px; flex-shrink:0; overflow-x:auto; scrollbar-width:none; }
+.filters{ display:flex; gap:8px; padding:8px 12px; flex-shrink:0; overflow-x:auto; scrollbar-width:none; -webkit-overflow-scrolling:touch; white-space:nowrap; }
+.filters::-webkit-scrollbar{ display:none; }
 .filters button{ background:#182229; color:#8696a0; border:none; border-radius:18px; padding:6px 12px; font-size:13px; cursor:pointer; white-space:nowrap; flex-shrink:0; }
 .filters button.active{ background:#0a332c; color:#00a884; font-weight:600; }
-.chat-list{ flex:1; overflow-y:auto; }
+.chat-list{ flex:1; overflow-y:auto; padding-bottom:10px; }
 .chat-row{ display:flex; align-items:center; padding:0 12px; cursor:pointer; position:relative; }
 .chat-row:hover{ background:#202c33; }
 .chat-row.selected{ background:#2a3942; }
@@ -273,5 +284,9 @@
 .bottom-nav{ display:none; height:50px; background:#202c33; border-top:1px solid #2a3942; justify-content:space-around; align-items:center; flex-shrink:0; }
 .b-nav-item{ background:none; border:none; color:#8696a0; display:flex; flex-direction:column; align-items:center; gap:2px; font-size:10px; cursor:pointer; padding:4px 16px; }
 .b-nav-item.active{ color:#e9edef; }
-@media (max-width:768px){.sidebar{ max-width:100%; width:100vw; }.bottom-nav{ display:flex; } }
+@media (max-width:768px){
+ .sidebar{ max-width:100%; width:100vw; }
+ .filters{ padding:8px 10px; gap:6px; }
+ .bottom-nav{ display:flex; }
+}
 </style>
