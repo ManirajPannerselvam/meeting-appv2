@@ -49,8 +49,7 @@
 	let avatarType = $state<'contact'|'group'>('contact');
 	let avatarUploading = $state(false);
 	let avatarPreview = $state<string | null>(null);
-	let mutedRooms = $state<Set<string>>(new Set(browser? JSON.parse(localStorage.getItem('mutedRooms') || '[]') : []));
-
+	let mutedRooms = $state<Set<string>>(new Set<string>([]));
 	let chatMode = $state<'chat'|'template'|'meeting'>('chat');
 	let openMode = $state(false);
 	let openList = $state(false);
@@ -59,6 +58,7 @@
 		{id:'1', title:'Daily Standup', date:'Today 10 AM'},
 		{id:'2', title:'Client Call', date:'Tomorrow 2 PM'}
 	]);
+	let bottomTab = $state('chat');
 
 	function isTemplateMsg(m:any){ return m.content?.includes('__TEMPLATE_DATA__') || m.content?.startsWith('📋'); }
 	function isMeetingMsg(m:any){ return m.content?.includes('__MEETING_DATA__'); }
@@ -115,8 +115,22 @@
 	}
 
 	onMount(async () => {
-		if (!browser) return; checkMobile(); window.addEventListener('resize', checkMobile);
-		if(data?.user?.id){ currentUser = data.user; } else { const { data: { user } } = await chatDB.auth.getUser(); if(user) currentUser = user; }
+		if (!browser) return;
+		checkMobile();
+		window.addEventListener('resize', checkMobile);
+		try{ mutedRooms = new Set(JSON.parse(localStorage.getItem('mutedRooms') || '[]')); }catch{}
+		// SECURE + avatar fix
+		const { data: { user } } = await chatDB.auth.getUser();
+		if(user){
+			currentUser = {...(data?.user||{}),...user, avatar_url: user.user_metadata?.avatar_url || data?.user?.avatar_url || null };
+			// also fetch profile avatar
+			try{
+				const { data: prof } = await chatDB.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle();
+				if(prof?.avatar_url) currentUser = {...currentUser, avatar_url: prof.avatar_url};
+			}catch{}
+		} else if(data?.user?.id){
+			currentUser = data.user;
+		}
 		const uid = getCurrentUserId(); if(!uid) return;
 		await Promise.all([loadGroups(), loadContacts(), setupPresence(), loadTemplates()]);
 	});
@@ -136,6 +150,11 @@
 	}
 	function openAvatarModal(target: any, type: 'contact'|'group'){ avatarTarget = target; avatarType = type; avatarPreview = target?.avatar_url || null; showAvatarModal = true; }
 	async function onAvatarFileChange(e: any){
+		// 5. OTHER USER ONLY VIEW
+		if(avatarType==='contact' &&!avatarTarget?.isSelf){
+			alert("You can only view other user's photo");
+			return;
+		}
 		const file = e.target.files?.[0]; if(!file) return; if(file.size > 5*1024*1024){ alert("Max 5MB"); return; }
 		avatarPreview = URL.createObjectURL(file);
 		try{
@@ -144,7 +163,13 @@
 			const formData = new FormData(); formData.append('file', blob); formData.append('fileName', fileName);
 			const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData }); const json = await res.json();
 			if(!res.ok) throw new Error(json.error || 'Upload failed'); const publicUrl = json.url;
-			if(avatarType === 'contact'){ const realId = avatarTarget.actual_user_id || avatarTarget.id; if(!avatarTarget.isSelf) await chatDB.from('profiles').update({ avatar_url: publicUrl }).eq('id', realId); else await chatDB.from('profiles').update({ avatar_url: publicUrl }).eq('id', getCurrentUserId()); contacts = contacts.map(c=> c.id===avatarTarget.id? {...c, avatar_url: publicUrl} : c); if(selectedContact?.id === avatarTarget.id) selectedContact = {...selectedContact, avatar_url: publicUrl}; }
+			if(avatarType === 'contact'){
+				const realId = avatarTarget.actual_user_id || avatarTarget.id;
+				await chatDB.from('profiles').update({ avatar_url: publicUrl }).eq('id', realId);
+				contacts = contacts.map(c=> c.id===avatarTarget.id? {...c, avatar_url: publicUrl} : c);
+				if(selectedContact?.id === avatarTarget.id) selectedContact = {...selectedContact, avatar_url: publicUrl};
+				if(avatarTarget?.isSelf) currentUser = {...currentUser, avatar_url: publicUrl};
+			}
 			else { await chatDB.from('chat_groups').update({ avatar_url: publicUrl }).eq('id', avatarTarget.id); groups = groups.map(g=> g.id===avatarTarget.id? {...g, avatar_url: publicUrl} : g); if(selectedGroup?.id === avatarTarget.id) selectedGroup = {...selectedGroup, avatar_url: publicUrl}; }
 			showAvatarModal = false;
 		}catch(err:any){ alert("Upload failed: "+err.message); } finally{ avatarUploading = false; }
@@ -170,9 +195,10 @@
 	async function loadGroups() { const userId = getCurrentUserId(); if(!userId) return; const { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId); groups = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); }
 	async function loadContacts() {
 		const userId = getCurrentUserId(); if(!userId){ contacts = []; return; }
-		let mapped: any[] = [{ id: userId, name: "You (Saved Messages)", email: currentUser?.email || data?.user?.email || "You", avatar_url: null, room_id: null, status: 'accepted', isSelf: true, last_message: "Message yourself" }];
-		try{ const { data: rooms } = await chatDB.from("rooms").select("id, user1_id, user2_id").or(`user1_id.eq.${userId},user2_id.eq.${userId}`); if(rooms?.length){ for(const r of rooms){ const otherId = r.user1_id === userId? r.user2_id : r.user1_id; if(!otherId || otherId===userId) continue; if(mapped.find(m=>m.id===otherId)) continue; const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", otherId).maybeSingle(); mapped.push({ id: otherId, name: prof?.name || prof?.email?.split('@')[0] || "User", email: prof?.email || "", avatar_url: prof?.avatar_url || null, room_id: r.id, status: 'accepted', isSelf: false }); } } }catch(e){}
-		try{ const { data: sent } = await chatDB.from('contact_invites').select('id, email, status').eq('invited_by', userId).neq('status', 'accepted'); sent?.forEach((i:any)=>{ if(!mapped.find(c=>c.email?.toLowerCase()===i.email?.toLowerCase())){ mapped.push({ id:i.id, invite_id:i.id, email:i.email, name:i.email.split('@')[0], room_id:null, status:i.status }); } }); }catch{} contacts = mapped;
+		let mapped: any[] = [{ id: userId, actual_user_id: userId, name: "You (Saved Messages)", email: currentUser?.email || data?.user?.email || "You", avatar_url: currentUser?.avatar_url || null, room_id: null, status: 'accepted', isSelf: true, last_message: "Message yourself" }];
+		try{ const { data: rooms } = await chatDB.from("rooms").select("id, user1_id, user2_id").or(`user1_id.eq.${userId},user2_id.eq.${userId}`); if(rooms?.length){ for(const r of rooms){ const otherId = r.user1_id === userId? r.user2_id : r.user1_id; if(!otherId || otherId===userId) continue; if(mapped.find(m=>m.id===otherId)) continue; const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", otherId).maybeSingle(); mapped.push({ id: otherId, actual_user_id: otherId, name: prof?.name || prof?.email?.split('@')[0] || "User", email: prof?.email || "", avatar_url: prof?.avatar_url || null, room_id: r.id, status: 'accepted', isSelf: false, last_message: "Tap to chat" }); } } }catch(e){}
+		try{ const { data: sent } = await chatDB.from('contact_invites').select('id, email, status').eq('invited_by', userId).neq('status', 'accepted'); sent?.forEach((i:any)=>{ if(!mapped.find(c=>c.email?.toLowerCase()===i.email?.toLowerCase())){ mapped.push({ id:i.id, invite_id:i.id, email:i.email, name:i.email.split('@')[0], room_id:null, status:i.status, last_message: "Invited" }); } }); }catch{}
+		contacts = mapped;
 	}
 	async function setupPresence() { const userId = getCurrentUserId(); if(!userId) return; if(presenceChannel) await chatDB.removeChannel(presenceChannel); presenceChannel = chatDB.channel("online-users", { config: { presence: { key: userId } } }); presenceChannel.on("presence", { event: "sync" }, () => { onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); }).subscribe(async (s) => { if(s==="SUBSCRIBED") await presenceChannel!.track({ user_id: userId }); }); }
 	function isUserOnline(id: string){ return onlineUsers.has(id); }
@@ -227,32 +253,60 @@
 	async function handleInvite(event: any){ const { inviteId, action }=event.detail; await chatDB.from('contact_invites').update({status:action}).eq('id',inviteId); if(action==='accepted'){ const inv=contacts.find((c:any)=>c.id===inviteId); const oid=(inv as any)?.actual_user_id||(inv as any)?.invited_by; if(oid && oid!== getCurrentUserId()) await getOrCreateRoom(oid); } await loadContacts(); }
 	async function createContact(){ if(!contactEmail.trim()) return; invitingUser=true; try{ const email=contactEmail.trim().toLowerCase(); await chatDB.from('contact_invites').insert({email, invited_by:getCurrentUserId(), status:'pending', token:crypto.randomUUID()}); showContactForm=false; contactEmail=""; await loadContacts(); } finally{ invitingUser=false; } }
 	async function createGroup(){ if(!groupName.trim()) return; const { data: g }=await chatDB.from("chat_groups").insert({name:groupName.trim(), created_by:getCurrentUserId()}).select().single(); if(g){ await chatDB.from("chat_group_members").insert({group_id:g.id, user_id:getCurrentUserId()}); groupName=""; showGroupForm=false; await loadGroups(); } }
+	function goBottom(tab:string){
+		bottomTab=tab;
+		if(tab==='dashboard' && browser) window.location.href='/dashboard';
+		if(tab==='report' && browser) window.location.href='/reports';
+		if(tab==='user' && browser) window.location.href='/profile';
+	}
 </script>
 
 <div class="main-container" class:mobile-chat-open={isMobileView && (selectedContact || selectedGroup)}>
 	<div class="sidebar-wrapper" class:hidden-mobile={isMobileView && (selectedContact || selectedGroup)}>
-		<ChatSidebar {groups} {contacts} {selectedGroup} {selectedContact}
-		  onSelectContact={(c)=>{ selectedContact={...c}; selectedGroup=null; selectedGroupId=null; selectedRoomId=c.room_id||null; handleContactLoad(c); }}
-		  onSelectGroup={onSelectGroup}
-		  onNewGroup={() => showGroupForm=true}
-		  onNewContact={() => showContactForm=true}
-		  onHandleInvite={handleInvite}
-		  onLogout={async () => { await chatDB.auth.signOut(); if(browser) location.reload(); }}
-		/>
+		<div class="sidebar-scroll">
+			<ChatSidebar {groups} {contacts} {selectedGroup} {selectedContact}
+			  onSelectContact={(c)=>{ selectedContact={...c}; selectedGroup=null; selectedGroupId=null; selectedRoomId=c.room_id||null; handleContactLoad(c); }}
+			  onSelectGroup={onSelectGroup}
+			  onNewGroup={() => showGroupForm=true}
+			  onNewContact={() => showContactForm=true}
+			  onHandleInvite={handleInvite}
+			  onLogout={async () => { await chatDB.auth.signOut(); if(browser) location.reload(); }}
+			/>
+		</div>
+		<!-- 1. FIXED BOTTOM ITEM - MOBILE+DESKTOP WITH IMAGE+TEXT -->
+		<nav class="bottom-fixed">
+			<button class:active={bottomTab==='dashboard'} onclick={()=>goBottom('dashboard')}>
+				<span class="b-icon">📊</span><small>Dashboard</small>
+			</button>
+			<button class:active={bottomTab==='chat'} onclick={()=>goBottom('chat')}>
+				<span class="b-icon">💬</span><small>Chat</small>
+			</button>
+			<button class:active={bottomTab==='report'} onclick={()=>goBottom('report')}>
+				<span class="b-icon">📋</span><small>Report</small>
+			</button>
+			<button class:active={bottomTab==='user'} onclick={()=>goBottom('user')}>
+				{#if currentUser?.avatar_url}<img src={currentUser.avatar_url} class="b-avatar" alt="me" />{:else}<span class="b-icon">👤</span>{/if}
+				<small>User</small>
+			</button>
+		</nav>
 	</div>
+
 	<section class="chat-area" class:show-mobile={isMobileView && (selectedContact || selectedGroup)}>
 		{#if selectedContact || selectedGroup}
-			<ChatHeader
-				title={selectedContact?.name?? selectedGroup?.name?? ''}
-				subtitle={selectedContact? (isUserOnline(selectedContact?.actual_user_id||selectedContact?.id)? "Online" : mutedRooms.has(selectedRoomId||selectedGroupId||selectedContact?.id||'')? "Muted" : "Tap for photo") : `${groupMembers.length} members`}
-				avatarUrl={selectedContact?.avatar_url?? selectedGroup?.avatar_url?? ''}
-				showBack={isMobileView}
-				isGroup={!!selectedGroup}
-				onBack={handleBackToList}
-				onAction={handleHeaderAction}
-			/>
+			<div class="chat-header-fixed">
+				<ChatHeader
+					title={selectedContact?.name?? selectedGroup?.name?? ''}
+					subtitle={selectedContact? (isUserOnline(selectedContact?.actual_user_id||selectedContact?.id)? "Online" : mutedRooms.has(selectedRoomId||selectedGroupId||selectedContact?.id||'')? "Muted" : "Tap for photo") : `${groupMembers.length} members`}
+					avatarUrl={selectedContact?.avatar_url?? selectedGroup?.avatar_url?? ''}
+					showBack={isMobileView}
+					isGroup={!!selectedGroup}
+					onBack={handleBackToList}
+					onAction={handleHeaderAction}
+				/>
+			</div>
 
-			<div class="top-mode-bar">
+			<!-- 4. FILTER AREA REDUCED - 2 LINE ON MOBILE -->
+			<div class="filter-fixed">
 			  <div class="mode-row">
 			    <div class="dd-wrap" use:clickOutside={()=>openMode=false}>
 			      <button class="mode-btn" onclick={(e)=>{e.stopPropagation(); openMode=!openMode}}>
@@ -292,9 +346,17 @@
 
 			<div class="filter-info">Showing: {chatMode}{selectedTemplate? ` - ${selectedTemplate.name}`:''} | {filteredMessages.length}/{messages.length} msgs</div>
 
-			<MessageList messages={filteredMessages} {selectedContact} {selectedGroup} currentUser={currentUser} selectedUser={currentUser} {replyingTo} onReply={handleReply} onForward={handleForward} onLongPress={handleMessageLongPress} onPressEnd={handleMessagePressEnd} onOpenDetail={handleOpenDetail} />
+			<!-- MESSAGES SCROLL -->
+			<div class="messages-scroll">
+				<MessageList messages={filteredMessages} {selectedContact} {selectedGroup} currentUser={currentUser} selectedUser={currentUser} {replyingTo} onReply={handleReply} onForward={handleForward} onLongPress={handleMessageLongPress} onPressEnd={handleMessagePressEnd} onOpenDetail={handleOpenDetail} />
+			</div>
+
 			{#if replyingTo}<div class="reply-preview"><span>Replying to: {replyingTo.content?.slice(0,50)}...</span><button onclick={()=>replyingTo=null}>✕</button></div>{/if}
-			{#if chatMode==='chat'}<ChatInput {uploadingFiles} onSendMessage={sendMessage} onOpenTemplate={onOpenTemplate} />{/if}
+			
+			<!-- 2. INPUT FIXED ALWAYS VISIBLE -->
+			<div class="chat-input-fixed">
+				{#if chatMode==='chat'}<ChatInput {uploadingFiles} onSendMessage={sendMessage} onOpenTemplate={onOpenTemplate} />{/if}
+			</div>
 
 		{:else}
 			<div class="empty-area"><div class="empty-icon">💬</div><h2>Chat</h2><p>Select a chat to start messaging</p></div>
@@ -303,8 +365,25 @@
 </div>
 
 {#if showAvatarModal}
-<div class="modal-bg" role="presentation"><button type="button" class="modal-bg-btn" onclick={()=>showAvatarModal=false}></button><div class="modal" role="dialog" tabindex="-1"><h3>{avatarType==='group'? 'Group Photo' : 'Contact Photo'}</h3><div style="display:flex;flex-direction:column;align-items:center;gap:12px;"><img src={avatarPreview || 'https://via.placeholder.com/128'} alt="preview" style="width:128px;height:128px;border-radius:50%;object-fit:cover;border:3px solid #00a884;" />{#if avatarUploading}<span style="color:#00a884;">Uploading...</span>{/if}</div><div class="modal-btns"><button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button><label class="btn-primary" style="text-align:center;cursor:pointer;">Choose<input type="file" accept="image/*" hidden onchange={onAvatarFileChange} /></label></div></div></div>
+<div class="modal-bg" role="presentation"><button type="button" class="modal-bg-btn" onclick={()=>showAvatarModal=false}></button>
+<div class="modal" role="dialog" tabindex="-1">
+<h3>{avatarType==='group'? 'Group Photo' : avatarTarget?.isSelf? 'Your Photo' : 'Contact Photo'}</h3>
+<div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+<img src={avatarPreview || 'https://via.placeholder.com/128'} alt="preview" style="width:128px;height:128px;border-radius:50%;object-fit:cover;border:3px solid #00a884;" />
+{#if avatarUploading}<span style="color:#00a884;">Uploading...</span>{/if}
+{#if avatarType==='contact' &&!avatarTarget?.isSelf}<small style="color:#8696a0;">View only - cannot edit other user</small>{/if}
+</div>
+<div class="modal-btns">
+<button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button>
+<!-- 5. ONLY SELF CAN CHANGE -->
+{#if avatarType==='group' || avatarTarget?.isSelf}
+<label class="btn-primary" style="text-align:center;cursor:pointer;">Choose<input type="file" accept="image/*" hidden onchange={onAvatarFileChange} /></label>
 {/if}
+</div>
+</div>
+</div>
+{/if}
+
 {#if showMessageOptions && selectedMessageForOptions}
 	<button class="message-options-overlay" onclick={()=>showMessageOptions=false}></button><div class="message-options" style="left:{messageOptionsPos.x}px; top:{messageOptionsPos.y}px;" use:clickOutside={()=>showMessageOptions=false}><button onclick={()=>handleReply(selectedMessageForOptions)}>↩️ Reply</button><button onclick={()=>handleForward(selectedMessageForOptions)}>➡️ Forward</button><button onclick={()=>{ if(browser){ navigator.clipboard.writeText(selectedMessageForOptions.content); } showMessageOptions=false; }}>📋 Copy</button></div>
 {/if}
@@ -316,12 +395,44 @@
 {#if showDetailModal && detailData}<div class="detail-bg" role="presentation"><button type="button" class="modal-bg-btn" onclick={()=>showDetailModal=false}></button><div class="detail-modal" role="dialog" tabindex="-1"><div class="detail-header"><h3>📋 {detailData.template_name}</h3><button class="detail-close" onclick={()=>showDetailModal=false}>✕</button></div><div class="detail-body">{#each Object.entries(detailData.values) as [k,v]}<div class="detail-row"><span class="d-label">{k.replace(/_/g,' ')}</span><b class="d-value">{String(v||'-')}</b></div>{/each}</div><div class="detail-actions"><button class="btn-secondary" onclick={()=>showDetailModal=false}>Close</button></div></div></div>{/if}
 
 <style>
-	.main-container{display:flex;height:100vh;width:100vw;background:#111b21;overflow:hidden;font-family:Inter,Segoe UI,sans-serif;}
-	.sidebar-wrapper{width:30%;min-width:300px;max-width:420px;display:flex;flex-direction:column;border-right:1px solid #222d34;}
-	.chat-area{flex:1;display:flex;flex-direction:column;background:#0b141a;min-width:0;}
+	/* 3. FIX HEIGHT - NOT MOVABLE */
+	.main-container{display:flex;height:100dvh;max-height:100dvh;width:100vw;background:#111b21;overflow:hidden;font-family:Inter,Segoe UI,sans-serif;}
+	.sidebar-wrapper{width:30%;min-width:300px;max-width:420px;display:flex;flex-direction:column;border-right:1px solid #222d34;background:#111b21;overflow:hidden;height:100dvh;max-height:100dvh;}
+	.sidebar-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;}
+	/* 1. BOTTOM FIXED - DESKTOP + MOBILE */
+	.bottom-fixed{flex-shrink:0;height:68px;min-height:68px;background:#202c33;border-top:1px solid #2a3942;display:flex;justify-content:space-around;align-items:center;z-index:20;padding-bottom:env(safe-area-inset-bottom);}
+	.bottom-fixed button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#8696a0;cursor:pointer;flex:1;padding:6px;}
+	.bottom-fixed button.active{color:#00a884;}
+	.b-icon{font-size:20px;line-height:1;}
+	.b-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid #00a884;}
+	.bottom-fixed small{font-size:11px;font-weight:600;}
+
+	.chat-area{flex:1;display:flex;flex-direction:column;background:#0b141a;min-width:0;height:100dvh;max-height:100dvh;overflow:hidden;}
+	.chat-header-fixed{flex-shrink:0;z-index:10;}
+	.filter-fixed{flex-shrink:0;background:#f0f2f5;border-bottom:1px solid #d1d7db;padding:6px 10px;z-index:9;}
+	.mode-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+	.dd-wrap{position:relative;}
+	.mode-btn{background:white;border:1px solid #d1d7db;padding:6px 10px;border-radius:6px;display:flex;gap:6px;align-items:center;cursor:pointer;font-size:12px;white-space:nowrap;}
+	.list-btn{background:white;border:1px solid #d1d7db;padding:6px 10px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;font-size:12px;min-width:180px;max-width:260px;}
+	.cut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;text-align:left;}
+	.second{flex:1;min-width:150px;}
+	.arr{color:#667781;font-size:10px;}
+	.dd{position:absolute;left:0;top:38px;background:white;border:1px solid #d1d7db;border-radius:10px;z-index:300;min-width:220px;max-height:280px;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,0.15);}
+	.dd2{width:100%;min-width:100%;}
+	.dd button{width:100%;border:none;background:transparent;padding:8px 10px;text-align:left;display:flex;flex-direction:column;gap:2px;cursor:pointer;border-bottom:1px solid #f5f5f5;}
+	.dd button:hover{background:#f0f2f5;}.dd button.active{background:#e7fce3;}
+	.dd b{font-size:13px;color:#111b21;}.dd small{font-size:11px;color:#667781;}
+	.empty{padding:12px;font-size:13px;color:#667781;}
+	.use-btn{background:#00a884;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;}
+	.filter-info{font-size:10px;color:#8696a0;padding:3px 12px;background:#202c33;flex-shrink:0;}
+
+	/* 2. INPUT + MESSAGES FIXED HEIGHT */
+	.messages-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;}
+	.chat-input-fixed{flex-shrink:0;background:#202c33;z-index:10;}
+
 	.empty-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#222e35;color:#8696a0;gap:8px;}
 	.empty-icon{font-size:64px;opacity:0.5;}.empty-area h2{color:#e9edef;font-size:32px;font-weight:300;margin:10px 0 0;}
-	.reply-preview{display:flex;justify-content:space-between;align-items:center;background:#202c33;padding:8px 12px;border-left:4px solid #00a884;color:#8696a0;font-size:13px;}
+	.reply-preview{display:flex;justify-content:space-between;align-items:center;background:#202c33;padding:8px 12px;border-left:4px solid #00a884;color:#8696a0;font-size:13px;flex-shrink:0;}
 	.reply-preview button{background:none;border:none;color:#8696a0;cursor:pointer;font-size:16px;}
 	.message-options-overlay{position:fixed;inset:0;z-index:1000;background:transparent;border:none;}
 	.message-options{position:fixed;z-index:1001;background:#233138;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.5);display:flex;flex-direction:column;overflow:hidden;min-width:160px;}
@@ -340,21 +451,16 @@
 	.detail-row{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fafc;border-radius:10px;}
 	.d-label{text-transform:capitalize;color:#64748b;font-size:13px;font-weight:600;}.d-value{color:#0f172a;font-size:13px;font-weight:700;}
 	.detail-actions{padding:14px 20px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;}
-	.top-mode-bar{background:#f0f2f5; border-bottom:1px solid #d1d7db; padding:8px 10px;}
-	.mode-row{display:flex; gap:8px; align-items:center;}
-	.dd-wrap{position:relative;}
-	.mode-btn{background:white; border:1px solid #d1d7db; padding:8px 12px; border-radius:8px; display:flex; gap:6px; align-items:center; cursor:pointer; font-size:13px; min-width:120px;}
-	.list-btn{background:white; border:1px solid #d1d7db; padding:8px 12px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; gap:12px; cursor:pointer; font-size:13px; min-width:220px; max-width:280px;}
-	.cut{white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; text-align:left;}
-	.second{flex:1;}
-	.arr{color:#667781; font-size:10px;}
-	.dd{position:absolute; left:0; top:42px; background:white; border:1px solid #d1d7db; border-radius:10px; z-index:300; min-width:240px; max-height:300px; overflow:auto; box-shadow:0 10px 30px rgba(0,0,0,0.15);}
-	.dd2{width:100%; min-width:100%;}
-	.dd button{width:100%; border:none; background:transparent; padding:10px 12px; text-align:left; display:flex; flex-direction:column; gap:2px; cursor:pointer; border-bottom:1px solid #f5f5f5;}
-	.dd button:hover{background:#f0f2f5;}.dd button.active{background:#e7fce3;}
-	.dd b{font-size:13px; color:#111b21;}.dd small{font-size:11px; color:#667781;}
-	.empty{padding:12px; font-size:13px; color:#667781;}
-	.use-btn{background:#00a884; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer;}
-	.filter-info{font-size:11px; color:#8696a0; padding:2px 12px; background:#202c33;}
-	@media (max-width:768px){.sidebar-wrapper{width:100%;max-width:100%;}.sidebar-wrapper.hidden-mobile{display:none;}.chat-area{display:none;}.chat-area.show-mobile{display:flex;position:fixed;inset:0;z-index:10;width:100vw;height:100vh;}.mode-row{flex-direction:column; align-items:stretch;}.list-btn{max-width:100%;}}
+
+	@media (max-width:768px){
+		.sidebar-wrapper{width:100%;max-width:100%;}
+		.sidebar-wrapper.hidden-mobile{display:none;}
+		.chat-area{display:none;}
+		.chat-area.show-mobile{display:flex;position:fixed;inset:0;z-index:50;width:100vw;height:100dvh;max-height:100dvh;}
+		/* 4. 2 LINE ON MOBILE */
+		.mode-row{flex-direction:column;align-items:stretch;gap:6px;}
+		.list-btn{max-width:100%;min-width:100%;}
+		.second{width:100%;}
+		.filter-fixed{padding:5px 8px;}
+	}
 </style>

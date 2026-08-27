@@ -1,437 +1,176 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { browser } from '$app/environment';
-  import { supabaseTemplates, supabaseChat } from "$lib/supabase";
+  import { supabaseTemplates } from "$lib/supabase";
   import dayjs from 'dayjs';
-  import type { Template, TemplateField } from '$lib/types';
-  import type { Chart } from 'chart.js';
-  import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerModal.svelte';
 
-  let templates: Template[] = $state([]);
-  let selectedTemplateId: string = $state('');
+  let templates: any[] = $state([]);
+  let selectedTemplateId = $state('');
   let selectedTemplate = $derived(templates.find(t => t.id === selectedTemplateId) || null);
-
-  let startDate = $state(dayjs().subtract(7, 'day').format('YYYY-MM-DD'));
-  let endDate = $state(dayjs().format('YYYY-MM-DD'));
-  let selectedShift: string = $state('All');
-  let selectedStations: string[] = $state([]);
-
+  let dateRange = $state({ from: '2026-07-28', to: '2026-08-27' });
+  let showCalendar = $state(false);
   let records: any[] = $state([]);
   let loading = $state(false);
   let error = $state("");
+  let showMoreRows = $state(false);
+  let displayRows = $derived(showMoreRows? records : records.slice(0,3));
+  let ChartJS: any = null;
+  let chartMap: Map<any, any> = new Map();
+  let nextId = $state(2);
+  let analysisSets: any[] = $state([{id:1, x:'station', y:'input01', label:'Set 1', stationFilter: [] as string[], chartType:'line'}]);
 
-  let contacts: any[] = $state([]);
-  let groups: any[] = $state([]);
-  let selectedContactId: string = $state('All');
-  let selectedGroupId: string = $state('All');
-  let chatMessages: any[] = $state([]);
-  let reportType: 'template' | 'chat' = $state('template');
+  let allFields = $derived(normalizeFields(selectedTemplate));
+  let availableStations = $derived(allFields.find((f:any) => (f.field_name||f.name).toLowerCase() === 'station')?.options || []);
+  let numericFields = $derived(allFields.filter((f:any) => f.field_name.toLowerCase().includes('input') || f.field_name.toLowerCase().includes('output') || f.field_type==="number"));
+  let xOptions = $derived([{name:'station', label:'Station'}, {name:'shift', label:'Shift'}, {name:'ts', label:'Time'},...allFields.map((f:any)=>({name:f.field_name, label:f.label}))]);
+  let yOptions = $derived(numericFields.length>0? numericFields.map((f:any)=>({name:f.field_name, label:f.label})) : [{name:'input01', label:'input01'}, {name:'output01', label:'output01'}]);
 
-  let xField = $state("station");
-  let yField = $state("");
-  let chartType: 'bar' | 'line' | 'pie' | 'doughnut' = $state('line');
-  let chartCanvas: HTMLCanvasElement;
-  let chart: Chart | null = null;
-  let ChartJS: typeof import('chart.js').Chart | null = null;
-
-  let availableStations = $derived(
-    normalizeFields(selectedTemplate).find(f => f.name.toLowerCase() === 'station')?.options || []
-  );
-  let numericFields = $derived(
-    normalizeFields(selectedTemplate).filter(f => f.field_type === "number" || f.field_type === "formula")
-  );
-
-  function normalizeFields(template: Template | null): TemplateField[] {
-    if (!template) return [];
-    return (template.data?.fields || []).map((f: any) => ({
-     ...f,
-        name: f.field_name?? f.name?? f._key,
-        field_name: f.field_name?? f.name?? f._key,
-        label: f.label?? f.field_name,
-        type: f.field_type?? f.type,
-        field_type: f.field_type?? f.type,
-        options: typeof f.options === "string"? JSON.parse(f.options || "[]") : (f.options || []),
-        formula: f.formula?? "",
-        required: f.required?? false
-    }));
-  }
-
-  function getFieldLabel(name: string): string {
-    const f = normalizeFields(selectedTemplate).find(f => f.name === name);
-    return f?.label || name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-  }
-
-  function evaluateFormula(formula: string, data: Record<string, any>): string {
-    if (!formula) return "0.00";
-    let expr = formula;
-    Object.keys(data).forEach(key => {
-        const value = Number(data[key]) || 0;
-        expr = expr.replaceAll(`{${key}}`, value.toString());
-    });
-    try {
-        const fn = new Function(`"use strict"; return (${expr})`);
-        const result = Number(fn());
-        return Number.isFinite(result)? result.toFixed(2) : "0.00";
-    } catch { return "0.00"; }
-  }
+  function normalizeFields(t:any){ if(!t) return []; return (t.data?.fields||[]).map((f:any)=>({field_name:f.field_name??f.name??f._key,label:f.label??f.field_name??f.name,field_type:f.field_type??f.type,name:f.field_name??f.name,options: typeof f.options==="string"? JSON.parse(f.options||"[]") : f.options||[]})) }
+  function getLabel(n:string){ const f=allFields.find((f:any)=>f.field_name===n); return f?.label||n; }
+  function getVal(row:any,key:string){ if(!row||!key) return ""; if(row[key]!==undefined&&row[key]!==""&&row[key]!==null) return row[key]; if(row.data?.[key]!==undefined) return row.data[key]; const lk=key.toLowerCase(); for(let k of Object.keys(row)){ if(k.toLowerCase()===lk) return row[k]; } if(row.data){ const found=Object.keys(row.data).find(k=>k.toLowerCase()===lk||k.toLowerCase().includes(lk)); if(found) return row.data[found]; } return ""; }
+  function getNum(row:any,key:string){ const v=getVal(row,key); const n=parseFloat(String(v)); return isNaN(n)?0:n; }
 
   onMount(async () => {
-    if (browser) {
-      const chartjs = await import('chart.js/auto');
-      await import('chartjs-adapter-dayjs-4');
-      ChartJS = chartjs.Chart;
+    if (browser) { const c = await import('chart.js/auto'); ChartJS=c.Chart; }
+    const { data } = await supabaseTemplates.from('templates').select('*').order('name');
+    templates = data||[];
+    if(templates.length>0){
+      const prod = templates.find(t=>t.name.toLowerCase().includes('production')) || templates[0];
+      selectedTemplateId=prod.id;
+      const inp = normalizeFields(prod).find((f:any)=>f.field_name.toLowerCase().includes('input'));
+      if(inp) analysisSets[0].y = inp.field_name;
     }
-    const { data, error: fetchErr } = await supabaseTemplates.from('templates').select('*').order('name');
-    if (fetchErr) error = "Failed to fetch templates: " + fetchErr.message;
-    else {
-      templates = data || [];
-      if (templates.length > 0) {
-        selectedTemplateId = templates[0].id;
-        const numeric = normalizeFields(templates[0]).filter(f => f.field_type === 'number' || f.field_type === 'formula');
-        if (numeric.length > 0) yField = numeric[0].name;
-      }
-    }
-    await loadContactsAndGroups();
+    loadRecords();
   });
 
-  async function loadContactsAndGroups(){
+  async function loadRecords(){
+    if(!selectedTemplate) return;
+    loading=true; error="";
     try{
-      const { data: rooms } = await supabaseChat.from("rooms").select(`id, user1_id, user2_id, user1:profiles!rooms_user1_fkey(id,name,email), user2:profiles!rooms_user2_fkey(id,name,email)`);
-      let mappedContacts: any[] = [];
-      (rooms||[]).forEach((r:any)=>{
-        if(r.user1) mappedContacts.push({ id: r.user1_id, name: r.user1.name || r.user1.email, email: r.user1.email, room_id: r.id });
-        if(r.user2) mappedContacts.push({ id: r.user2_id, name: r.user2.name || r.user2.email, email: r.user2.email, room_id: r.id });
+      const t_code = selectedTemplate?.template_code?.trim();
+      let q = supabaseTemplates.from("records").select("*").eq("t_code", t_code).gte("ts", dayjs(dateRange.from).startOf("day").toISOString()).lte("ts", dayjs(dateRange.to).endOf("day").toISOString()).order("ts",{ascending:true}).limit(2000);
+      const { data, error: dErr } = await q;
+      if(dErr) throw dErr;
+      if(!data || data.length===0){ error=`No records`; records=[]; return; }
+      records=data.map((r:any)=> ({...r,...(r.data||{})}));
+      await tick(); setTimeout(()=>{ renderAll(); }, 600);
+    }catch(e:any){ error=e.message; } finally{ loading=false; }
+  }
+
+  async function renderAll(){
+    await tick();
+    if(!ChartJS || records.length===0) return;
+    for(const set of analysisSets){
+      const canvas = document.getElementById(`chart-${set.id}`) as HTMLCanvasElement;
+      if(!canvas) continue;
+      let filtered = records;
+      if(set.stationFilter?.length>0) filtered = records.filter(r=> set.stationFilter.includes(String(getVal(r,'station')||'').trim()));
+      const grouped: Record<string, {vals:number[], ts:number}> = {};
+      filtered.forEach(row=>{
+        let xv = set.x==='ts'? dayjs(row.ts).format('MM/DD HH:mm') : String(getVal(row,set.x)||'Unknown').trim();
+        let yv = getNum(row,set.y);
+        if(!grouped[xv]) grouped[xv]={vals:[], ts:new Date(row.ts).getTime()};
+        grouped[xv].vals.push(yv);
       });
-      const unique = new Map();
-      mappedContacts.forEach(c=>{ if(!unique.has(c.id)) unique.set(c.id, c); });
-      contacts = Array.from(unique.values());
-      const { data: grp } = await supabaseChat.from("chat_groups").select("id,name");
-      groups = grp || [];
-    }catch(e){ console.log("contact load error", e); }
-  }
-
-  // Auto-load when filter changes
-  $effect(()=>{
-    if(selectedTemplateId && startDate && endDate){
-      // trigger load but avoid loop
-      if(reportType==='template') loadRecords();
-    }
-  });
-
-  async function loadRecords() {
-    if (!selectedTemplate && reportType==='template') return;
-    loading = true;
-    error = "";
-    try {
-        if(reportType==='chat'){
-          await loadChatReport();
-          return;
-        }
-        const t_code = selectedTemplate?.template_code?.trim();
-        let query = supabaseTemplates.from("records").select("*")
-        .eq("t_code", t_code)
-        .gte("ts", dayjs(startDate).startOf("day").toISOString())
-        .lte("ts", dayjs(endDate).endOf("day").toISOString());
-        if(selectedShift!=='All') query = query.ilike("shift", selectedShift.trim());
-        if (selectedStations.length > 0) query = query.in("station", selectedStations);
-        if(selectedContactId!=='All') query = query.eq("created_by", selectedContactId);
-
-        const { data, error: dbError } = await query.order("ts", { ascending: true });
-        if (dbError) throw dbError;
-        if (!data || data.length === 0) {
-            error = `No records found for ${selectedTemplate?.name}. Try All shifts / All stations.`;
-            records = [];
-            return;
-        }
-        const templateFields = normalizeFields(selectedTemplate);
-        records = (data || []).map(r => {
-            const rowData = { station: r.station, shift: r.shift, ts: r.ts,...(r.data || {}) };
-            templateFields.filter(f => f.field_type === "formula" && f.formula).forEach(f => {
-                    const key = f.field_name?? f.name;
-                    rowData[key] = evaluateFormula(f.formula, rowData);
-                });
-            return {...r,...rowData };
-        });
-        if (records.length > 0 && browser) setTimeout(generateChart, 100);
-    } catch (err: any) {
-        error = err.message;
-        records = [];
-    } finally {
-        loading = false;
+      let entries = Object.entries(grouped);
+      if(set.x==='ts') entries.sort((a,b)=> a[1].ts - b[1].ts); else entries.sort((a,b)=>a[0].localeCompare(b[0]));
+      const labels = entries.map(e=>e[0]); const values = entries.map(e=> e[1].vals.reduce((a,b)=>a+b,0)/(e[1].vals.length||1));
+      const old = chartMap.get(set.id); if(old) old.destroy();
+      const ctx = canvas.getContext('2d'); if(!ctx) continue;
+      const color = ['#2563eb','#00a884','#f59e0b','#ef4444','#8b5cf6'][(set.id-1)%5];
+      const chart = new ChartJS(ctx,{ type: set.chartType==='trend'?'line':set.chartType, data:{ labels: labels.length?labels:['No Data'], datasets:[{ label:`${getLabel(set.y)}`, data: values.length?values:[0], borderColor:color, backgroundColor:color+'33', borderWidth:3, tension:0.4, fill:true, pointRadius:5 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:true}, title:{display:true, text:`${set.label} → X:${getLabel(set.x)} | Y:${getLabel(set.y)} | [${set.stationFilter.join(',')||'All'}] (${filtered.length})`} }, scales:{ x:{title:{display:true, text:`X: ${getLabel(set.x)}`}}, y:{title:{display:true, text:`Y: ${getLabel(set.y)}`}, beginAtZero:true} } } });
+      chartMap.set(set.id, chart);
     }
   }
-
-  async function loadChatReport(){
-    try{
-      let query = supabaseChat.from("messages").select("*, sender:profiles!messages_sender_id_fkey(name,email)").gte("created_at", dayjs(startDate).startOf("day").toISOString()).lte("created_at", dayjs(endDate).endOf("day").toISOString()).order("created_at", { ascending: true }).limit(1000);
-      if(selectedContactId!=='All') query = query.eq("sender_id", selectedContactId);
-      if(selectedGroupId!=='All') query = query.eq("group_id", selectedGroupId);
-      const { data, error: dbErr } = await query;
-      if(dbErr) throw dbErr;
-      chatMessages = data || [];
-      records = [];
-      if(chatMessages.length===0) error = "No chat messages found";
-    }catch(e:any){ error = e.message; chatMessages = []; }
-    finally{ loading = false; }
-  }
-
-  function generateChart() {
-    if (!browser ||!ChartJS ||!xField ||!yField ||!chartCanvas || records.length === 0) return;
-    const grouped: Record<string, {vals: number[], rawTs: string}> = {};
-    records.forEach(row => {
-      const xVal = xField === 'ts'? dayjs(row[xField]).format('MMM D HH:mm') : String(row[xField] || 'Unknown');
-      const yVal = parseFloat(row[yField]?? "0");
-      if (!grouped[xVal]) grouped[xVal] = {vals: [], rawTs: row.ts};
-      grouped[xVal].vals.push(yVal);
-    });
-    let entries = Object.entries(grouped);
-    if(xField === 'ts') entries.sort((a,b) => new Date(a[1].rawTs).getTime() - new Date(b[1].rawTs).getTime());
-    else entries.sort((a,b) => a[0].localeCompare(b[0]));
-    const labels = entries.map(e => e[0]);
-    const values = entries.map(e => e[1].vals.reduce((a, b) => a + b, 0) / (e[1].vals.length || 1));
-    const colors = labels.map((_, i) => `hsl(${(i * 45) % 360},70%,55%)`);
-    if (chart) chart.destroy();
-    const ctx = chartCanvas.getContext('2d');
-    if (!ctx) return;
-    chart = new ChartJS(ctx, {
-      type: chartType,
-      data: {
-        labels,
-        datasets: [{
-          label: getFieldLabel(yField),
-          data: values,
-          backgroundColor: chartType === "line"? "rgba(37,99,235,.15)" : colors,
-          borderColor: "#2563eb",
-          borderWidth: 2,
-          tension: chartType === 'line'? 0.25 : 0,
-          fill: chartType === 'line'
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: chartType === 'pie' || chartType === 'doughnut' },
-          title: { display: true, text: `${getFieldLabel(yField)} by ${getFieldLabel(xField)}` }
-        },
-        scales: chartType === 'pie' || chartType === 'doughnut'? {} : {
-          x: { title: { display: true, text: getFieldLabel(xField) } },
-          y: { beginAtZero: true, title: { display: true, text: getFieldLabel(yField) } }
-        }
-      }
-    });
-  }
-
-  // FIX ITEM 6 - Excel filter by template + shift + station + contact
-  function exportExcel() {
-    const dataToExport = reportType==='chat'? chatMessages : records;
-    if (dataToExport.length === 0) return alert('No data to export');
-    let headers: string[] = [];
-    let csvRows: string[] = [];
-    if(reportType==='chat'){
-      headers = ["Time","Sender","Content","Group","Room"];
-      csvRows = [
-        headers.join(','),
-       ...chatMessages.map((r:any)=> [`"${dayjs(r.created_at).format('DD/MM HH:mm')}"`,`"${r.sender?.name||r.sender_id}"`,`"${(r.content||'').replace(/"/g,'""').slice(0,200)}"`,`"${r.group_id||''}"`,`"${r.room_id||''}"`].join(','))
-      ];
-    } else {
-      const fields = normalizeFields(selectedTemplate);
-      const base = ["ts","station","shift"];
-      const fieldNames = fields.map(f => f.field_name).filter(fn=>!base.includes(fn));
-      headers = [...base, ...fieldNames];
-      csvRows = [
-        headers.map(h => `"${getFieldLabel(h)}"`).join(','),
-       ...records.map(r => headers.map(h => `"${String(r[h]?? '').replace(/"/g, '""')}"`).join(','))
-      ];
-    }
-    const csv = csvRows.join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    const tmplName = selectedTemplate?.template_code || reportType;
-    a.download = `${tmplName}_${selectedShift}_${startDate}_${endDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+  function updateX(set:any, v:string){ set.x=v; analysisSets=[...analysisSets]; renderAll(); }
+  function updateY(set:any, v:string){ set.y=v; analysisSets=[...analysisSets]; renderAll(); }
+  function updateChartType(set:any, v:string){ set.chartType=v; analysisSets=[...analysisSets]; renderAll(); }
+  function addStationFilter(set:any, v:string){ if(v&&!set.stationFilter.includes(v)){ set.stationFilter=[...set.stationFilter,v]; analysisSets=[...analysisSets]; renderAll(); } }
+  function removeStationFilter(set:any, sf:string){ set.stationFilter=set.stationFilter.filter((s:string)=>s!==sf); analysisSets=[...analysisSets]; renderAll(); }
+  async function addComparison(){ if(analysisSets.length>=5) return; const nid=nextId++; analysisSets=[...analysisSets,{id:nid,x:'station',y:'input01',label:`Set ${nid}`,stationFilter:[] as string[],chartType:'line'}]; await tick(); setTimeout(renderAll,400); }
+  function removeSet(id:any){ const c=chartMap.get(id); if(c) c.destroy(); chartMap.delete(id); analysisSets=analysisSets.filter(s=>s.id!==id); }
 </script>
 
-<div class="page">
-  <div class="header">
-    <h1>📊 Universal Reports</h1>
-    <div class="header-right">
-      <select bind:value={reportType} class="type-select">
-        <option value="template">Template Report</option>
-        <option value="chat">Chat Report</option>
-      </select>
-      <a href="/chat" class="btn-back">← Chat</a>
+<div class="app">
+  <!-- 1. TOP FIXED - NO STATION NAMES -->
+  <div class="top-fixed">
+    <div class="top-row"><div class="title">📈 Production Report</div><a href="/chat" class="chat-btn">→ Chat</a></div>
+    <div class="filters">
+      <div class="f1"><label>Calendar</label><button class="date-btn" onclick={()=>showCalendar=!showCalendar}>{dateRange.from} / {dateRange.to}</button>{#if showCalendar}<div class="cal-pop"><input type="date" bind:value={dateRange.from} /><input type="date" bind:value={dateRange.to} /><button class="apply" onclick={()=>{showCalendar=false; loadRecords();}}>Apply</button></div>{/if}</div>
+      <div class="f2"><label>Template</label><select bind:value={selectedTemplateId} onchange={loadRecords}>{#each templates as t}<option value={t.id}>{t.name}</option>{/each}</select></div>
+      <button class="load" onclick={loadRecords}>{loading?'...':'Load'}</button>
     </div>
+    {#if error}<div class="err">{error}</div>{/if}
   </div>
 
-  <div class="toolbar">
-    <div class="field">
-      <label for="from">From</label>
-      <input id="from" type="date" bind:value={startDate} />
-    </div>
-    <div class="field">
-      <label for="to">To</label>
-      <input id="to" type="date" bind:value={endDate} />
-    </div>
-
-    {#if reportType==='template'}
-      <div class="field">
-        <label for="template">Template</label>
-        <select id="template" bind:value={selectedTemplateId}>
-          <option value="">Select</option>
-          {#each templates as t}<option value={t.id}>{t.name} ({t.template_code})</option>{/each}
-        </select>
+  <!-- 3. MOVABLE ONLY -->
+  <div class="scroll-area">
+    {#if records.length>0}
+      <div class="table-box"><table><thead><tr><th>Time</th><th>Shift</th><th>Station</th><th>input01</th><th>output01</th><th>remark</th></tr></thead><tbody>{#each displayRows as r}<tr><td>{dayjs(r.ts).format('MM/DD HH:mm')}</td><td>{getVal(r,'shift')}</td><td>{getVal(r,'station')}</td><td style="color:#2563eb;font-weight:700;background:#eff6ff">{getVal(r,'input01')}</td><td style="color:#00a884;font-weight:700;background:#f0fdf4">{getVal(r,'output01')}</td><td>{getVal(r,'remark01')}</td></tr>{/each}</tbody></table>
+        {#if records.length>3}<div style="text-align:center;margin:6px 0;"><button class="more" onclick={()=>showMoreRows=!showMoreRows}>{showMoreRows?'▲ Less':'▼ All '+records.length}</button></div>{/if}
       </div>
-      <div class="field">
-        <label for="shift">Shift</label>
-        <select id="shift" bind:value={selectedShift}>
-          <option value="All">All Shifts</option>
-          <option value="A">A</option><option value="B">B</option><option value="C">C</option>
-        </select>
-      </div>
+      {#each analysisSets as set, i (set.id)}
+        <div class="graph">
+          <div class="g-controls">
+            <span class="badge">{set.label} ({i+1}/{analysisSets.length})</span>
+            <select class="inline" value={set.x} onchange={(e)=>updateX(set,(e.target as HTMLSelectElement).value)}>{#each xOptions as o}<option value={o.name}>{o.label}</option>{/each}</select>
+            <select class="inline" value={set.y} onchange={(e)=>updateY(set,(e.target as HTMLSelectElement).value)}>{#each yOptions as o}<option value={o.name}>{o.label}</option>{/each}</select>
+            <select class="inline" value={set.chartType} onchange={(e)=>updateChartType(set,(e.target as HTMLSelectElement).value)}><option value="line">Line</option><option value="bar">Bar</option><option value="trend">Trend</option></select>
+            <select class="inline" onchange={(e)=>{ addStationFilter(set,(e.target as HTMLSelectElement).value); (e.target as HTMLSelectElement).value='';}}><option value="">All</option>{#each availableStations as st}<option value={st}>{st}</option>{/each}</select>
+            {#if analysisSets.length>1}<button class="del" onclick={()=>removeSet(set.id)}>🗑️</button>{/if}
+          </div>
+          {#if set.stationFilter.length>0}<div class="f-chips">{#each set.stationFilter as sf}<span>{sf}<button onclick={()=>removeStationFilter(set,sf)}>x</button></span>{/each}</div>{/if}
+          <div class="chart-wrap"><canvas id="chart-{set.id}"></canvas></div>
+        </div>
+      {/each}
+      {#if analysisSets.length<5}<button class="add" onclick={addComparison}>+ Add Graph ({analysisSets.length}/5)</button>{:else}<div class="max">✅ Max 5 reached</div>{/if}
     {/if}
-
-    <div class="field">
-      <label for="contact">Contact</label>
-      <select id="contact" bind:value={selectedContactId}>
-        <option value="All">All Contacts</option>
-        {#each contacts as c}<option value={c.id}>{c.name} - {c.email}</option>{/each}
-      </select>
-    </div>
-
-    <div class="field">
-      <label for="group">Group</label>
-      <select id="group" bind:value={selectedGroupId}>
-        <option value="All">All Groups</option>
-        {#each groups as g}<option value={g.id}>{g.name}</option>{/each}
-      </select>
-    </div>
-
-    <button class="btn-load" onclick={loadRecords} disabled={loading}>{loading? 'Loading...' : 'Load All Data'}</button>
   </div>
 
-  {#if reportType==='template' && availableStations.length > 0}
-    <div class="station-filter">
-      <p>Filter Stations:</p>
-      <div class="station-list">{#each availableStations as station}<label><input type="checkbox" bind:group={selectedStations} value={station} /> {station}</label>{/each}</div>
-    </div>
-  {/if}
-
-  {#if error}<div class="error">{error}</div>{/if}
-
-  {#if reportType==='chat' && chatMessages.length > 0}
-    <div class="analysis-view">
-      <h2>💬 Chat Messages - {chatMessages.length} records</h2>
-      <div class="table-container">
-        <table>
-          <thead><tr><th>Time</th><th>Sender</th><th>Content</th><th>Group</th><th>Room</th></tr></thead>
-          <tbody>
-            {#each chatMessages as r}
-              <tr>
-                <td>{dayjs(r.created_at).format('DD/MM HH:mm')}</td>
-                <td>{r.sender?.name || r.sender_id}</td>
-                <td class="msg-cell">{r.content?.slice(0,200)}</td>
-                <td>{r.group_id||'-'}</td>
-                <td>{r.room_id||'-'}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-      <div class="actions"><button class="excel" onclick={exportExcel}>📗 Export Chat Excel</button></div>
-    </div>
-  {/if}
-
-  {#if reportType==='template' && records.length > 0}
-    <div class="analysis-view">
-      <h2>{selectedTemplate?.name} - {records.length} records</h2>
-      <div class="controls">
-        <div>
-          <label for="xaxis">X-Axis</label>
-          <select id="xaxis" bind:value={xField} onchange={generateChart}>
-            <option value="ts">Time</option>
-            <option value="station">Station</option>
-            <option value="shift">Shift</option>
-            {#each normalizeFields(selectedTemplate).filter(f => (f.type === "text" || f.type === "dropdown") && f.field_name!== "station" && f.field_name!== "shift") as field}
-                <option value={field.field_name}>{field.label}</option>
-            {/each}
-          </select>
-        </div>
-        <div>
-          <label for="yaxis">Y-Axis</label>
-          <select id="yaxis" bind:value={yField} onchange={generateChart}>
-            {#each numericFields as field}<option value={field.name}>{getFieldLabel(field.name)}</option>{/each}
-          </select>
-        </div>
-        <div>
-          <label for="chart">Chart</label>
-          <select id="chart" bind:value={chartType} onchange={generateChart}>
-            <option value="line">Line</option><option value="bar">Bar</option><option value="pie">Pie</option><option value="doughnut">Doughnut</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="table-container">
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th><th>Shift</th><th>Station</th>
-              {#each normalizeFields(selectedTemplate) as field}<th>{getFieldLabel(field.name)}</th>{/each}
-            </tr>
-          </thead>
-          <tbody>
-            {#each records as r}
-              <tr>
-                <td>{dayjs(r.ts).format('DD/MM HH:mm')}</td>
-                <td>{r.shift}</td>
-                <td>{r.station}</td>
-                {#each normalizeFields(selectedTemplate) as field}<td>{r[field.field_name]}</td>{/each}
-              </tr>
-            {/each}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="chart-container"><canvas bind:this={chartCanvas}></canvas></div>
-      <div class="actions"><button class="excel" onclick={exportExcel}>📗 Export {selectedTemplate?.template_code} Excel ({selectedShift})</button></div>
-    </div>
-  {/if}
+  <!-- 2. BOTTOM FIXED -->
+  <div class="bottom-fixed">
+    <a href="/" class="b">📋</a>
+    <a href="/chat" class="b">💬<span>Chat</span></a>
+    <a href="/report" class="b active">📊<span>Report</span></a>
+    <a href="/profile" class="b">👤</a>
+  </div>
 </div>
 
 <style>
-.page { padding: 20px; background: #eef4fb; min-height: 100vh; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-.header h1{ margin:0; font-size:22px; }
-.header-right{ display:flex; gap:10px; align-items:center; }
-.type-select{ padding:8px 12px; border-radius:8px; border:1px solid #ccc; font-weight:600; }
-.btn-back { background: #111b21; color: white; padding: 8px 16px; border-radius: 8px; font-weight: 600; text-decoration: none; }
-.toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; margin-bottom: 16px; background: white; padding: 16px; border-radius: 12px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-.field{ display:flex; flex-direction:column; gap:4px; }
-.field label{ font-size:12px; font-weight:600; color:#64748b; }
-.toolbar input,.toolbar select { padding: 9px 12px; border-radius: 8px; border: 1px solid #cbd5e1; min-width:140px; }
-.btn-load { background: #00a884; color: white; font-weight: 700; cursor: pointer; padding:10px 20px; border-radius:8px; border:none; height:38px; }
-.btn-load:disabled{ opacity:0.6; }
-.station-filter { background: white; padding: 14px; border-radius: 12px; margin-bottom: 16px; }
-.station-filter p{ margin:0 0 8px; font-weight:600; font-size:13px; }
-.station-list{ display:flex; gap:12px; flex-wrap:wrap; }
-.analysis-view { background: white; padding: 20px; border-radius: 12px; box-shadow:0 2px 12px rgba(0,0,0,0.06); }
-.controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 20px; }
-.controls select{ width:100%; padding:8px; border-radius:6px; border:1px solid #ccc; }
-.chart-container { height: 380px; background: #f8fafc; border-radius: 12px; padding: 16px; margin-top: 20px; border:1px solid #e2e8f0; }
-.table-container { overflow-x: auto; margin-bottom: 20px; border:1px solid #e5e7eb; border-radius:8px; }
-table { width: 100%; border-collapse: collapse; }
-th, td { padding: 10px 12px; border-bottom: 1px solid #e5e7eb; text-align: left; font-size: 13px; }
-th { background: #f8fafc; font-weight: 700; position:sticky; top:0; }
-.msg-cell{ max-width:300px; white-space:pre-wrap; word-break:break-word; }
-.actions{ margin-top:16px; }
-.actions button { padding: 10px 18px; border: none; border-radius: 8px; color: white; background: #16a34a; cursor: pointer; font-weight:600; }
-.error { background: #fee2e2; color: #dc2626; padding: 12px; border-radius: 8px; margin-bottom:12px; border:1px solid #fecaca; }
-@media (max-width:768px){
- .controls{ grid-template-columns:1fr; }
- .toolbar{ flex-direction:column; align-items:stretch; }
-}
+.app{display:flex;flex-direction:column;height:100dvh;width:100vw;overflow:hidden;background:#f1f5f9;margin:0;}
+.top-fixed{flex:0 0 auto;background:#fff7ed;border-bottom:2px solid #fed7aa;padding:8px;z-index:30;}
+.scroll-area{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:white;padding:8px;}
+.bottom-fixed{flex:0 0 auto;height:56px;background:#1c1917;display:flex;justify-content:space-around;align-items:center;border-top:1px solid #444;z-index:30;}
+.top-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.title{font-weight:800;font-size:14px;}
+.chat-btn{background:#3a241c;color:white;padding:4px 10px;border-radius:16px;text-decoration:none;font-size:11px;}
+.filters{display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;}
+.f1,.f2{display:flex;flex-direction:column;gap:2px;}
+.f1 label,.f2 label{font-size:9px;font-weight:700;color:#7c2d12;}
+.date-btn{padding:7px 10px;border:1px solid #e7c4b0;border-radius:8px;background:white;font-size:11px;}
+.f2 select{padding:7px;border-radius:8px;border:1px solid #e7c4b0;min-width:160px;font-size:12px;}
+.load{background:#00a884;color:white;border:none;padding:7px 14px;border-radius:8px;font-weight:700;height:32px;}
+.cal-pop{position:absolute;top:80px;left:8px;z-index:50;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:10px;display:flex;gap:6px;box-shadow:0 10px 20px rgba(0,0,0,0.2);}
+.apply{background:#00a884;color:white;border:none;padding:6px 10px;border-radius:6px;}
+.err{background:#fee2e2;color:#b91c1c;padding:6px;border-radius:6px;font-size:11px;margin-top:6px;}
+.table-box{border:1px solid #e5e7eb;border-radius:8px;overflow-x:auto;margin-bottom:10px;}
+table{width:100%;border-collapse:collapse;min-width:600px;}
+th,td{padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:11px;white-space:nowrap;}
+th{background:#f8fafc;font-weight:700;}
+.more{padding:4px 10px;border:1px solid #cbd5e1;border-radius:6px;background:#f1f5f9;font-size:11px;}
+.graph{border:1px solid #e2e8f0;border-radius:10px;padding:8px;margin-bottom:10px;background:#fcfdff;}
+.g-controls{display:flex;flex-direction:row;gap:6px;align-items:center;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;}
+.g-controls::-webkit-scrollbar{display:none;}.g-controls{scrollbar-width:none;-ms-overflow-style:none;}
+.badge{flex:0 0 auto;font-size:10px;font-weight:800;color:white;background:#2563eb;padding:6px 8px;border-radius:6px;white-space:nowrap;}
+select.inline{flex:1 1 0;min-width:75px;padding:7px 6px;border-radius:6px;border:1px solid #cbd5e1;font-size:12px;background:white;}
+.del{flex:0 0 auto;background:#fee2e2;border:1px solid #fecaca;border-radius:6px;padding:6px 8px;}
+.f-chips{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0;}
+.f-chips span{background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:10px;font-size:10px;display:flex;gap:3px;align-items:center;}
+.chart-wrap{height:320px;background:white;border:1px solid #e2e8f0;border-radius:8px;padding:6px;}
+.chart-wrap canvas{width:100%!important;height:100%!important;}
+.add{width:100%;background:white;border:1px dashed #2563eb;color:#2563eb;padding:10px;border-radius:8px;font-weight:700;margin-top:6px;}
+.max{text-align:center;color:#00a884;font-weight:700;padding:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;}
+.b{color:#a89088;text-decoration:none;font-size:18px;display:flex;flex-direction:column;align-items:center;line-height:1;}
+.b span{font-size:9px;margin-top:2px;}
+.b.active{color:white;}
 </style>

@@ -17,10 +17,8 @@
 	import HeaderBar from '$lib/components/layout/HeaderBar.svelte';
 
 	let { data } = $props();
-
 	let loading = $state(false);
 	let error = $state<string | null>(null);
-
 	let meetings = $state<any[]>(data.meetings?? []);
 	let actions = $state<any[]>(data.actions?? []);
 	let downtime = $state<any[]>(data.downtime?? []);
@@ -34,87 +32,44 @@
 		ai: '/ai-summary'
 	};
 
-	function navigate(path: string) {
-		if (!path) return;
-		goto(path).catch((err) => console.error('[Dashboard] Navigation failed:', err));
-	}
-
-	function handleKeydown(e: KeyboardEvent, path: string) {
-		if (e.key === 'Enter' || e.key === ' ') {
-			e.preventDefault();
-			navigate(path);
-		}
-	}
-
-	function getToday(): string {
-		return new Date().toISOString().split('T')[0];
-	}
-
+	function navigate(path: string) { if (!path) return; goto(path); }
+	function getToday(): string { return new Date().toISOString().split('T')[0]; }
 	function mapProduction(productionData: any[]) {
-		return productionData
-			.map((record) => {
-				const values = record?.data && typeof record.data === 'object'? record.data : {};
-				return {
-					...record,
-					date: record?.report_date?? record?.ts?.split?.('T')?.[0]?? getToday(),
-					target: Number(record?.target?? values?.target?? values?.total_target?? 0),
-					actual: Number(record?.actual?? values?.actual?? values?.total_actual?? 0),
-					ng: Number(record?.ng?? values?.ng?? values?.total_ng?? 0),
-					yield: Number(record?.yield?? values?.yield?? values?.yield_percent?? 0),
-					oee: Number(record?.oee?? values?.oee?? 0)
-				};
-			})
-			.filter((record) => record.target > 0 || record.actual > 0 || record.ng > 0 || record.yield > 0);
+		return productionData.map((record) => {
+			const values = record?.data && typeof record.data === 'object'? record.data : {};
+			return {
+				...record,
+				date: record?.report_date?? record?.ts?.split?.('T')?.[0]?? getToday(),
+				target: Number(record?.target?? values?.target?? 0),
+				actual: Number(record?.actual?? values?.actual?? 0),
+				ng: Number(record?.ng?? values?.ng?? 0),
+				yield: Number(record?.yield?? values?.yield?? 0),
+				oee: Number(record?.oee?? values?.oee?? 0)
+			};
+		}).filter((r) => r.target > 0 || r.actual > 0 || r.ng > 0 || r.yield > 0);
 	}
 
 	const production = $derived(mapProduction(data.production?? []));
-
 	const stats = $derived(() => {
-		const totalTarget = production.reduce((total, row) => total + Number(row?.target?? 0), 0);
-		const totalActual = production.reduce((total, row) => total + Number(row?.actual?? 0), 0);
-		const totalNG = production.reduce((total, row) => total + Number(row?.ng?? 0), 0);
-		const yields = production.map((row) => Number(row?.yield?? 0)).filter((value) => Number.isFinite(value) && value > 0);
-		const avgYield = yields.length > 0? (yields.reduce((total, value) => total + value, 0) / yields.length).toFixed(2) : '0.00';
+		const totalTarget = production.reduce((t, r) => t + Number(r?.target?? 0), 0);
+		const totalActual = production.reduce((t, r) => t + Number(r?.actual?? 0), 0);
+		const totalNG = production.reduce((t, r) => t + Number(r?.ng?? 0), 0);
+		const yields = production.map((r) => Number(r?.yield?? 0)).filter((v) => v > 0);
+		const avgYield = yields.length > 0? (yields.reduce((a,b)=>a+b,0)/yields.length).toFixed(1) : '0.0';
 		const today = getToday();
-		const todayMeetings = meetings.filter((meeting) => meeting?.meeting_date === today);
-		const upcomingMeetings = meetings.filter((meeting) => {
-			if (!meeting?.meeting_date) return false;
-			const meetingDate = new Date(meeting.meeting_date);
-			return!Number.isNaN(meetingDate.getTime()) && meetingDate >= new Date();
-		});
-		const completedMeetings = meetings.filter((meeting) => String(meeting?.status?? '').toLowerCase() === 'completed');
-		const pendingActions = actions.filter((action) => String(action?.status?? '').toLowerCase()!== 'completed');
-		const totalDowntimeMinutes = downtime.filter((row) => row?.report_date === today).reduce((total, row) => total + Number(row?.duration_minutes?? 0), 0);
-		return {
-			production, meetings, actions, downtime,
-			todayMeetings: todayMeetings.length,
-			upcomingMeetings: upcomingMeetings.length,
-			completedMeetings: completedMeetings.length,
-			pendingActions: pendingActions.length,
-			totalReports: production.length,
-			totalTarget, totalActual, totalNG, avgYield, totalDowntimeMinutes
-		};
+		const todayMeetings = meetings.filter((m) => m?.meeting_date === today);
+		const upcomingMeetings = meetings.filter((m) => m?.meeting_date && new Date(m.meeting_date) >= new Date());
+		const pendingActions = actions.filter((a) => String(a?.status?? '').toLowerCase()!== 'completed');
+		const totalDowntimeMinutes = downtime.filter((r) => r?.report_date === today).reduce((t, r) => t + Number(r?.duration_minutes?? 0), 0);
+		return { production, meetings, actions, downtime, todayMeetings: todayMeetings.length, upcomingMeetings: upcomingMeetings.length, pendingActions: pendingActions.length, totalReports: production.length, totalTarget, totalActual, totalNG, avgYield, totalDowntimeMinutes };
 	});
-
 	const aiSummaryData = $derived(() => ({
 		loading: false,
-		production: {
-			achievement: stats().totalTarget > 0? (stats().totalActual / stats().totalTarget) * 100 : 0,
-			yield: Number(stats().avgYield),
-			oee: 82.5
-		},
-		actions: {
-			pending: stats().pendingActions,
-			overdue: actions.filter((action) => {
-				if (String(action?.status?? '').toLowerCase() === 'completed') return false;
-				if (!action?.due_date) return false;
-				const dueDate = new Date(action.due_date);
-				return!Number.isNaN(dueDate.getTime()) && dueDate < new Date();
-			}).length
-		},
+		production: { achievement: stats().totalTarget > 0? (stats().totalActual / stats().totalTarget) * 100 : 0, yield: Number(stats().avgYield), oee: 82.5 },
+		actions: { pending: stats().pendingActions, overdue: actions.filter((a) => String(a?.status?? '').toLowerCase()!== 'completed' && a?.due_date && new Date(a.due_date) < new Date()).length },
 		meetings: { today: stats().todayMeetings },
-		issues: stats().totalDowntimeMinutes > 120? ['High downtime detected today'] : [],
-		recommendations: ['Focus on reducing changeover time', 'Complete pending actions']
+		issues: stats().totalDowntimeMinutes > 120? ['High downtime today'] : [],
+		recommendations: ['Reduce changeover time', 'Complete pending actions']
 	}));
 
 	onMount(() => {
@@ -122,144 +77,97 @@
 		const handleUpdate = () => window.location.reload();
 		window.addEventListener('meetings:updated', handleUpdate);
 		window.addEventListener('actions:updated', handleUpdate);
-		window.addEventListener('downtime:updated', handleUpdate);
-		window.addEventListener('templates:updated', handleUpdate);
-		return () => {
-			window.removeEventListener('meetings:updated', handleUpdate);
-			window.removeEventListener('actions:updated', handleUpdate);
-			window.removeEventListener('downtime:updated', handleUpdate);
-			window.removeEventListener('templates:updated', handleUpdate);
-		};
+		return () => { window.removeEventListener('meetings:updated', handleUpdate); window.removeEventListener('actions:updated', handleUpdate); };
 	});
-
-	function reloadDashboard() {
-		window.location.reload();
-	}
 </script>
 
-<div class="dashboard">
-	<HeaderBar
-		title="Temple Operations Reporting System"
-		user={data.user}
-		online={true}
-		queueCount={0}
-		notifications={0}
-		chatUnread={0}
-	/>
+<div class="app">
+  <!-- 1. TOP FIXED -->
+  <div class="top-fixed">
+    <HeaderBar title="TORS" user={data.user} online={true} queueCount={0} notifications={0} chatUnread={0} />
+  </div>
 
-	{#if loading}
-	<DashboardSkeleton />
-	{:else if error}
-	<ErrorCard title="Dashboard Error" message={error} onretry={reloadDashboard} />
-	{:else}
-	<AISummary summary={aiSummaryData()} />
+  <!-- 3. MIDDLE SCROLL ONLY -->
+  <div class="scroll-area">
+    {#if loading}<DashboardSkeleton />{:else if error}<ErrorCard title="Error" message={error} onretry={()=>window.location.reload()} />{:else}
 
-	<div class="top-cards">
-			<ProductionSummary production={stats().production} />
-			<MeetingSummary meetings={stats().meetings} />
-			<ActionSummary actions={stats().actions} />
-			<ReportSummary reports={stats().production} />
-			<DowntimeSummary downtime={stats().downtime} />
-		</div>
+    <AISummary summary={aiSummaryData()} />
 
-	<div class="kpi-grid">
-			<div class="card blue clickable" role="button" tabindex="0" onclick={() => navigate(ROUTES.todayMeetings)} onkeydown={(e) => handleKeydown(e, ROUTES.todayMeetings)}>
-				<h2>{stats().todayMeetings}</h2>
-				<p>Today's Meetings</p>
-			</div>
+    <!-- Quick 4 KPIs - Simple -->
+    <div class="kpi-simple">
+      <div class="k" onclick={()=>navigate(ROUTES.todayMeetings)}><span class="n">{stats().todayMeetings}</span><span class="l">Today Meet</span></div>
+      <div class="k" onclick={()=>navigate(ROUTES.actions)}><span class="n" style="color:#dc2626">{stats().pendingActions}</span><span class="l">Pending</span></div>
+      <div class="k" onclick={()=>navigate(ROUTES.reports)}><span class="n" style="color:#16a34a">{stats().totalReports}</span><span class="l">Reports</span></div>
+      <div class="k" onclick={()=>navigate(ROUTES.downtime)}><span class="n" style="color:#ea580c">{stats().totalDowntimeMinutes}m</span><span class="l">Downtime</span></div>
+    </div>
 
-			<div class="card green clickable" role="button" tabindex="0" onclick={() => navigate(ROUTES.upcomingMeetings)} onkeydown={(e) => handleKeydown(e, ROUTES.upcomingMeetings)}>
-				<h2>{stats().upcomingMeetings}</h2>
-				<p>Upcoming Meetings</p>
-			</div>
+    <!-- Production Totals - Clean -->
+    <div class="totals">
+      <div><b>{stats().totalTarget.toLocaleString()}</b><p>Target</p></div>
+      <div><b style="color:#16a34a">{stats().totalActual.toLocaleString()}</b><p>Actual</p></div>
+      <div><b style="color:#dc2626">{stats().totalNG.toLocaleString()}</b><p>NG</p></div>
+      <div><b style="color:#2563eb">{stats().avgYield}%</b><p>Yield</p></div>
+    </div>
 
-			<div class="card red clickable" role="button" tabindex="0" onclick={() => navigate(ROUTES.actions)} onkeydown={(e) => handleKeydown(e, ROUTES.actions)}>
-				<h2>{stats().pendingActions}</h2>
-				<p>Pending Actions</p>
-			</div>
+    <!-- Summary Cards - Horizontal Scroll on mobile -->
+    <div class="h-scroll">
+      <ProductionSummary production={stats().production} />
+      <MeetingSummary meetings={stats().meetings} />
+      <ActionSummary actions={stats().actions} />
+      <DowntimeSummary downtime={stats().downtime} />
+    </div>
 
-			<div class="card orange clickable" role="button" tabindex="0" onclick={() => navigate(ROUTES.reports)} onkeydown={(e) => handleKeydown(e, ROUTES.reports)}>
-				<h2>{stats().totalReports}</h2>
-				<p>Production Reports</p>
-			</div>
+    <ProductionTrend production={stats().production} />
 
-			<div class="card purple clickable" role="button" tabindex="0" onclick={() => navigate(ROUTES.downtime)} onkeydown={(e) => handleKeydown(e, ROUTES.downtime)}>
-				<h2>{stats().totalDowntimeMinutes}</h2>
-				<p>Today's Downtime (min)</p>
-			</div>
+    <div class="grid-2">
+      <RecentMeetings meetings={stats().meetings} />
+      <RecentActions actions={stats().actions} />
+    </div>
 
-			<div class="card dark clickable" role="button" tabindex="0" onclick={() => navigate(ROUTES.ai)} onkeydown={(e) => handleKeydown(e, ROUTES.ai)}>
-				<h2>🤖</h2>
-				<p>AI Executive Summary</p>
-			</div>
-	</div>
+    {/if}
+    <div style="height:20px"></div>
+  </div>
 
-		<div class="middle-grid">
-			<RecentMeetings meetings={stats().meetings} />
-			<RecentActions actions={stats().actions} />
-	</div>
-
-	<ProductionTrend production={stats().production} />
-
-		<div class="summary">
-			<div>
-				<b>Total Target</b>
-				<p>{(stats().totalTarget?? 0).toLocaleString()}</p>
-			</div>
-			<div>
-				<b>Total Actual</b>
-				<p>{(stats().totalActual?? 0).toLocaleString()}</p>
-			</div>
-			<div>
-				<b>Total NG</b>
-				<p>{(stats().totalNG?? 0).toLocaleString()}</p>
-			</div>
-			<div>
-				<b>Average Yield</b>
-				<p>{stats().avgYield}%</p>
-			</div>
-			<div>
-				<b>Completed Meetings</b>
-				<p>{stats().completedMeetings}</p>
-			</div>
-		</div>
-	{/if}
+  <!-- 2. BOTTOM FIXED -->
+  <div class="bottom-fixed">
+    <a href="/" class="b active">🏠<span>Home</span></a>
+    <a href="/chat" class="b">💬<span>Chat</span></a>
+    <a href="/report" class="b">📊<span>Report</span></a>
+    <a href="/profile" class="b">👤<span>Me</span></a>
+  </div>
 </div>
 
 <style>
-	.dashboard { width: 100%; min-height: 100%; padding: 20px; box-sizing: border-box; }
-	.kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
-	.card { padding: 20px; border-radius: 14px; background: white; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06); transition: transform 0.15s ease, box-shadow 0.15s ease; }
-	.clickable { cursor: pointer; user-select: none; }
-	.clickable:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12); }
-	.clickable:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.35); outline-offset: 2px; }
-	.card h2 { margin: 0 0 6px; font-size: 28px; font-weight: 700; }
-	.card p { margin: 0; color: #64748b; }
-	.blue { border-left: 4px solid #2563eb; }
-	.green { border-left: 4px solid #16a34a; }
-	.red { border-left: 4px solid #dc2626; }
-	.orange { border-left: 4px solid #ea580c; }
-	.purple { border-left: 4px solid #9333ea; }
-	.dark { border-left: 4px solid #334155; }
-	.top-cards,.middle-grid { display: grid; gap: 16px; margin-top: 20px; }
-	.top-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-	.middle-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-	.summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
-	.summary > div { padding: 18px; background: white; border: 1px solid #e2e8f0; border-radius: 12px; }
-	.summary b { display: block; color: #475569; font-size: 13px; }
-	.summary p { margin: 8px 0 0; color: #0f172a; font-size: 24px; font-weight: 700; }
-	@media (max-width: 1100px) {
-		.top-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-		.summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-	}
-	@media (max-width: 800px) {
-		.dashboard { padding: 14px; }
-		.kpi-grid,.middle-grid { grid-template-columns: 1fr; }
-		.summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-	}
-	@media (max-width: 600px) {
-		.dashboard { padding: 10px; }
-		.top-cards,.summary { grid-template-columns: 1fr; }
-		.card { padding: 16px; }
-	}
+.app{display:flex;flex-direction:column;height:100dvh;width:100vw;overflow:hidden;background:#f6f7fb;}
+.top-fixed{flex:0 0 auto;background:white;border-bottom:1px solid #e2e8f0;z-index:30;}
+.scroll-area{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:10px;display:flex;flex-direction:column;gap:12px;}
+.bottom-fixed{flex:0 0 auto;height:56px;background:#111827;display:flex;justify-content:space-around;align-items:center;z-index:30;}
+
+.kpi-simple{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+.k{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:12px 8px;display:flex;flex-direction:column;align-items:center;cursor:pointer;}
+.k.n{font-size:20px;font-weight:800;color:#0f172a;}
+.k.l{font-size:10px;color:#64748b;margin-top:2px;}
+
+.totals{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:10px;}
+.totals div{text-align:center;border-right:1px solid #f1f5f9;}
+.totals div:last-child{border:none;}
+.totals b{font-size:16px;display:block;}
+.totals p{font-size:10px;color:#64748b;margin:2px 0 0;}
+
+.h-scroll{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;scroll-snap-type:x mandatory;}
+.h-scroll > :global(*){flex:0 0 280px;scroll-snap-align:start;}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+.b{color:#9ca3af;text-decoration:none;font-size:18px;display:flex;flex-direction:column;align-items:center;line-height:1;}
+.b span{font-size:9px;margin-top:2px;}
+.b.active{color:white;}
+
+@media(max-width:768px){
+ .kpi-simple{grid-template-columns:repeat(2,1fr);}
+ .totals{grid-template-columns:repeat(2,1fr);gap:0;}
+ .totals div{padding:8px;border-bottom:1px solid #f1f5f9;}
+ .grid-2{grid-template-columns:1fr;}
+ .h-scroll > :global(*){flex:0 0 85vw;}
+}
 </style>

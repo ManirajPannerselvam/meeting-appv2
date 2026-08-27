@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { supabase } from '$lib/supabase'; // single supabase client
+  import { supabase } from '$lib/supabase';
   import type { Template, TemplateField } from '$lib/types';
 
   let templates: Template[] = [];
@@ -21,6 +21,8 @@
   let stationOptions: string[] = [];
   let formFields: TemplateField[] = [];
   let computedFields: TemplateField[] = [];
+
+  let activeTab = 'report';
 
   function normalizeFields(template: Template | null): TemplateField[] {
     if (!template) return [];
@@ -64,7 +66,6 @@
 
   onMount(async () => {
     loadingTemplates = true;
-    // FIXED: use template_reports schema table
     const { data, error } = await supabase.from("templates").select('*').order('name');
     if (error) {
       message = "Failed to load templates: " + error.message;
@@ -116,27 +117,38 @@
     });
 
     try {
-        // FIXED: 75% smaller + secure
         const { data: { user } } = await supabase.auth.getUser();
+        const userId = user?.id || 'guest';
 
-        const { error } = await supabase.from("template_reports").insert([{
+        const { data: reportData, error } = await supabase.from("template_reports").insert([{
             template_id: selectedTemplate.id,
             template_version: selectedTemplate.data?.version || 1,
-            sender: user?.id || 'guest',
-            room_id: 'factory-floor', // default room
+            sender: userId,
+            room_id: 'factory-floor',
             report_date: new Date().toISOString(),
-            values: { // jsonb direct - 24kB not 96kB
-               ...formData,
-               ...calculated,
+            values: {
+             ...formData,
+             ...calculated,
                 shift,
                 station,
                 t_code: selectedTemplate.template_code
             },
             created_at: new Date().toISOString()
-        }]).select();
+        }]).select().single();
 
         if (error) throw error;
-        message = "✅ Saved 75% smaller - 24kB"; messageType = "success";
+
+        // FIXED - TEXT id, no foreign key
+        await supabase.from("messages").insert([{
+            sender_id: userId,
+            room_id: 'factory-floor',
+            type: 'template',
+            report_id: String(reportData.id),
+            content: `📋 ${selectedTemplate.name} - ${station} / Shift ${shift}`,
+            created_at: new Date().toISOString()
+        }]);
+
+        message = "✅ Saved + Shared to chat"; messageType = "success";
         const cleared: Record<string, any> = {};
         formFields.forEach(field => {
             cleared[field.name] = field.type === 'number'? Number(field.default_value) || 0 : field.default_value || "";
@@ -149,9 +161,15 @@
         setTimeout(() => message = "", 3000);
     }
   }
+
+  function goTab(tab: string){
+    if(tab === 'chat') window.location.href = '/chat';
+    if(tab === 'dashboard') window.location.href = '/dashboard';
+    if(tab === 'report') window.location.href = '/reports';
+    if(tab === 'user') window.location.href = '/profile';
+  }
 </script>
 
-<!-- YOUR SAME UI - no change -->
 <div class="page">
   <div class="header">
     <div class="brand">
@@ -163,7 +181,7 @@
     </div>
     <a href="/reports" class="btn-reports">📊 View Reports →</a>
   </div>
-  <!--... rest of your HTML same... -->
+
   <div class="card">
     <label for="template">Select Template</label>
     {#if loadingTemplates}
@@ -235,10 +253,17 @@
     {/if}
     {#if message}<div class="alert {messageType}">{message}</div>{/if}
   </div>
+
+  <nav class="bottom-nav">
+    <button class:active={activeTab==='dashboard'} on:click={()=>goTab('dashboard')}>📊<small>Dashboard</small></button>
+    <button class:active={activeTab==='chat'} on:click={()=>goTab('chat')}>💬<small>Chat</small></button>
+    <button class:active={activeTab==='report'} on:click={()=>goTab('report')}>📋<small>Report</small></button>
+    <button class:active={activeTab==='user'} on:click={()=>goTab('user')}>👤<small>User</small></button>
+  </nav>
 </div>
 
 <style>
-.page{padding:20px;background:#f8fafc;min-height:100vh;font-family:system-ui,sans-serif;box-sizing:border-box;}
+.page{padding:20px 20px 90px 20px;background:#f8fafc;min-height:100vh;font-family:system-ui,sans-serif;box-sizing:border-box;}
 .header{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:20px;flex-wrap:wrap;}
 .brand{display:flex;align-items:center;gap:10px;}
 .brand h1{margin:0;color:#1e293b;font-size:24px;line-height:1;}
@@ -258,5 +283,10 @@ select,input,textarea{width:100%;padding:10px;border:2px solid #e5e7eb;border-ra
 .alert{padding:12px;border-radius:8px;margin-top:16px;text-align:center;font-weight:600;}
 .alert.success{background:#dcfce7;color:#166534;}
 .alert.error{background:#fee2e2;color:#dc2626;}
-@media (max-width:600px){.page{padding:10px;}.grid-2{grid-template-columns:1fr;}.header{flex-direction:column;align-items:stretch;}}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;height:70px;background:#202c33;border-top:1px solid #2a3942;display:flex;justify-content:space-around;align-items:center;z-index:100;}
+.bottom-nav button{background:none;border:none;color:#8696a0;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:22px;cursor:pointer;flex:1;}
+.bottom-nav button small{font-size:11px;}
+.bottom-nav button.active{color:#00a884;}
+.bottom-nav button.active small{font-weight:700;}
+@media (max-width:600px){.page{padding:10px 10px 90px 10px;}.grid-2{grid-template-columns:1fr;}.header{flex-direction:column;align-items:stretch;}}
 </style>
