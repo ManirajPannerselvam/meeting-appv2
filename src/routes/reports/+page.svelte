@@ -5,35 +5,41 @@
   import dayjs from 'dayjs';
   import type { Template, TemplateField } from '$lib/types';
   import type { Chart } from 'chart.js';
-import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerModal.svelte';
+  import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerModal.svelte';
 
-  let templates: Template[] = [];
-  let selectedTemplateId: string = '';
-  $: selectedTemplate = templates.find(t => t.id === selectedTemplateId) || null;
+  let templates: Template[] = $state([]);
+  let selectedTemplateId: string = $state('');
+  let selectedTemplate = $derived(templates.find(t => t.id === selectedTemplateId) || null);
 
-  let startDate = dayjs().subtract(7, 'day').format('YYYY-MM-DD');
-  let endDate = dayjs().format('YYYY-MM-DD');
-  let selectedShift: string = 'All'; // FIX 8 - All option
-  let selectedStations: string[] = [];
+  let startDate = $state(dayjs().subtract(7, 'day').format('YYYY-MM-DD'));
+  let endDate = $state(dayjs().format('YYYY-MM-DD'));
+  let selectedShift: string = $state('All');
+  let selectedStations: string[] = $state([]);
 
-  let records: any[] = [];
-  let loading = false;
-  let error = "";
+  let records: any[] = $state([]);
+  let loading = $state(false);
+  let error = $state("");
 
-  // FIX 8,9 - Contact & Group filter
-  let contacts: any[] = [];
-  let groups: any[] = [];
-  let selectedContactId: string = 'All';
-  let selectedGroupId: string = 'All';
-  let chatMessages: any[] = [];
-  let reportType: 'template' | 'chat' = 'template';
+  let contacts: any[] = $state([]);
+  let groups: any[] = $state([]);
+  let selectedContactId: string = $state('All');
+  let selectedGroupId: string = $state('All');
+  let chatMessages: any[] = $state([]);
+  let reportType: 'template' | 'chat' = $state('template');
 
-  let xField = "station";
-  let yField = "";
-  let chartType: 'bar' | 'line' | 'pie' | 'doughnut' = 'line';
+  let xField = $state("station");
+  let yField = $state("");
+  let chartType: 'bar' | 'line' | 'pie' | 'doughnut' = $state('line');
   let chartCanvas: HTMLCanvasElement;
   let chart: Chart | null = null;
   let ChartJS: typeof import('chart.js').Chart | null = null;
+
+  let availableStations = $derived(
+    normalizeFields(selectedTemplate).find(f => f.name.toLowerCase() === 'station')?.options || []
+  );
+  let numericFields = $derived(
+    normalizeFields(selectedTemplate).filter(f => f.field_type === "number" || f.field_type === "formula")
+  );
 
   function normalizeFields(template: Template | null): TemplateField[] {
     if (!template) return [];
@@ -61,17 +67,12 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
     Object.keys(data).forEach(key => {
         const value = Number(data[key]) || 0;
         expr = expr.replaceAll(`{${key}}`, value.toString());
-        expr = expr.replaceAll(`{${key.toLowerCase()}}`, value.toString());
-        expr = expr.replaceAll(`{${key.toUpperCase()}}`, value.toString());
     });
     try {
         const fn = new Function(`"use strict"; return (${expr})`);
         const result = Number(fn());
         return Number.isFinite(result)? result.toFixed(2) : "0.00";
-    } catch (err) {
-        console.error("Formula Error", formula, err);
-        return "0.00";
-    }
+    } catch { return "0.00"; }
   }
 
   onMount(async () => {
@@ -80,7 +81,6 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
       await import('chartjs-adapter-dayjs-4');
       ChartJS = chartjs.Chart;
     }
-    // Load templates
     const { data, error: fetchErr } = await supabaseTemplates.from('templates').select('*').order('name');
     if (fetchErr) error = "Failed to fetch templates: " + fetchErr.message;
     else {
@@ -91,32 +91,32 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
         if (numeric.length > 0) yField = numeric[0].name;
       }
     }
-    // FIX 8 - Load all contacts and groups
     await loadContactsAndGroups();
   });
 
   async function loadContactsAndGroups(){
     try{
-      // Load contacts from profiles or rooms
       const { data: rooms } = await supabaseChat.from("rooms").select(`id, user1_id, user2_id, user1:profiles!rooms_user1_fkey(id,name,email), user2:profiles!rooms_user2_fkey(id,name,email)`);
       let mappedContacts: any[] = [];
       (rooms||[]).forEach((r:any)=>{
         if(r.user1) mappedContacts.push({ id: r.user1_id, name: r.user1.name || r.user1.email, email: r.user1.email, room_id: r.id });
         if(r.user2) mappedContacts.push({ id: r.user2_id, name: r.user2.name || r.user2.email, email: r.user2.email, room_id: r.id });
       });
-      // unique
       const unique = new Map();
       mappedContacts.forEach(c=>{ if(!unique.has(c.id)) unique.set(c.id, c); });
       contacts = Array.from(unique.values());
-
       const { data: grp } = await supabaseChat.from("chat_groups").select("id,name");
       groups = grp || [];
     }catch(e){ console.log("contact load error", e); }
   }
 
-  $: availableStations = normalizeFields(selectedTemplate).find(f => f.name.toLowerCase() === 'station')?.options || [];
-  $: numericFields = normalizeFields(selectedTemplate).filter(f => f.field_type === "number" || f.field_type === "formula");
-  $: if(selectedTemplateId && startDate && endDate) loadRecords();
+  // Auto-load when filter changes
+  $effect(()=>{
+    if(selectedTemplateId && startDate && endDate){
+      // trigger load but avoid loop
+      if(reportType==='template') loadRecords();
+    }
+  });
 
   async function loadRecords() {
     if (!selectedTemplate && reportType==='template') return;
@@ -127,37 +127,22 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
           await loadChatReport();
           return;
         }
-
         const t_code = selectedTemplate?.template_code?.trim();
-
         let query = supabaseTemplates.from("records").select("*")
         .eq("t_code", t_code)
         .gte("ts", dayjs(startDate).startOf("day").toISOString())
         .lte("ts", dayjs(endDate).endOf("day").toISOString());
-
-        // FIX 8 - All shifts
-        if(selectedShift!=='All'){
-          query = query.ilike("shift", selectedShift.trim());
-        }
-        if (selectedStations.length > 0) {
-            query = query.in("station", selectedStations);
-        }
-
-        // FIX 9 - Filter by contact if selected (if records have user_id)
-        if(selectedContactId!=='All'){
-          // If your records table has user_id or created_by
-          query = query.eq("created_by", selectedContactId);
-        }
+        if(selectedShift!=='All') query = query.ilike("shift", selectedShift.trim());
+        if (selectedStations.length > 0) query = query.in("station", selectedStations);
+        if(selectedContactId!=='All') query = query.eq("created_by", selectedContactId);
 
         const { data, error: dbError } = await query.order("ts", { ascending: true });
         if (dbError) throw dbError;
-
         if (!data || data.length === 0) {
-            error = `No records found. Try All shifts / All stations.`;
+            error = `No records found for ${selectedTemplate?.name}. Try All shifts / All stations.`;
             records = [];
             return;
         }
-
         const templateFields = normalizeFields(selectedTemplate);
         records = (data || []).map(r => {
             const rowData = { station: r.station, shift: r.shift, ts: r.ts,...(r.data || {}) };
@@ -167,9 +152,7 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
                 });
             return {...r,...rowData };
         });
-
         if (records.length > 0 && browser) setTimeout(generateChart, 100);
-
     } catch (err: any) {
         error = err.message;
         records = [];
@@ -181,19 +164,13 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
   async function loadChatReport(){
     try{
       let query = supabaseChat.from("messages").select("*, sender:profiles!messages_sender_id_fkey(name,email)").gte("created_at", dayjs(startDate).startOf("day").toISOString()).lte("created_at", dayjs(endDate).endOf("day").toISOString()).order("created_at", { ascending: true }).limit(1000);
-
-      if(selectedContactId!=='All'){
-        query = query.eq("sender_id", selectedContactId);
-      }
-      if(selectedGroupId!=='All'){
-        query = query.eq("group_id", selectedGroupId);
-      }
-
+      if(selectedContactId!=='All') query = query.eq("sender_id", selectedContactId);
+      if(selectedGroupId!=='All') query = query.eq("group_id", selectedGroupId);
       const { data, error: dbErr } = await query;
       if(dbErr) throw dbErr;
       chatMessages = data || [];
-      records = []; // clear template records
-      if(chatMessages.length===0) error = "No chat messages found for selected filters";
+      records = [];
+      if(chatMessages.length===0) error = "No chat messages found";
     }catch(e:any){ error = e.message; chatMessages = []; }
     finally{ loading = false; }
   }
@@ -245,35 +222,37 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
     });
   }
 
+  // FIX ITEM 6 - Excel filter by template + shift + station + contact
   function exportExcel() {
     const dataToExport = reportType==='chat'? chatMessages : records;
     if (dataToExport.length === 0) return alert('No data to export');
-
     let headers: string[] = [];
     let csvRows: string[] = [];
-
     if(reportType==='chat'){
       headers = ["Time","Sender","Content","Group","Room"];
       csvRows = [
         headers.join(','),
-       ...chatMessages.map((r:any)=> [`"${dayjs(r.created_at).format('DD/MM HH:mm')}"`,`"${r.sender?.name||r.sender_id}"`,`"${(r.content||'').replace(/"/g,'""').slice(0,100)}"`,`"${r.group_id||''}"`,`"${r.room_id||''}"`].join(','))
+       ...chatMessages.map((r:any)=> [`"${dayjs(r.created_at).format('DD/MM HH:mm')}"`,`"${r.sender?.name||r.sender_id}"`,`"${(r.content||'').replace(/"/g,'""').slice(0,200)}"`,`"${r.group_id||''}"`,`"${r.room_id||''}"`].join(','))
       ];
     } else {
       const fields = normalizeFields(selectedTemplate);
-      headers = Array.from(new Set(["ts","station","shift",...fields.map(f => f.field_name)]));
+      const base = ["ts","station","shift"];
+      const fieldNames = fields.map(f => f.field_name).filter(fn=>!base.includes(fn));
+      headers = [...base, ...fieldNames];
       csvRows = [
         headers.map(h => `"${getFieldLabel(h)}"`).join(','),
        ...records.map(r => headers.map(h => `"${String(r[h]?? '').replace(/"/g, '""')}"`).join(','))
       ];
     }
-
     const csv = csvRows.join('\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${reportType}_${startDate}_${endDate}.csv`;
+    const tmplName = selectedTemplate?.template_code || reportType;
+    a.download = `${tmplName}_${selectedShift}_${startDate}_${endDate}.csv`;
     a.click();
+    URL.revokeObjectURL(url);
   }
 </script>
 
@@ -316,7 +295,6 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
       </div>
     {/if}
 
-    <!-- FIX 9 - Contact & Group Filters -->
     <div class="field">
       <label for="contact">Contact</label>
       <select id="contact" bind:value={selectedContactId}>
@@ -333,7 +311,7 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
       </select>
     </div>
 
-    <button class="btn-load" on:click={loadRecords} disabled={loading}>{loading? 'Loading...' : 'Load All Data'}</button>
+    <button class="btn-load" onclick={loadRecords} disabled={loading}>{loading? 'Loading...' : 'Load All Data'}</button>
   </div>
 
   {#if reportType==='template' && availableStations.length > 0}
@@ -347,7 +325,7 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
 
   {#if reportType==='chat' && chatMessages.length > 0}
     <div class="analysis-view">
-      <h2>💬 Chat Messages - {chatMessages.length} records (All Users)</h2>
+      <h2>💬 Chat Messages - {chatMessages.length} records</h2>
       <div class="table-container">
         <table>
           <thead><tr><th>Time</th><th>Sender</th><th>Content</th><th>Group</th><th>Room</th></tr></thead>
@@ -364,18 +342,17 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
           </tbody>
         </table>
       </div>
-      <div class="actions"><button class="excel" on:click={exportExcel}>📗 Export Chat Excel</button></div>
+      <div class="actions"><button class="excel" onclick={exportExcel}>📗 Export Chat Excel</button></div>
     </div>
   {/if}
 
   {#if reportType==='template' && records.length > 0}
     <div class="analysis-view">
-      <h2>{selectedTemplate?.name} - {records.length} records (All Users & All Data)</h2>
-
+      <h2>{selectedTemplate?.name} - {records.length} records</h2>
       <div class="controls">
         <div>
           <label for="xaxis">X-Axis</label>
-          <select id="xaxis" bind:value={xField} on:change={generateChart}>
+          <select id="xaxis" bind:value={xField} onchange={generateChart}>
             <option value="ts">Time</option>
             <option value="station">Station</option>
             <option value="shift">Shift</option>
@@ -386,13 +363,13 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
         </div>
         <div>
           <label for="yaxis">Y-Axis</label>
-          <select id="yaxis" bind:value={yField} on:change={generateChart}>
+          <select id="yaxis" bind:value={yField} onchange={generateChart}>
             {#each numericFields as field}<option value={field.name}>{getFieldLabel(field.name)}</option>{/each}
           </select>
         </div>
         <div>
           <label for="chart">Chart</label>
-          <select id="chart" bind:value={chartType} on:change={generateChart}>
+          <select id="chart" bind:value={chartType} onchange={generateChart}>
             <option value="line">Line</option><option value="bar">Bar</option><option value="pie">Pie</option><option value="doughnut">Doughnut</option>
           </select>
         </div>
@@ -420,7 +397,7 @@ import ProductionTrackerModal from '$lib/components/reports/ProductionTrackerMod
       </div>
 
       <div class="chart-container"><canvas bind:this={chartCanvas}></canvas></div>
-      <div class="actions"><button class="excel" on:click={exportExcel}>📗 Export Excel (All Data)</button></div>
+      <div class="actions"><button class="excel" onclick={exportExcel}>📗 Export {selectedTemplate?.template_code} Excel ({selectedShift})</button></div>
     </div>
   {/if}
 </div>

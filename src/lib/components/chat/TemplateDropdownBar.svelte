@@ -51,6 +51,7 @@
 	let avatarPreview = $state<string | null>(null);
 	let mutedRooms = $state<Set<string>>(new Set(browser? JSON.parse(localStorage.getItem('mutedRooms') || '[]') : []));
 
+	// MODE FILTER
 	let chatMode = $state<'chat'|'template'|'meeting'>('chat');
 	let openMode = $state(false);
 	let openList = $state(false);
@@ -60,37 +61,14 @@
 		{id:'2', title:'Client Call', date:'Tomorrow 2 PM'}
 	]);
 
-	function isTemplateMsg(m:any){ return m.content?.includes('__TEMPLATE_DATA__') || m.content?.startsWith('📋'); }
+	function isTemplateMsg(m:any){ return m.content?.includes('__TEMPLATE_DATA__'); }
 	function isMeetingMsg(m:any){ return m.content?.includes('__MEETING_DATA__'); }
-	function getMeta(m:any){
-		try{
-			let p = m.content?.split('__TEMPLATE_DATA__');
-			if(p?.length>1) return JSON.parse(p[1]);
-		}catch{}
-		return null;
-	}
+	function isChatMsg(m:any){ return!isTemplateMsg(m) &&!isMeetingMsg(m); }
+
 	let filteredMessages = $derived.by(()=>{
-		if(chatMode==='template'){
-			let list = messages.filter(isTemplateMsg);
-			if(selectedTemplate){
-				return list.filter((m:any)=>{
-					let meta = getMeta(m);
-					if(meta){
-						if(meta.template_id===selectedTemplate.id) return true;
-						if(meta.template_code===selectedTemplate.template_code) return true;
-						if(meta.template_name===selectedTemplate.name) return true;
-					}
-					return m.content?.includes(selectedTemplate.template_code) || m.content?.includes(selectedTemplate.name);
-				});
-			}
-			return list;
-		}
-		if(chatMode==='meeting'){
-			let list = messages.filter(isMeetingMsg);
-			if(selectedMeeting) return list.filter((m:any)=> m.content?.includes(selectedMeeting.id) || m.content?.includes(selectedMeeting.title));
-			return list;
-		}
-		return messages.filter((m:any)=>!isTemplateMsg(m) &&!isMeetingMsg(m));
+		if(chatMode==='template') return messages.filter(isTemplateMsg);
+		if(chatMode==='meeting') return messages.filter(isMeetingMsg);
+		return messages.filter(isChatMsg);
 	});
 
 	function getCurrentUserId(){ return currentUser?.id || data?.user?.id || ''; }
@@ -171,7 +149,7 @@
 	async function loadContacts() {
 		const userId = getCurrentUserId(); if(!userId){ contacts = []; return; }
 		let mapped: any[] = [{ id: userId, name: "You (Saved Messages)", email: currentUser?.email || data?.user?.email || "You", avatar_url: null, room_id: null, status: 'accepted', isSelf: true, last_message: "Message yourself" }];
-		try{ const { data: rooms } = await chatDB.from("rooms").select("id, user1_id, user2_id").or(`user1_id.eq.${userId},user2_id.eq.${userId}`); if(rooms?.length){ for(const r of rooms){ const otherId = r.user1_id === userId? r.user2_id : r.user1_id; if(!otherId || otherId===userId) continue; if(mapped.find(m=>m.id===otherId)) continue; const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", otherId).maybeSingle(); mapped.push({ id: otherId, name: prof?.name || prof?.email?.split('@')[0] || "User", email: prof?.email || "", avatar_url: prof?.avatar_url || null, room_id: r.id, status: 'accepted', isSelf: false }); } } }catch(e){}
+		try{ const { data: rooms } = await chatDB.from("rooms").select("id, user1_id, user2_id").or(`user1_id.eq.${userId},user2_id.eq.${userId}`); if(rooms?.length){ for(const r of rooms){ const otherId = r.user1_id === userId? r.user2_id : r.user1_id; if(!otherId || otherId===userId) continue; if(mapped.find(m=>m.id===otherId)) continue; const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", otherId).maybeSingle(); mapped.push({ id: otherId, name: prof?.name || prof?.email?.split('@')[0] || "User", email: prof?.email || "", avatar_url: prof?.avatar_url || null, room_id: r.id, status: 'accepted', isSelf: false }); } } }catch(e){ console.error(e); }
 		try{ const { data: sent } = await chatDB.from('contact_invites').select('id, email, status').eq('invited_by', userId).neq('status', 'accepted'); sent?.forEach((i:any)=>{ if(!mapped.find(c=>c.email?.toLowerCase()===i.email?.toLowerCase())){ mapped.push({ id:i.id, invite_id:i.id, email:i.email, name:i.email.split('@')[0], room_id:null, status:i.status }); } }); }catch{} contacts = mapped;
 	}
 	async function setupPresence() { const userId = getCurrentUserId(); if(!userId) return; if(presenceChannel) await chatDB.removeChannel(presenceChannel); presenceChannel = chatDB.channel("online-users", { config: { presence: { key: userId } } }); presenceChannel.on("presence", { event: "sync" }, () => { onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); }).subscribe(async (s) => { if(s==="SUBSCRIBED") await presenceChannel!.track({ user_id: userId }); }); }
@@ -195,15 +173,15 @@
 	  const payload: any = { sender_id: uid, content: content, room_id: selectedRoomId || null, group_id: selectedGroupId || null, receiver_id: selectedGroupId? null : (selectedContact?.actual_user_id || selectedContact?.id || uid), reply_to: replyingTo?.id || null };
 	  replyingTo = null;
 	  const { data, error } = await chatDB.from("messages").insert(payload).select().single();
-	  if(error){ messages = messages.filter(m=>m.id!==tempId); } else if(data){ messages = messages.map(m=> m.id===tempId? {...data, is_own:true} : m); }
+	  if(error){ console.error(error); messages = messages.filter(m=>m.id!==tempId); } else if(data){ messages = messages.map(m=> m.id===tempId? {...data, is_own:true} : m); }
 	}
 	async function getOrCreateRoom(otherId: string){
 		if(!otherId) return null; const currentUserId = getCurrentUserId(); if(!currentUserId || otherId === currentUserId) return null;
 		try{ const { data }=await chatDB.rpc("get_or_create_room",{p_user1:getCurrentUserId(),p_user2:otherId}); const r=Array.isArray(data)?data[0]:data; if(r?.id) return r.id; if(typeof r === 'string') return r; }catch(e){}
 		const { data: existing } = await chatDB.from("rooms").select("id").or(`and(user1_id.eq.${getCurrentUserId()},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${getCurrentUserId()})`).maybeSingle();
 		if(existing?.id) return existing.id;
-		const { data: newRoom } = await chatDB.from("rooms").insert({user1_id:getCurrentUserId(), user2_id:otherId}).select("id").single();
-		return newRoom?.id || null;
+		const { data: newRoom, error } = await chatDB.from("rooms").insert({user1_id:getCurrentUserId(), user2_id:otherId}).select("id").single();
+		if(error){ return null; } return newRoom?.id || null;
 	}
 	async function handleContactLoad(contact:any){
 		const currentUserId = getCurrentUserId(); const contactUserId = contact.actual_user_id || contact.id;
@@ -262,9 +240,9 @@
 			      </button>
 			      {#if openMode}
 			        <div class="dd" onclick={(e)=>{e.stopPropagation()}}>
-			          <button class:active={chatMode==='chat'} onclick={()=>{chatMode='chat'; openMode=false; openList=false; selectedTemplate=null;}}>💬 Chat</button>
-			          <button class:active={chatMode==='template'} onclick={()=>{chatMode='template'; openMode=false;}}>📋 Template</button>
-			          <button class:active={chatMode==='meeting'} onclick={()=>{chatMode='meeting'; openMode=false;}}>📅 Meeting</button>
+			          <button class:active={chatMode==='chat'} onclick={()=>{chatMode='chat'; openMode=false;}}><span>💬</span> Chat <small>text, emoji, file, voice only</small></button>
+			          <button class:active={chatMode==='template'} onclick={()=>{chatMode='template'; openMode=false;}}><span>📋</span> Template <small>template messages only</small></button>
+			          <button class:active={chatMode==='meeting'} onclick={()=>{chatMode='meeting'; openMode=false;}}><span>📅</span> Meeting <small>meeting messages only</small></button>
 			        </div>
 			      {/if}
 			    </div>
@@ -278,7 +256,7 @@
 			        {#if openList}
 			          <div class="dd dd2" onclick={(e)=>{e.stopPropagation()}}>
 			            {#if chatMode==='template'}
-			              {#each templates as t}<button class:active={selectedTemplate?.id===t.id} onclick={()=>{selectedTemplate=t; openList=false;}}><b>{t.name}</b><small>{t.template_code}</small></button>{:else}<div class="empty">No templates</div>{/each}
+			              {#each templates as t}<button class:active={selectedTemplate?.id===t.id} onclick={()=>{selectedTemplate=t; openList=false;}}><b>{t.name || t.template_code}</b><small>{t.template_code}</small></button>{:else}<div class="empty">No templates</div>{/each}
 			            {:else}
 			              {#each meetings as m}<button class:active={selectedMeeting?.id===m.id} onclick={()=>{selectedMeeting=m; openList=false;}}><b>{m.title}</b><small>{m.date}</small></button>{:else}<div class="empty">No meetings</div>{/each}
 			            {/if}
@@ -288,22 +266,23 @@
 			      {#if chatMode==='template' && selectedTemplate}<button class="use-btn" onclick={()=>{handleUseTemplate({detail:{template:selectedTemplate}})}}>Use</button>{/if}
 			    {/if}
 			  </div>
-			</div>
 
-			<div class="filter-info">Showing: {chatMode}{selectedTemplate? ` - ${selectedTemplate.name}`:''} | {filteredMessages.length}/{messages.length} msgs</div>
+			  {#if chatMode==='template' && selectedTemplate}
+			    <div class="data-box"><div class="data-head">📋 {selectedTemplate.name} <span>{selectedTemplate.template_code}</span></div><div class="grid">{#each Object.entries(selectedTemplate.data||{}) as [k,v]}<div class="field"><span class="fk">{k.replace(/_/g,' ')}</span><b class="fv">{String(v||'-').slice(0,80)}</b></div>{/each}</div></div>
+			  {/if}
+			</div>
 
 			<MessageList messages={filteredMessages} {selectedContact} {selectedGroup} currentUser={currentUser} selectedUser={currentUser} {replyingTo} onReply={handleReply} onForward={handleForward} onLongPress={handleMessageLongPress} onPressEnd={handleMessagePressEnd} onOpenDetail={handleOpenDetail} />
 			{#if replyingTo}<div class="reply-preview"><span>Replying to: {replyingTo.content?.slice(0,50)}...</span><button onclick={()=>replyingTo=null}>✕</button></div>{/if}
 			{#if chatMode==='chat'}<ChatInput {uploadingFiles} onSendMessage={sendMessage} onOpenTemplate={onOpenTemplate} />{/if}
-
 		{:else}
-			<div class="empty-area"><div class="empty-icon">💬</div><h2>Chat</h2><p>Select a chat to start messaging</p></div>
+			<div class="empty-area"><div class="empty-icon">💬</div><h2>Chat</h2><p>Select a chat to start messaging</p><span>End-to-end encrypted</span></div>
 		{/if}
 	</section>
 </div>
 
 {#if showAvatarModal}
-<div class="modal-bg" role="presentation"><button type="button" class="modal-bg-btn" onclick={()=>showAvatarModal=false}></button><div class="modal" role="dialog" tabindex="-1"><h3>{avatarType==='group'? 'Group Photo' : 'Contact Photo'}</h3><div style="display:flex;flex-direction:column;align-items:center;gap:12px;"><img src={avatarPreview || 'https://via.placeholder.com/128'} alt="preview" style="width:128px;height:128px;border-radius:50%;object-fit:cover;border:3px solid #00a884;" />{#if avatarUploading}<span style="color:#00a884;">Uploading...</span>{/if}</div><div class="modal-btns"><button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button><label class="btn-primary" style="text-align:center;cursor:pointer;">Choose<input type="file" accept="image/*" hidden onchange={onAvatarFileChange} /></label></div></div></div>
+<div class="modal-bg" role="presentation"><button type="button" class="modal-bg-btn" onclick={()=>showAvatarModal=false}></button><div class="modal" role="dialog" tabindex="-1"><h3>{avatarType==='group'? 'Group Photo' : 'Contact Photo'} • 128x128</h3><div style="display:flex;flex-direction:column;align-items:center;gap:12px;"><img src={avatarPreview || 'https://via.placeholder.com/128'} alt="preview" style="width:128px;height:128px;border-radius:50%;object-fit:cover;border:3px solid #00a884;" /><p style="font-size:12px;color:#8696a0;">Auto resized to 128x128 WEBP</p>{#if avatarUploading}<span style="color:#00a884;">Uploading...</span>{/if}</div><div class="modal-btns"><button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button><label class="btn-primary" style="text-align:center;cursor:pointer;">Choose Image<input type="file" accept="image/*" hidden onchange={onAvatarFileChange} /></label></div></div></div>
 {/if}
 {#if showMessageOptions && selectedMessageForOptions}
 	<button class="message-options-overlay" onclick={()=>showMessageOptions=false}></button><div class="message-options" style="left:{messageOptionsPos.x}px; top:{messageOptionsPos.y}px;" use:clickOutside={()=>showMessageOptions=false}><button onclick={()=>handleReply(selectedMessageForOptions)}>↩️ Reply</button><button onclick={()=>handleForward(selectedMessageForOptions)}>➡️ Forward</button><button onclick={()=>{ if(browser){ navigator.clipboard.writeText(selectedMessageForOptions.content); } showMessageOptions=false; }}>📋 Copy</button></div>
@@ -340,7 +319,7 @@
 	.detail-row{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fafc;border-radius:10px;}
 	.d-label{text-transform:capitalize;color:#64748b;font-size:13px;font-weight:600;}.d-value{color:#0f172a;font-size:13px;font-weight:700;}
 	.detail-actions{padding:14px 20px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;}
-	.top-mode-bar{background:#f0f2f5; border-bottom:1px solid #d1d7db; padding:8px 10px;}
+	.top-mode-bar{background:#f0f2f5; border-bottom:1px solid #d1d7db; padding:8px 10px; display:flex; flex-direction:column; gap:8px;}
 	.mode-row{display:flex; gap:8px; align-items:center;}
 	.dd-wrap{position:relative;}
 	.mode-btn{background:white; border:1px solid #d1d7db; padding:8px 12px; border-radius:8px; display:flex; gap:6px; align-items:center; cursor:pointer; font-size:13px; min-width:120px;}
@@ -354,7 +333,12 @@
 	.dd button:hover{background:#f0f2f5;}.dd button.active{background:#e7fce3;}
 	.dd b{font-size:13px; color:#111b21;}.dd small{font-size:11px; color:#667781;}
 	.empty{padding:12px; font-size:13px; color:#667781;}
+	.data-box{background:white; border:1px solid #e9edef; border-radius:10px; padding:10px;}
+	.data-head{font-size:13px; font-weight:700; display:flex; justify-content:space-between; margin-bottom:8px;}
+	.data-head span{font-size:11px; color:#667781; font-weight:400;}
+	.grid{display:grid; grid-template-columns:1fr 1fr; gap:6px;}
+	.field{background:#f0f2f5; padding:6px 8px; border-radius:6px; display:flex; flex-direction:column;}
+	.fk{font-size:10px; color:#667781; text-transform:capitalize;}.fv{font-size:12px; font-weight:600;}
 	.use-btn{background:#00a884; color:white; border:none; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer;}
-	.filter-info{font-size:11px; color:#8696a0; padding:2px 12px; background:#202c33;}
 	@media (max-width:768px){.sidebar-wrapper{width:100%;max-width:100%;}.sidebar-wrapper.hidden-mobile{display:none;}.chat-area{display:none;}.chat-area.show-mobile{display:flex;position:fixed;inset:0;z-index:10;width:100vw;height:100vh;}.mode-row{flex-direction:column; align-items:stretch;}.list-btn{max-width:100%;}}
 </style>

@@ -1,155 +1,202 @@
 <script lang="ts">
-  import dayjs from 'dayjs';
+  import { onMount } from "svelte";
 
   let {
-    messages = [],
-    selectedContact = null,
-    selectedGroup = null,
-    currentUserId = null,
-    currentUser = null,
-    selectedUser = null,
-    replyingTo = null,
-    onReply = () => {},
-    onDelete = () => {},
-    onForward = () => {},
-    onLongPress = () => {},
-    onPressEnd = () => {}
+    messages = [] as any[],
+    currentUser = null as any,
+    selectedContact = null as any,
+    selectedGroup = null as any,
+    replyingTo = null as any,
+    onReply = (m:any)=>{},
+    onForward = (m:any)=>{},
+    onLongPress = (m:any,e:any)=>{},
+    onPressEnd = ()=>{},
+    onOpenDetail = (t:any,m:any)=>{}
   } = $props();
 
-  let uid = $derived(currentUserId || currentUser?.id || '');
+  let listEl: HTMLDivElement | undefined = $state();
 
-  let groupedMessages = $derived(
-    messages.reduce((acc:any, msg:any, idx:number) => {
-      const prev = messages[idx-1];
-      const isSameSender = prev && prev.sender_id === msg.sender_id;
-      const timeDiff = prev? dayjs(msg.created_at).diff(dayjs(prev.created_at), 'minute') : 10;
-      const groupedPrev = isSameSender && timeDiff < 2;
-      acc.push({...msg, groupedPrev, mine: msg.sender_id === uid });
-      return acc;
-    }, [])
-  );
-
-  function formatTime(ts:string){
-    return dayjs(ts).format('h:mm A');
-  }
-
-  function isTemplate(content:string){
-    if(!content) return false;
-    return content.includes('__TEMPLATE_DATA__') || content.includes('TEMPLATE_REPORT');
+  function formatTime(d:string){
+    if(!d) return '';
+    try{
+      return new Date(d).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    }catch{ return ''; }
   }
 
   function parseTemplate(content:string){
-    try {
-      if(content.includes('__TEMPLATE_DATA__')){
-        const jsonStr = content.split('__TEMPLATE_DATA__')[1]?.trim();
-        const parsed = JSON.parse(jsonStr);
-        return parsed;
-      }
+    if(!content ||!content.includes('__TEMPLATE_DATA__')) return null;
+    try{
+      const parts = content.split('__TEMPLATE_DATA__');
+      const jsonStr = parts[1]?.trim();
+      if(!jsonStr) return null;
+      const data = JSON.parse(jsonStr);
+      return { display: parts[0]?.trim() || '', data };
+    }catch{
       return null;
-    } catch { return null; }
+    }
   }
 
-  function getTheme(code:string){
-    if(!code) return { bg:'#e6f0ff', border:'#c7dbff', title:'#0f172a' };
-    if(code.includes('PROD') || code.includes('PRO')) return { bg:'#e6f0ff', border:'#c7dbff', title:'#0f172a' };
-    if(code.includes('MAINT')) return { bg:'#fef3c7', border:'#fde68a', title:'#92400e' };
-    if(code.includes('QUAL')) return { bg:'#dcfce7', border:'#bbf7d0', title:'#166534' };
-    return { bg:'#e6f0ff', border:'#c7dbff', title:'#0f172a' };
-  }
-
-  function getYield(v:any){
-    const inp = Number(v?.input01 || 0);
-    const out = Number(v?.output01 || 0);
-    if(!inp) return '-';
-    return ((out / inp) * 100).toFixed(2) + '%';
-  }
+  // auto scroll to bottom when new message
+  $effect(()=>{
+    messages.length;
+    setTimeout(()=>{
+      if(listEl) listEl.scrollTop = listEl.scrollHeight;
+    }, 50);
+  });
 </script>
 
-<div class="message-list">
-  {#each groupedMessages as m}
-    {@const tpl = isTemplate(m.content)? parseTemplate(m.content) : null}
-    {@const vals = tpl?.values || {}}
-    {@const theme = tpl? getTheme(tpl.template_code || tpl.template_name) : null}
-
-    <div class="msg-row" class:mine={m.mine} class:grouped={m.groupedPrev}
-         role="button" tabindex="0"
-         oncontextmenu={(e)=>{ e.preventDefault(); onLongPress(m, e); }}
-         ontouchstart={(e)=>onLongPress(m, e)}
-         ontouchend={onPressEnd}
-         onmousedown={(e)=>onLongPress(m, e)}
-         onmouseup={onPressEnd}
+<div class="messages-container" bind:this={listEl}>
+  {#each messages as msg (msg.id)}
+    {@const tpl = parseTemplate(msg.content || '')}
+    {@const isOwn = msg.is_own || msg.sender_id === currentUser?.id}
+    <div
+      class="message-wrapper"
+      class:own={isOwn}
+      ontouchstart={(e)=>onLongPress(msg,e)}
+      ontouchend={onPressEnd}
+      onmousedown={(e)=>onLongPress(msg,e)}
+      onmouseup={onPressEnd}
+      role="button"
+      tabindex="0"
     >
-      {#if !m.groupedPrev}
-        {#if selectedGroup &&!m.mine}
-          <div class="sender-name">{m.sender_name || m.profiles?.name || 'User'}</div>
+      <div class="message-bubble" class:own={isOwn}>
+        {#if msg.reply_to}
+          <div class="reply-line">↩ Reply</div>
         {/if}
-      {/if}
-
-      <div class="bubble" class:mine-bubble={m.mine} class:template-bubble={tpl}>
 
         {#if tpl}
-          <!-- TEMPLATE CARD - YOUR SCREENSHOT STYLE -->
-          <div class="t-card" style="background:{theme.bg}; border: 1px solid {theme.border}">
-            <div class="t-header">
-              <span>📋</span>
-              <b style="color:{theme.title}">{tpl.template_name || 'Production Tracker'}</b>
-            </div>
-            <div class="t-body">
-              {#if vals.shift}<div class="t-row"><span>Shift:</span><b>{vals.shift}</b></div>{/if}
-              {#if vals.station}<div class="t-row"><span>Station:</span><b>{vals.station}</b></div>{/if}
-              <div class="t-row"><span>RAT Input:</span><b>{vals.input01?? '-'}</b></div>
-              <div class="t-row"><span>RAT Output:</span><b>{vals.output01?? '-'}</b></div>
-              <div class="t-row"><span>RAT Yield:</span><b>{vals.yield || getYield(vals)}</b></div>
-              {#if vals.remark01}<div class="t-row remark"><span>Remark:</span><b>{vals.remark01}</b></div>{/if}
-
-              <!-- Show all other values dynamically -->
-              {#each Object.entries(vals) as [k,v]}
-                {#if !['shift','station','input01','output01','yield','remark01'].includes(k)}
-                  <div class="t-row"><span>{k}:</span><b>{v || '-'}</b></div>
-                {/if}
-              {/each}
-            </div>
+          <div class="template-card">
+            <div class="tpl-header">📋 {tpl.data.template_name || tpl.data.template_code || 'Production Report'}</div>
+            <div class="tpl-preview">{tpl.display.slice(0,180) || 'Template data'}</div>
+            <button class="tpl-view-btn" onclick={()=>onOpenDetail(tpl.data, msg)}>View Details</button>
           </div>
         {:else}
-          <div class="content">{m.content}</div>
+          <div class="msg-text">{msg.content || ''}</div>
         {/if}
 
-        <div class="meta">
-          <span class="time">{formatTime(m.created_at)}</span>
-          {#if m.mine}<span class="tick">✓✓</span>{/if}
+        <div class="msg-meta">
+          <span class="msg-time">{formatTime(msg.created_at)}</span>
+          {#if isOwn}
+            <span class="msg-tick">✓✓</span>
+          {/if}
         </div>
       </div>
+    </div>
+  {:else}
+    <div class="empty-msg">
+      <div>💬</div>
+      <p>No messages yet</p>
+      <span>Start the conversation</span>
     </div>
   {/each}
 </div>
 
 <style>
-.message-list{ flex:1; overflow-y:auto; padding:12px 16px; display:flex; flex-direction:column; gap:2px; background:#0b141a; }
-.msg-row{ display:flex; flex-direction:column; max-width:75%; align-self:flex-start; margin-bottom:4px; outline:none; }
-.msg-row.mine{ align-self:flex-end; }
-.msg-row.grouped{ margin-top:-2px; }
-.sender-name{ font-size:12px; font-weight:600; color:#53bdeb; margin:4px 8px 2px; }
-.bubble{ background:#202c33; color:#e9edef; padding:6px 8px 6px 10px; border-radius:8px; border-top-left-radius:0; position:relative; box-shadow:0 1px 0.5px rgba(0,0,0,0.13); min-width:120px; }
-.mine-bubble{ background:#005c4b; border-radius:8px; border-top-right-radius:0; }
-.bubble.template-bubble{ background:#005c4b; padding:6px; }
-.bubble.template-bubble.mine-bubble{ background:#005c4b; }
-.content{ font-size:14.2px; line-height:19px; white-space:pre-wrap; word-break:break-word; }
+.messages-container{
+  flex:1;
+  overflow-y:auto;
+  padding:16px 16px 20px;
+  background:#0b141a;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  -webkit-overflow-scrolling:touch;
+}
+.message-wrapper{
+  display:flex;
+  width:100%;
+}
+.message-wrapper.own{
+  justify-content:flex-end;
+}
+.message-bubble{
+  max-width:68%;
+  background:#202c33;
+  color:#e9edef;
+  padding:7px 10px 6px;
+  border-radius:8px;
+  border-top-left-radius:0;
+  box-shadow:0 1px 0.5px rgba(0,0,0,0.13);
+  word-break:break-word;
+  position:relative;
+}
+.message-bubble.own{
+  background:#005c4b;
+  border-radius:8px;
+  border-top-right-radius:0;
+}
+.reply-line{
+  font-size:12px;
+  color:#53bdeb;
+  border-left:3px solid #00a884;
+  padding:2px 6px;
+  margin-bottom:5px;
+  background:rgba(0,0,0,0.15);
+  border-radius:2px;
+}
+.msg-text{
+  font-size:14.6px;
+  line-height:19px;
+  white-space:pre-wrap;
+  word-wrap:break-word;
+}
+.template-card{
+  background:#111b21;
+  border:1px solid #2a3942;
+  border-radius:10px;
+  padding:10px;
+  min-width:200px;
+}
+.tpl-header{
+  color:#00a884;
+  font-weight:700;
+  font-size:13px;
+  margin-bottom:5px;
+}
+.tpl-preview{
+  font-size:12.5px;
+  color:#8696a0;
+  margin-bottom:8px;
+  white-space:pre-wrap;
+}
+.tpl-view-btn{
+  background:#00a884;
+  border:none;
+  color:#111b21;
+  padding:6px 14px;
+  border-radius:20px;
+  font-weight:700;
+  font-size:12px;
+  cursor:pointer;
+}
+.tpl-view-btn:hover{ background:#06cf9c; }
+.msg-meta{
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  gap:4px;
+  font-size:11px;
+  color:#8696a0;
+  margin-top:4px;
+  user-select:none;
+}
+.message-bubble.own.msg-meta{ color:#53bdeb; }
+.empty-msg{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  color:#8696a0;
+  gap:6px;
+  margin-top:120px;
+}
+.empty-msg div{ font-size:42px; opacity:0.5; }
+.empty-msg p{ font-size:14px; margin:0; }
+.empty-msg span{ font-size:12px; color:#667781; }
 
-/* TEMPLATE CARD - EXACT SCREENSHOT */
-.t-card{ border-radius:12px; overflow:hidden; min-width:220px; max-width:300px; }
-.t-header{ display:flex; align-items:center; gap:6px; padding:10px 14px; border-bottom:1px solid rgba(0,0,0,0.08); background:rgba(255,255,255,0.65); }
-.t-header b{ font-size:14px; font-weight:800; }
-.t-body{ padding:10px 14px; display:flex; flex-direction:column; gap:7px; background:transparent; }
-.t-row{ display:flex; justify-content:space-between; align-items:center; gap:16px; }
-.t-row span{ font-size:13px; color:#334155; font-weight:400; }
-.t-row b{ font-size:13px; color:#0f172a; font-weight:700; text-align:right; max-width:140px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.t-row.remark{ flex-direction:column; align-items:flex-start; gap:2px; margin-top:4px; padding-top:6px; border-top:1px dashed rgba(0,0,0,0.12); }
-.t-row.remark b{ text-align:left; max-width:100%; font-weight:500; white-space:normal; }
-
-.meta{ display:flex; justify-content:flex-end; align-items:center; gap:4px; margin-top:4px; }
-.template-bubble.meta{ padding:0 4px 2px 0; }
-.template-bubble.meta.time{ color:#d1d7db; }
-.time{ font-size:11px; color:#8696a0; }
-.mine-bubble.time{ color:#8696a0; }
-.tick{ font-size:11px; color:#53bdeb; }
+@media (max-width:768px){
+ .message-bubble{ max-width:84%; }
+ .messages-container{ padding:12px 10px 16px; }
+}
 </style>
