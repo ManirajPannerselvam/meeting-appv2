@@ -3,10 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
     <title>ORG - Tauri + SvelteKit</title>
     %sveltekit.head%
     <style>
+      /* FIX WHITE GAP - SAFE AREA */
+      html, body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100%;
+        height: 100%;
+        background: #111827 !important;
+        overscroll-behavior: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      body {
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+
       #app-initial-loader {
         position: fixed;
         inset: 0;

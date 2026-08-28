@@ -18,6 +18,8 @@
   let chartMap: Map<any, any> = new Map();
   let nextId = $state(2);
   let analysisSets: any[] = $state([{id:1, x:'station', y:'input01', label:'Set 1', stationFilter: [] as string[], chartType:'line'}]);
+  let currentUser = $state<any>(null);
+  let bottomTab = $state('report');
 
   let allFields = $derived(normalizeFields(selectedTemplate));
   let availableStations = $derived(allFields.find((f:any) => (f.field_name||f.name).toLowerCase() === 'station')?.options || []);
@@ -31,7 +33,10 @@
   function getNum(row:any,key:string){ const v=getVal(row,key); const n=parseFloat(String(v)); return isNaN(n)?0:n; }
 
   onMount(async () => {
-    if (browser) { const c = await import('chart.js/auto'); ChartJS=c.Chart; }
+    if (browser) {
+      const c = await import('chart.js/auto'); ChartJS=c.Chart;
+      try{ const { supabase } = await import('$lib/supabase'); const { data: { user } } = await supabase.auth.getUser(); if(user) currentUser=user; }catch{}
+    }
     const { data } = await supabaseTemplates.from('templates').select('*').order('name');
     templates = data||[];
     if(templates.length>0){
@@ -89,12 +94,18 @@
   function removeStationFilter(set:any, sf:string){ set.stationFilter=set.stationFilter.filter((s:string)=>s!==sf); analysisSets=[...analysisSets]; renderAll(); }
   async function addComparison(){ if(analysisSets.length>=5) return; const nid=nextId++; analysisSets=[...analysisSets,{id:nid,x:'station',y:'input01',label:`Set ${nid}`,stationFilter:[] as string[],chartType:'line'}]; await tick(); setTimeout(renderAll,400); }
   function removeSet(id:any){ const c=chartMap.get(id); if(c) c.destroy(); chartMap.delete(id); analysisSets=analysisSets.filter(s=>s.id!==id); }
+  function goBottom(tab:string){
+    bottomTab=tab;
+    if(tab==='dashboard' && browser) window.location.href='/';
+    if(tab==='chat' && browser) window.location.href='/chat';
+    if(tab==='report' && browser) window.location.href='/report';
+    if(tab==='user' && browser) window.location.href='/profile';
+  }
 </script>
 
 <div class="app">
-  <!-- 1. TOP FIXED - NO STATION NAMES -->
   <div class="top-fixed">
-    <div class="top-row"><div class="title">📈 Production Report</div><a href="/chat" class="chat-btn">→ Chat</a></div>
+    <div class="top-row"><div class="title">📈 Report</div><a href="/chat" class="chat-btn">→ Chat</a></div>
     <div class="filters">
       <div class="f1"><label>Calendar</label><button class="date-btn" onclick={()=>showCalendar=!showCalendar}>{dateRange.from} / {dateRange.to}</button>{#if showCalendar}<div class="cal-pop"><input type="date" bind:value={dateRange.from} /><input type="date" bind:value={dateRange.to} /><button class="apply" onclick={()=>{showCalendar=false; loadRecords();}}>Apply</button></div>{/if}</div>
       <div class="f2"><label>Template</label><select bind:value={selectedTemplateId} onchange={loadRecords}>{#each templates as t}<option value={t.id}>{t.name}</option>{/each}</select></div>
@@ -103,7 +114,6 @@
     {#if error}<div class="err">{error}</div>{/if}
   </div>
 
-  <!-- 3. MOVABLE ONLY -->
   <div class="scroll-area">
     {#if records.length>0}
       <div class="table-box"><table><thead><tr><th>Time</th><th>Shift</th><th>Station</th><th>input01</th><th>output01</th><th>remark</th></tr></thead><tbody>{#each displayRows as r}<tr><td>{dayjs(r.ts).format('MM/DD HH:mm')}</td><td>{getVal(r,'shift')}</td><td>{getVal(r,'station')}</td><td style="color:#2563eb;font-weight:700;background:#eff6ff">{getVal(r,'input01')}</td><td style="color:#00a884;font-weight:700;background:#f0fdf4">{getVal(r,'output01')}</td><td>{getVal(r,'remark01')}</td></tr>{/each}</tbody></table>
@@ -127,20 +137,28 @@
     {/if}
   </div>
 
-  <!-- 2. BOTTOM FIXED -->
-  <div class="bottom-fixed">
-    <a href="/" class="b">📋</a>
-    <a href="/chat" class="b">💬<span>Chat</span></a>
-    <a href="/report" class="b active">📊<span>Report</span></a>
-    <a href="/profile" class="b">👤</a>
-  </div>
+  <!-- SAME AS CHAT BOTTOM FIXED -->
+  <nav class="bottom-fixed">
+    <button class:active={bottomTab==='dashboard'} onclick={()=>goBottom('dashboard')}>
+      <span class="b-icon">📊</span><small>Dashboard</small>
+    </button>
+    <button class:active={bottomTab==='chat'} onclick={()=>goBottom('chat')}>
+      <span class="b-icon">💬</span><small>Chat</small>
+    </button>
+    <button class:active={bottomTab==='report'} onclick={()=>goBottom('report')}>
+      <span class="b-icon">📋</span><small>Report</small>
+    </button>
+    <button class:active={bottomTab==='user'} onclick={()=>goBottom('user')}>
+      {#if currentUser?.user_metadata?.avatar_url}<img src={currentUser.user_metadata.avatar_url} class="b-avatar" alt="me" />{:else}<span class="b-icon">👤</span>{/if}
+      <small>User</small>
+    </button>
+  </nav>
 </div>
 
 <style>
 .app{display:flex;flex-direction:column;height:100dvh;width:100vw;overflow:hidden;background:#f1f5f9;margin:0;}
 .top-fixed{flex:0 0 auto;background:#fff7ed;border-bottom:2px solid #fed7aa;padding:8px;z-index:30;}
 .scroll-area{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:white;padding:8px;}
-.bottom-fixed{flex:0 0 auto;height:56px;background:#1c1917;display:flex;justify-content:space-around;align-items:center;border-top:1px solid #444;z-index:30;}
 .top-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
 .title{font-weight:800;font-size:14px;}
 .chat-btn{background:#3a241c;color:white;padding:4px 10px;border-radius:16px;text-decoration:none;font-size:11px;}
@@ -170,7 +188,51 @@ select.inline{flex:1 1 0;min-width:75px;padding:7px 6px;border-radius:6px;border
 .chart-wrap canvas{width:100%!important;height:100%!important;}
 .add{width:100%;background:white;border:1px dashed #2563eb;color:#2563eb;padding:10px;border-radius:8px;font-weight:700;margin-top:6px;}
 .max{text-align:center;color:#00a884;font-weight:700;padding:8px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;}
-.b{color:#a89088;text-decoration:none;font-size:18px;display:flex;flex-direction:column;align-items:center;line-height:1;}
-.b span{font-size:9px;margin-top:2px;}
-.b.active{color:white;}
+
+/* SAME AS CHAT - BOTTOM FIXED */
+.bottom-fixed{flex-shrink:0;height:68px;min-height:68px;background:#202c33;border-top:1px solid #2a3942;display:flex;justify-content:space-around;align-items:center;z-index:30;padding-bottom:env(safe-area-inset-bottom);}
+.bottom-fixed button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#8696a0;cursor:pointer;flex:1;padding:6px;}
+.bottom-fixed button.active{color:#00a884;}
+.b-icon{font-size:20px;line-height:1;}
+.b-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid #00a884;}
+.bottom-fixed small{font-size:11px;font-weight:600;}
+
+/* MOBILE ONLY - Calendar & Template same size + 26 size reduce */
+@media (max-width:768px){
+  .filters{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    align-items:end;
+  }
+  .f1,.f2{
+    width:100%;
+    min-width:0;
+  }
+  .date-btn,.f2 select{
+    width:100%;
+    min-width:0;
+    height:38px;
+    font-size:12px;
+  }
+  .load{
+    grid-column:1 / -1;
+    width:100%;
+    height:36px;
+    margin-top:2px;
+  }
+  .more{
+    padding:3px 10px !important;
+    font-size:10px !important;
+    height:26px !important;
+    min-height:26px !important;
+    line-height:1;
+  }
+  .g-controls{gap:4px;}
+  .badge{font-size:9px !important;padding:4px 6px !important;height:28px;display:flex;align-items:center;}
+  select.inline{height:28px !important;font-size:11px !important;padding:3px 4px !important;min-width:58px !important;}
+  .del{height:28px !important;padding:3px 6px !important;font-size:11px !important;}
+  .chart-wrap{height:260px;}
+  .add{height:36px;padding:6px;font-size:12px;}
+}
 </style>

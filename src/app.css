@@ -7,6 +7,7 @@
 html,
 body{
     width:100%;
+    height:100%;
     min-height:100dvh;
     overflow-x:hidden;
     font-family:"Segoe UI",Arial,sans-serif;
@@ -14,16 +15,51 @@ body{
     color:#1f2937;
     -webkit-font-smoothing:antialiased;
     text-rendering:optimizeLegibility;
+    overscroll-behavior:none;
 }
 
 body{
-    overscroll-behavior:none;
     touch-action:manipulation;
+    /* REMOVED padding-bottom:75px - causes white gap */
+    padding-bottom: env(safe-area-inset-bottom);
 }
 
 #app{
     width:100%;
     min-height:100dvh;
+    display:flex;
+    flex-direction:column;
+}
+
+/* Fixed layout helpers - used in dashboard/report */
+.app{
+    display:flex;
+    flex-direction:column;
+    height:100dvh;
+    height:100svh;
+    overflow:hidden;
+    background:#f5f7fb;
+}
+
+.top-fixed{
+    flex:0 0 auto;
+    z-index:30;
+}
+
+.scroll-area{
+    flex:1 1 auto;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+}
+
+.bottom-fixed{
+    flex:0 0 auto;
+    position:sticky;
+    bottom:0;
+    z-index:30;
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+    background:#111827;
 }
 
 .page{
@@ -79,63 +115,42 @@ a{
 }
 
 /* ---------- Large Tablets ---------- */
-
 @media (max-width:1200px){
-
     .page{
         padding:16px;
     }
-
 }
 
 /* ---------- Tablets ---------- */
-
 @media (max-width:768px){
-
     .page{
         padding:12px;
     }
-
     .cards{
         grid-template-columns:1fr;
     }
-
     table{
         font-size:14px;
     }
-
     button{
         min-height:44px;
     }
-
+    /* NO body padding-bottom here - handled by .bottom-fixed */
 }
 
 /* ---------- Phones ---------- */
-@media (max-width:768px){
-
-    body{
-
-        padding-bottom:75px;
-
-    }
-
-}
-
 @media (max-width:480px){
-
     .page{
         padding:10px;
+        padding-bottom: calc(10px + 56px + env(safe-area-inset-bottom));
     }
-
     table{
         font-size:13px;
     }
-
     button,
     input,
     select,
     textarea{
         font-size:16px;
     }
-
 }
