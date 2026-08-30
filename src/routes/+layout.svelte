@@ -15,6 +15,7 @@
   const modules = ['/', '/chat', '/reports', '/dashboard', '/templates'];
   let startX = 0;
   let startY = 0;
+  let startTime = 0;
   let isSwiping = false;
 
   function getModuleIndex(path: string){
@@ -26,9 +27,28 @@
     return 0;
   }
 
+  function shouldIgnoreSwipe(target: any){
+    if(!target) return false;
+    const tag = target.tagName?.toLowerCase();
+    // Don't swipe when touching buttons, inputs, tables, canvas
+    if(['button','input','select','textarea','a'].includes(tag)) return true;
+    if(target.closest('button, input, select, textarea, a,.table-wrapper, [data-no-swipe]')) return true;
+    return false;
+  }
+
   function onTouchStart(e: TouchEvent){
+    if(shouldIgnoreSwipe(e.target)) {
+      isSwiping = false;
+      return;
+    }
+    // Disable swipe on templates page (it has its own drag)
+    if($page.url.pathname.startsWith('/templates')) {
+      isSwiping = false;
+      return;
+    }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
+    startTime = Date.now();
     isSwiping = true;
   }
 
@@ -39,13 +59,21 @@
     const endY = e.changedTouches[0].clientY;
     const diffX = endX - startX;
     const diffY = endY - startY;
-    if(Math.abs(diffX) < 80 || Math.abs(diffY) > 60) return;
+    const elapsed = Date.now() - startTime;
+
+    // FIX: Increased threshold + velocity check
+    // Need 120px horizontal, less than 50px vertical, and fast swipe < 400ms
+    if(Math.abs(diffX) < 120) return;
+    if(Math.abs(diffY) > 50) return;
+    if(elapsed > 500) return; // slow drag = not a swipe, probably scroll
+    if(Math.abs(diffX) < Math.abs(diffY) * 1.5) return; // must be mostly horizontal
+
     const currentPath = $page.url.pathname;
     let idx = getModuleIndex(currentPath);
-    if(diffX < -80){
+    if(diffX < -120){
       const next = (idx + 1) % modules.length;
       goto(modules[next]);
-    } else if(diffX > 80){
+    } else if(diffX > 120){
       const prev = (idx - 1 + modules.length) % modules.length;
       goto(modules[prev]);
     }
@@ -101,7 +129,7 @@
 </div>
 {/if}
 
-<div class="swipe-root">
+<div class="swipe-root" data-no-swipe>
   <slot />
 </div>
 

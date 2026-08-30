@@ -9,21 +9,41 @@
   async function handleSignup() {
     loading = true;
     error = '';
-    const { error: err } = await supabase.auth.signUp({
+    const { data, error: err } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo: `http://localhost:1420`
+        emailRedirectTo: `http://localhost:1420/auth/callback`
       }
     });
-    if (err) error = err.message;
-    else goto('/login?msg=Check email to confirm');
+    
+    if (err) {
+      error = err.message;
+      loading = false;
+      return;
+    }
+
+    // Link invite if email was invited before signup
+    if (data.user) {
+      try {
+        await supabase.from('contact_invites')
+          .update({ 
+            invited_user: data.user.id, 
+            status: 'accepted' 
+          })
+          .eq('email', email.toLowerCase().trim())
+          .is('invited_user', null);
+      } catch (e) {
+        console.log('invite link failed', e);
+      }
+    }
+
+    goto('/login?msg=Check email to confirm');
     loading = false;
   }
 </script>
 
 <div class="auth-page">
-  
   <div class="card">
     <h2>Create Account</h2>
     {#if error}<div class="error">{error}</div>{/if}

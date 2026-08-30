@@ -7,18 +7,33 @@
     <title>ORG - Tauri + SvelteKit</title>
     %sveltekit.head%
     <style>
-      /* FIX WHITE GAP - SAFE AREA */
+      /* FIX WHITE GAP - SAFE AREA + TOUCH FIX */
       html, body {
-        margin: 0 !important;
-        padding: 0 !important;
+        margin: 0!important;
+        padding: 0!important;
         width: 100%;
         height: 100%;
-        background: #111827 !important;
+        background: #111827!important;
         overscroll-behavior: none;
         -webkit-tap-highlight-color: transparent;
+        touch-action: pan-y;
+        user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
       }
       body {
         padding-bottom: env(safe-area-inset-bottom);
+        position: fixed; /* FIX: prevents swipe bounce */
+        overflow: hidden;
+        width: 100%;
+      }
+      /* Allow inner scroll areas to scroll */
+      #svelte {
+        width: 100%;
+        height: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
       }
 
       #app-initial-loader {
@@ -35,13 +50,13 @@
         opacity: 0;
         visibility: hidden;
       }
-      .loader-content {
+     .loader-content {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 16px;
       }
-      .handshake-anim {
+     .handshake-anim {
         display: flex;
         align-items: center;
         gap: 2px;
@@ -54,31 +69,31 @@
         50% { transform: translateY(0) scale(1.1) rotate(0deg); }
         75% { transform: translateY(-2px) scale(1.05) rotate(2deg); }
       }
-      .loader-brand {
+     .loader-brand {
         color: #22c55e;
         font-weight: 900;
         font-size: 28px;
         letter-spacing: 8px;
         font-family: "Segoe UI", sans-serif;
       }
-      .loader-dots {
+     .loader-dots {
         display: flex;
         gap: 6px;
       }
-      .loader-dots span {
+     .loader-dots span {
         width: 8px;
         height: 8px;
         background: #22c55e;
         border-radius: 50%;
         animation: loaderDot 1s infinite;
       }
-      .loader-dots span:nth-child(2) { animation-delay: 0.2s; }
-      .loader-dots span:nth-child(3) { animation-delay: 0.4s; }
+     .loader-dots span:nth-child(2) { animation-delay: 0.2s; }
+     .loader-dots span:nth-child(3) { animation-delay: 0.4s; }
       @keyframes loaderDot {
         0%, 100% { transform: translateY(0); opacity: 0.4; }
         50% { transform: translateY(-8px); opacity: 1; }
       }
-      .loader-bar {
+     .loader-bar {
         width: 140px;
         height: 3px;
         background: #1f2937;
@@ -86,7 +101,7 @@
         overflow: hidden;
         margin-top: 6px;
       }
-      .loader-bar-fill {
+     .loader-bar-fill {
         width: 45%;
         height: 100%;
         background: linear-gradient(90deg, #22c55e, #16a34a);
@@ -113,6 +128,20 @@
     <div style="display: contents">%sveltekit.body%</div>
 
     <script>
+      // FIX: Block browser swipe-back that causes next page on little swap
+      let touchStartX = 0;
+      document.addEventListener('touchstart', function(e) {
+        touchStartX = e.touches[0].clientX;
+      }, { passive: true });
+
+      document.addEventListener('touchmove', function(e) {
+        const diff = e.touches[0].clientX - touchStartX;
+        // If swipe starts from edge <30px and moves >10px horizontal -> block it
+        if (touchStartX < 30 && diff > 10) {
+          e.preventDefault();
+        }
+      }, { passive: false });
+
       // Hide loader after SvelteKit hydrates
       window.addEventListener('load', function() {
         setTimeout(function() {
@@ -126,7 +155,7 @@
       // Fallback - hide after 3s max
       setTimeout(function(){
         var loader = document.getElementById('app-initial-loader');
-        if (loader && !loader.classList.contains('hide')) {
+        if (loader &&!loader.classList.contains('hide')) {
           loader.classList.add('hide');
           setTimeout(function(){ loader.remove(); }, 500);
         }

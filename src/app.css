@@ -2,6 +2,7 @@
     margin:0;
     padding:0;
     box-sizing:border-box;
+    -webkit-tap-highlight-color: transparent; /* FIX: remove blue flash late feeling */
 }
 
 html,
@@ -16,12 +17,15 @@ body{
     -webkit-font-smoothing:antialiased;
     text-rendering:optimizeLegibility;
     overscroll-behavior:none;
+    touch-action: pan-y; /* FIX: allow vertical scroll, block horizontal swipe */
+    user-select: none; /* FIX: prevent text selection feeling like lag */
+    -webkit-user-select: none;
 }
 
 body{
-    touch-action:manipulation;
-    /* REMOVED padding-bottom:75px - causes white gap */
+    touch-action: pan-y;
     padding-bottom: env(safe-area-inset-bottom);
+    position: relative;
 }
 
 #app{
@@ -51,6 +55,7 @@ body{
     overflow-y:auto;
     overflow-x:hidden;
     -webkit-overflow-scrolling:touch;
+    touch-action: pan-y; /* FIX: smooth scroll area */
 }
 
 .bottom-fixed{
@@ -60,6 +65,7 @@ body{
     z-index:30;
     padding-bottom: max(0px, env(safe-area-inset-bottom));
     background:#111827;
+    touch-action: manipulation;
 }
 
 .page{
@@ -79,6 +85,7 @@ body{
     width:100%;
     overflow-x:auto;
     -webkit-overflow-scrolling:touch;
+    touch-action: pan-x pan-y; /* FIX: allow table scroll without triggering page swipe */
 }
 
 table{
@@ -90,11 +97,20 @@ img{
     max-width:100%;
     height:auto;
     display:block;
+    pointer-events: none; /* FIX: images not stealing touch */
 }
 
 button{
     cursor:pointer;
     font:inherit;
+    touch-action: manipulation; /* FIX: removes 300ms delay */
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+button:active{
+    transform: scale(0.98); /* FIX: instant feedback */
+    opacity: 0.9;
 }
 
 input,
@@ -108,10 +124,14 @@ input,
 select,
 textarea{
     width:100%;
+    user-select: text; /* FIX: allow typing */
+    -webkit-user-select: text;
+    touch-action: manipulation;
 }
 
 a{
     color:inherit;
+    touch-action: manipulation;
 }
 
 /* ---------- Large Tablets ---------- */
@@ -134,8 +154,8 @@ a{
     }
     button{
         min-height:44px;
+        min-width:44px;
     }
-    /* NO body padding-bottom here - handled by .bottom-fixed */
 }
 
 /* ---------- Phones ---------- */
@@ -151,6 +171,6 @@ a{
     input,
     select,
     textarea{
-        font-size:16px;
+        font-size:16px; /* FIX: prevents zoom on iOS */
     }
 }
