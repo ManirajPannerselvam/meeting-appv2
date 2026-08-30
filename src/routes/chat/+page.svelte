@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from "svelte";
 	import { browser } from "$app/environment";
-	import { supabase as chatDB } from '$lib/supabase';
+	import { supabase as chatDB, supabaseTemplates } from '$lib/supabase';
 	import ChatSidebar from "$lib/components/chat/ChatSidebar.svelte";
 	import ChatHeader from "$lib/components/chat/ChatHeader.svelte";
 	import MessageList from "$lib/components/chat/MessageList.svelte";
@@ -69,6 +69,35 @@
 		}catch{}
 		return null;
 	}
+
+	function evalFormulaChat(formulaStr: string, vals: Record<string,any>): string {
+		if(!formulaStr) return "0.00";
+		try{
+			let expr = formulaStr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/—/g,'-');
+			expr = expr.replace(/\{([^}]+)\}/g, (_, k)=>{
+				let key = k.trim();
+				let v = vals[key]?? vals[key.toLowerCase()]?? vals[key.toLowerCase().replace(/\s+/g,"_")]?? "0";
+				let num = Number(String(v).replace(/[^0-9.\-]/g,''));
+				return isNaN(num)? "0" : String(num);
+			});
+			expr = expr.replace(/%/g,'');
+			if(/[^0-9+\-*/().\s]/.test(expr)) return "0.00";
+			let r = Function('"use strict";return ('+expr+')')();
+			if(r===undefined || isNaN(r) ||!isFinite(r)) return "0.00";
+			return Number(r).toFixed(2);
+		}catch{ return "0.00"; }
+	}
+	function calcAllFormulas(template: any, vals: Record<string,any>){
+		let out = {...vals};
+		let fields = template?.fields || template?.data?.fields || selectedTemplate?.data?.fields || [];
+		for(let f of fields){
+			if(f.type==='formula' && f.formula){
+				out[f.field_name] = evalFormulaChat(f.formula, out);
+			}
+		}
+		return out;
+	}
+
 	let filteredMessages = $derived.by(()=>{
 		if(chatMode==='template'){
 			let list = messages.filter(isTemplateMsg);
@@ -119,11 +148,9 @@
 		checkMobile();
 		window.addEventListener('resize', checkMobile);
 		try{ mutedRooms = new Set(JSON.parse(localStorage.getItem('mutedRooms') || '[]')); }catch{}
-		// SECURE + avatar fix
 		const { data: { user } } = await chatDB.auth.getUser();
 		if(user){
 			currentUser = {...(data?.user||{}),...user, avatar_url: user.user_metadata?.avatar_url || data?.user?.avatar_url || null };
-			// also fetch profile avatar
 			try{
 				const { data: prof } = await chatDB.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle();
 				if(prof?.avatar_url) currentUser = {...currentUser, avatar_url: prof.avatar_url};
@@ -132,7 +159,7 @@
 			currentUser = data.user;
 		}
 		const uid = getCurrentUserId(); if(!uid) return;
-		await Promise.all([loadGroups(), loadContacts(), setupPresence(), loadTemplates()]);
+		await Promise.all([loadGroups(), loadContacts(), setupPresence()]);
 	});
 	onDestroy(async () => { if (browser) window.removeEventListener('resize', checkMobile); await cleanupRealtime(); });
 
@@ -150,7 +177,6 @@
 	}
 	function openAvatarModal(target: any, type: 'contact'|'group'){ avatarTarget = target; avatarType = type; avatarPreview = target?.avatar_url || null; showAvatarModal = true; }
 	async function onAvatarFileChange(e: any){
-		// 5. OTHER USER ONLY VIEW
 		if(avatarType==='contact' &&!avatarTarget?.isSelf){
 			alert("You can only view other user's photo");
 			return;
@@ -174,24 +200,115 @@
 			showAvatarModal = false;
 		}catch(err:any){ alert("Upload failed: "+err.message); } finally{ avatarUploading = false; }
 	}
+
 	async function loadTemplates(){
-	  if(templates.length>0) return; templateLoading=true;
-	  try{ const res = await fetch(`/api/templates?t=${Date.now()}`, { cache:"no-store" }); if(!res.ok){ templates=[]; return; } const json = await res.json(); let list = json.templates || json.data || json || []; if(!Array.isArray(list)) list=[]; templates = list.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data })); }catch{ templates=[]; } finally{ templateLoading=false; }
+	  templateLoading=true;
+	  try{
+	    const uid = getCurrentUserId();
+	    const contactId = selectedContact?.actual_user_id || selectedContact?.id;
+	    const groupId = selectedGroupId;
+	    let url = `/api/templates?t=${Date.now()}&user_id=${uid}`;
+	    if(contactId) url += `&contact_id=${contactId}`;
+	    if(groupId) url += `&group_id=${groupId}`;
+	    const res = await fetch(url, { cache:"no-store" });
+	    let list:any[] = [];
+	    if(res.ok){
+	      const json = await res.json();
+	      list = json.templates || json.data || json || [];
+	      if(!Array.isArray(list)) list=[];
+	    }
+	    try{
+	      const local = JSON.parse(localStorage.getItem("templates")||"[]");
+	      local.forEach((t:any)=>{
+	        if(!list.find((x:any)=> String(x.id)===String(t.id))){
+	          list.push({...t, template_code: t.template_code||t.code, data: t.data||{ fields: t.fields||[] }});
+	        }
+	      });
+	    }catch{}
+	    templates = list.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data }));
+	  }catch{
+	    try{
+	      const local = JSON.parse(localStorage.getItem("templates")||"[]");
+	      templates = local.map((t:any)=>({...t, data: t.data||{ fields: t.fields||[] }}));
+	    }catch{ templates=[]; }
+	  } finally{ templateLoading=false; }
 	}
-	function onOpenTemplate(){ if(!selectedContact &&!selectedGroup){ alert("Select a contact first"); return; } loadTemplates(); showTemplateForm=false; showTemplateModal = true; }
+
+	function onOpenTemplate(){
+	  if(!selectedContact &&!selectedGroup){ alert("Select a contact first"); return; }
+	  loadTemplates();
+	  showTemplateForm=false;
+	  showTemplateModal = true;
+	}
+
 	function handleUseTemplate(e:any){
 		const t = e.detail?.template || e.detail; if(!t) return;
 		try{ selectedTemplate = JSON.parse(JSON.stringify(t)); if(typeof selectedTemplate.data==='string'){ try{ selectedTemplate.data = JSON.parse(selectedTemplate.data); }catch{} } }catch{ selectedTemplate = {...t, data: typeof t.data==='string'? JSON.parse(t.data||'{}') : (t.data||{}) }; }
 		showTemplateModal=false; setTimeout(()=>{ showTemplateForm=true; }, 120);
 	}
-	function handleCreateTemplate(){ showTemplateModal=false; showTemplateForm=false; if(browser) window.open("/templates","_blank"); }
-	function handleOpenDetail(tpl: any, msg: any){ detailData = { template_name: tpl.template_name || tpl.template_code || 'Production Report', template_code: tpl.template_code, values: tpl.values || tpl.data || {}, t_code: tpl.template_code, user_name: msg.sender_name || msg.profiles?.name || currentUser?.email || 'User', created_at: msg.created_at, }; showDetailModal = true; }
-	async function sendTemplateReport(e:any){
-		const { template, values } = e.detail; if(!template) return;
-		let displayLines = [`📋 *${template.name}*`, ``]; Object.entries(values).forEach(([k,v])=>{ displayLines.push(`${k}: ${v || '-'}`); });
-		const display = displayLines.join('\n'); const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: template.template_code, values, shared_with: selectedContact?.id || selectedGroupId };
-		const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`; showTemplateForm=false; await sendMessage({ detail: { content: fullContent } } as any); selectedTemplate=null;
+
+	function handleCreateTemplate(){
+	  showTemplateModal=false;
+	  showTemplateForm=false;
+	  const contactId = selectedContact?.actual_user_id || selectedContact?.id || '';
+	  const groupId = selectedGroupId || '';
+	  if(browser) window.location.href=`/templates/create?contact_id=${contactId}&group_id=${groupId}`;
 	}
+
+	function handleOpenDetail(tpl: any, msg: any){ detailData = { template_name: tpl.template_name || tpl.template_code || 'Production Report', template_code: tpl.template_code, values: tpl.values || tpl.data || {}, t_code: tpl.template_code, user_name: msg.sender_name || msg.profiles?.name || currentUser?.email || 'User', created_at: msg.created_at, }; showDetailModal = true; }
+
+					async function sendTemplateReport(e:any){
+		const { template, values } = e.detail; if(!template) return;
+		const calculatedValues = calcAllFormulas(template, values);
+		let displayLines = [`📋 *${template.name}*`, ``];
+		Object.entries(calculatedValues).forEach(([k,v])=>{ displayLines.push(`${k}: ${v || '0.00'}`); });
+		const display = displayLines.join('\n');
+		const t_code = template.template_code || template.code || template.t_code;
+		const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: t_code, values: calculatedValues, created_at: new Date().toISOString() };
+		const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`;
+		try{
+		  // get uid from both projects - chatDB is where auth lives
+		  const { data: { user: chatUser } } = await chatDB.auth.getUser();
+		  const { data: { user: tmplUser } } = await supabaseTemplates.auth.getUser();
+		  const realUid = chatUser?.id || tmplUser?.id || getCurrentUserId();
+		  const email = chatUser?.email || tmplUser?.email || currentUser?.email || data?.user?.email || '';
+		  const nowIso = new Date().toISOString();
+
+		  // payload that matches real table: t_code, reference_template_id, data, ts, owner_id(uuid)
+		  const payload:any = {
+		    t_code: t_code,
+		    reference_template_id: template.id,
+		    data: {
+		      ...calculatedValues,
+		      t_code: t_code,
+		      template_code: t_code,
+		      template_name: template.name,
+		      template_id: template.id,
+		      reference_template_id: template.id,
+		      owner_id: realUid,
+		      user_id: realUid,
+		      owner_email: email,
+		      created_at: nowIso
+		    },
+		    ts: nowIso
+		  };
+		  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(realUid)){
+		    payload.owner_id = realUid;
+		  }
+
+		  console.log("Saving to templates DB:", payload.t_code, payload.reference_template_id, payload.owner_id);
+		  const { data: inserted, error } = await supabaseTemplates.from("records").insert(payload).select().single();
+		  if(error) throw error;
+		  console.log("✅ VENT saved:", inserted.id);
+		}catch(err:any){
+		  console.error("FINAL fail", err?.message, err?.details, err?.hint);
+		  alert("Save failed: "+err?.message+" - Run SQL policy fix in rfckn project");
+		}
+		showTemplateForm=false;
+		await sendMessage({ detail: { content: fullContent } } as any);
+		selectedTemplate=null;
+	}
+
 	async function loadGroups() { const userId = getCurrentUserId(); if(!userId) return; const { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId); groups = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); }
 	async function loadContacts() {
 		const userId = getCurrentUserId(); if(!userId){ contacts = []; return; }
@@ -273,24 +390,13 @@
 			  onLogout={async () => { await chatDB.auth.signOut(); if(browser) location.reload(); }}
 			/>
 		</div>
-		<!-- 1. FIXED BOTTOM ITEM - MOBILE+DESKTOP WITH IMAGE+TEXT -->
 		<nav class="bottom-fixed">
-			<button class:active={bottomTab==='dashboard'} onclick={()=>goBottom('dashboard')}>
-				<span class="b-icon">📊</span><small>Dashboard</small>
-			</button>
-			<button class:active={bottomTab==='chat'} onclick={()=>goBottom('chat')}>
-				<span class="b-icon">💬</span><small>Chat</small>
-			</button>
-			<button class:active={bottomTab==='report'} onclick={()=>goBottom('report')}>
-				<span class="b-icon">📋</span><small>Report</small>
-			</button>
-			<button class:active={bottomTab==='user'} onclick={()=>goBottom('user')}>
-				{#if currentUser?.avatar_url}<img src={currentUser.avatar_url} class="b-avatar" alt="me" />{:else}<span class="b-icon">👤</span>{/if}
-				<small>User</small>
-			</button>
+			<button class:active={bottomTab==='dashboard'} onclick={()=>goBottom('dashboard')}><span class="b-icon">📊</span><small>Dashboard</small></button>
+			<button class:active={bottomTab==='chat'} onclick={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button>
+			<button class:active={bottomTab==='report'} onclick={()=>goBottom('report')}><span class="b-icon">📋</span><small>Report</small></button>
+			<button class:active={bottomTab==='user'} onclick={()=>goBottom('user')}>{#if currentUser?.avatar_url}<img src={currentUser.avatar_url} class="b-avatar" alt="me" />{:else}<span class="b-icon">👤</span>{/if}<small>User</small></button>
 		</nav>
 	</div>
-
 	<section class="chat-area" class:show-mobile={isMobileView && (selectedContact || selectedGroup)}>
 		{#if selectedContact || selectedGroup}
 			<div class="chat-header-fixed">
@@ -304,8 +410,6 @@
 					onAction={handleHeaderAction}
 				/>
 			</div>
-
-			<!-- 4. FILTER AREA REDUCED - 2 LINE ON MOBILE -->
 			<div class="filter-fixed">
 			  <div class="mode-row">
 			    <div class="dd-wrap" use:clickOutside={()=>openMode=false}>
@@ -322,7 +426,6 @@
 			        </div>
 			      {/if}
 			    </div>
-
 			    {#if chatMode!=='chat'}
 			      <div class="dd-wrap second" use:clickOutside={()=>openList=false}>
 			        <button class="list-btn" onclick={(e)=>{e.stopPropagation(); openList=!openList}}>
@@ -332,7 +435,7 @@
 			        {#if openList}
 			          <div class="dd dd2" onclick={(e)=>{e.stopPropagation()}}>
 			            {#if chatMode==='template'}
-			              {#each templates as t}<button class:active={selectedTemplate?.id===t.id} onclick={()=>{selectedTemplate=t; openList=false;}}><b>{t.name}</b><small>{t.template_code}</small></button>{:else}<div class="empty">No templates</div>{/each}
+			              {#each templates as t}<button class:active={selectedTemplate?.id===t.id} onclick={()=>{selectedTemplate=t; openList=false;}}><b>{t.name}</b><small>{t.template_code}</small></button>{:else}<div class="empty">No templates for this chat</div>{/each}
 			            {:else}
 			              {#each meetings as m}<button class:active={selectedMeeting?.id===m.id} onclick={()=>{selectedMeeting=m; openList=false;}}><b>{m.title}</b><small>{m.date}</small></button>{:else}<div class="empty">No meetings</div>{/each}
 			            {/if}
@@ -343,21 +446,14 @@
 			    {/if}
 			  </div>
 			</div>
-
 			<div class="filter-info">Showing: {chatMode}{selectedTemplate? ` - ${selectedTemplate.name}`:''} | {filteredMessages.length}/{messages.length} msgs</div>
-
-			<!-- MESSAGES SCROLL -->
 			<div class="messages-scroll">
 				<MessageList messages={filteredMessages} {selectedContact} {selectedGroup} currentUser={currentUser} selectedUser={currentUser} {replyingTo} onReply={handleReply} onForward={handleForward} onLongPress={handleMessageLongPress} onPressEnd={handleMessagePressEnd} onOpenDetail={handleOpenDetail} />
 			</div>
-
 			{#if replyingTo}<div class="reply-preview"><span>Replying to: {replyingTo.content?.slice(0,50)}...</span><button onclick={()=>replyingTo=null}>✕</button></div>{/if}
-			
-			<!-- 2. INPUT FIXED ALWAYS VISIBLE -->
 			<div class="chat-input-fixed">
 				{#if chatMode==='chat'}<ChatInput {uploadingFiles} onSendMessage={sendMessage} onOpenTemplate={onOpenTemplate} />{/if}
 			</div>
-
 		{:else}
 			<div class="empty-area"><div class="empty-icon">💬</div><h2>Chat</h2><p>Select a chat to start messaging</p></div>
 		{/if}
@@ -375,7 +471,6 @@
 </div>
 <div class="modal-btns">
 <button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button>
-<!-- 5. ONLY SELF CAN CHANGE -->
 {#if avatarType==='group' || avatarTarget?.isSelf}
 <label class="btn-primary" style="text-align:center;cursor:pointer;">Choose<input type="file" accept="image/*" hidden onchange={onAvatarFileChange} /></label>
 {/if}
@@ -395,18 +490,15 @@
 {#if showDetailModal && detailData}<div class="detail-bg" role="presentation"><button type="button" class="modal-bg-btn" onclick={()=>showDetailModal=false}></button><div class="detail-modal" role="dialog" tabindex="-1"><div class="detail-header"><h3>📋 {detailData.template_name}</h3><button class="detail-close" onclick={()=>showDetailModal=false}>✕</button></div><div class="detail-body">{#each Object.entries(detailData.values) as [k,v]}<div class="detail-row"><span class="d-label">{k.replace(/_/g,' ')}</span><b class="d-value">{String(v||'-')}</b></div>{/each}</div><div class="detail-actions"><button class="btn-secondary" onclick={()=>showDetailModal=false}>Close</button></div></div></div>{/if}
 
 <style>
-	/* 3. FIX HEIGHT - NOT MOVABLE */
 	.main-container{display:flex;height:100dvh;max-height:100dvh;width:100vw;background:#111b21;overflow:hidden;font-family:Inter,Segoe UI,sans-serif;}
 	.sidebar-wrapper{width:30%;min-width:300px;max-width:420px;display:flex;flex-direction:column;border-right:1px solid #222d34;background:#111b21;overflow:hidden;height:100dvh;max-height:100dvh;}
 	.sidebar-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;}
-	/* 1. BOTTOM FIXED - DESKTOP + MOBILE */
 	.bottom-fixed{flex-shrink:0;height:68px;min-height:68px;background:#202c33;border-top:1px solid #2a3942;display:flex;justify-content:space-around;align-items:center;z-index:20;padding-bottom:env(safe-area-inset-bottom);}
 	.bottom-fixed button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#8696a0;cursor:pointer;flex:1;padding:6px;}
 	.bottom-fixed button.active{color:#00a884;}
 	.b-icon{font-size:20px;line-height:1;}
 	.b-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid #00a884;}
 	.bottom-fixed small{font-size:11px;font-weight:600;}
-
 	.chat-area{flex:1;display:flex;flex-direction:column;background:#0b141a;min-width:0;height:100dvh;max-height:100dvh;overflow:hidden;}
 	.chat-header-fixed{flex-shrink:0;z-index:10;}
 	.filter-fixed{flex-shrink:0;background:#f0f2f5;border-bottom:1px solid #d1d7db;padding:6px 10px;z-index:9;}
@@ -425,11 +517,8 @@
 	.empty{padding:12px;font-size:13px;color:#667781;}
 	.use-btn{background:#00a884;color:white;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;}
 	.filter-info{font-size:10px;color:#8696a0;padding:3px 12px;background:#202c33;flex-shrink:0;}
-
-	/* 2. INPUT + MESSAGES FIXED HEIGHT */
 	.messages-scroll{flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;}
 	.chat-input-fixed{flex-shrink:0;background:#202c33;z-index:10;}
-
 	.empty-area{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#222e35;color:#8696a0;gap:8px;}
 	.empty-icon{font-size:64px;opacity:0.5;}.empty-area h2{color:#e9edef;font-size:32px;font-weight:300;margin:10px 0 0;}
 	.reply-preview{display:flex;justify-content:space-between;align-items:center;background:#202c33;padding:8px 12px;border-left:4px solid #00a884;color:#8696a0;font-size:13px;flex-shrink:0;}
@@ -451,13 +540,11 @@
 	.detail-row{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fafc;border-radius:10px;}
 	.d-label{text-transform:capitalize;color:#64748b;font-size:13px;font-weight:600;}.d-value{color:#0f172a;font-size:13px;font-weight:700;}
 	.detail-actions{padding:14px 20px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;}
-
 	@media (max-width:768px){
 		.sidebar-wrapper{width:100%;max-width:100%;}
 		.sidebar-wrapper.hidden-mobile{display:none;}
 		.chat-area{display:none;}
 		.chat-area.show-mobile{display:flex;position:fixed;inset:0;z-index:50;width:100vw;height:100dvh;max-height:100dvh;}
-		/* 4. 2 LINE ON MOBILE */
 		.mode-row{flex-direction:column;align-items:stretch;gap:6px;}
 		.list-btn{max-width:100%;min-width:100%;}
 		.second{width:100%;}

@@ -3,7 +3,7 @@ import { type Handle } from '@sveltejs/kit'
 import { sequence } from '@sveltejs/kit/hooks'
 import { env } from '$env/dynamic/public'
 
-const supabase: Handle = async ({ event, resolve }) => {
+const supabaseHandle: Handle = async ({ event, resolve }) => {
 	const supabaseUrl = env.PUBLIC_SUPABASE_CHAT_URL || env.PUBLIC_SUPABASE_URL
 	const supabaseAnonKey = env.PUBLIC_SUPABASE_CHAT_ANON_KEY || env.PUBLIC_SUPABASE_ANON_KEY
 
@@ -26,14 +26,26 @@ const supabase: Handle = async ({ event, resolve }) => {
 	});
 
 	try {
+		// 1. Get session first (ok)
 		const {
-			data: { session },
-			error
+			data: { session }
 		} = await event.locals.supabase.auth.getSession();
 
-		if (error) throw error;
+		// 2. SECURE FIX: Authenticate user via Supabase Auth server - not from cookies
+		const {
+			data: { user },
+			error: userError
+		} = await event.locals.supabase.auth.getUser();
 
-		event.locals.user = session?.user?? null;
+		if (userError) {
+			// If getUser fails, session is invalid - clear cookies
+			throw userError;
+		}
+
+		// SECURE: Use authenticated user, not session.user
+		event.locals.user = user?? null;
+		event.locals.session = session?? null;
+
 	} catch (error: any) {
 		console.log('[Hook] Auth error - clearing supabase cookies:', error.message);
 		event.cookies.getAll().forEach((c) => {
@@ -42,6 +54,7 @@ const supabase: Handle = async ({ event, resolve }) => {
 			}
 		});
 		event.locals.user = null;
+		event.locals.session = null;
 	}
 
 	return resolve(event, {
@@ -51,4 +64,4 @@ const supabase: Handle = async ({ event, resolve }) => {
 	});
 };
 
-export const handle = sequence(supabase);
+export const handle = sequence(supabaseHandle);
