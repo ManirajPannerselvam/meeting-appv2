@@ -1,369 +1,267 @@
 <script lang="ts">
 import { goto } from "$app/navigation";
-import { onMount } from "svelte";
-import {
-    meetings,
-    refreshMeetings,
-    removeMeeting
-} from "$lib/stores/meetings";
+import { onMount, onDestroy } from "svelte";
+import { browser } from "$app/environment";
+import { meetings, refreshMeetings, removeMeeting } from "$lib/stores/meetings";
+import { supabaseChat } from "$lib/supabase/client";
 
-let search = "";
-let selectedType = "All";
-let showHistory = false;
-let currentPage = 1;
-let loading = true;
+let search = ""; let selectedType = "All"; let showHistory = false; let currentPage = 1; let loading = true;
 const pageSize = 10;
-
-const meetingTypes = [
-    "All", "Internal", "Customer", "Management", "Review",
-    "Production", "Quality", "PM", "Safety"
-];
+const meetingTypes = ["All", "Internal", "Customer", "Management", "Review","Production", "Quality", "PM", "Safety"];
+let realtimeChannel: any = null;
+let onFocus: any = null; let onStorage: any = null; let onCustom: any = null;
 
 onMount(async () => {
+    if(!browser) return;
     loading = true;
-    try {
-        await refreshMeetings();
-    } catch (err) {
-        console.error('Failed to load meetings:', err);
-    } finally {
-        loading = false;
-    }
+    try { 
+      await refreshMeetings(); 
+      realtimeChannel = supabaseChat.channel('meetings-list')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'meetings' }, () => refreshMeetings())
+        .subscribe();
+      onFocus = () => refreshMeetings();
+      onStorage = () => refreshMeetings();
+      onCustom = () => refreshMeetings();
+      window.addEventListener('focus', onFocus);
+      window.addEventListener('storage', onStorage);
+      window.addEventListener('meetings:updated', onCustom);
+    } catch (err) { console.error(err); } finally { loading = false; }
+});
+onDestroy(() => {
+  if(!browser) return;
+  if(realtimeChannel) supabaseChat.removeChannel(realtimeChannel);
+  if(onFocus) window.removeEventListener('focus', onFocus);
+  if(onStorage) window.removeEventListener('storage', onStorage);
+  if(onCustom) window.removeEventListener('meetings:updated', onCustom);
 });
 
 function formatDate(date: string) {
-    if (!date) return "-";
-    const d = new Date(date);
-    if (isNaN(d.getTime())) return "-";
-    return d.toLocaleDateString("en-GB", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric"
-    });
+    if (!date) return "-"; const d = new Date(date); if (isNaN(d.getTime())) return "-";
+    return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
 }
-
 function getMeetingStatus(meeting: any): string {
-    if (!meeting.meeting_date) return "Unknown";
-    
+    if (!meeting.meeting_date) return "Upcoming";
     if (meeting.completed || meeting.status === 'completed') return "Completed";
-
     const now = new Date();
-    const meetingDateTime = new Date(
-        `${meeting.meeting_date}T${meeting.start_time || "00:00"}`
-    );
-
-    if (isNaN(meetingDateTime.getTime())) return "Unknown";
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const meetingDay = new Date(meetingDateTime);
-    meetingDay.setHours(0, 0, 0, 0);
-
+    const meetingDateTime = new Date(`${meeting.meeting_date}T${meeting.start_time || "00:00"}`);
+    if (isNaN(meetingDateTime.getTime())) return "Upcoming";
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const meetingDay = new Date(meetingDateTime); meetingDay.setHours(0, 0, 0, 0);
     if (meetingDay.getTime() === today.getTime()) {
         if (meetingDateTime > now) return "Today";
         const endTime = new Date(`${meeting.meeting_date}T${meeting.end_time || "23:59"}`);
         if (endTime < now) return "Completed";
         return "In Progress";
     }
-
-    if (meetingDateTime > now) return "Upcoming";
-    
-    return "Overdue";
+    if (meetingDateTime > now) return "Upcoming"; return "Overdue";
 }
-
-function viewMeeting(id:number){
-    if (!id) return alert("Invalid meeting ID");
-    goto(`/meeting/${id}`);
+function viewMeeting(id:number){ goto(`/meeting/${id}`); }
+function editMeeting(id:number){ goto(`/meeting/edit/${id}`); }
+function minutesMeeting(id:number){ goto(`/minutes/${id}`); }
+async function handleDeleteMeeting(id:number){
+    if(!confirm("Delete this meeting?")) return;
+    await removeMeeting(id); await refreshMeetings();
 }
-
-function editMeeting(id:number){
-    if (!id) return alert("Invalid meeting ID");
-    goto(`/meeting/edit/${id}`);
+function resetFilters(){ search=""; selectedType="All"; showHistory=false; currentPage=1; }
+function formatTime(t: string | null | undefined) {
+    if (!t) return "--:--"; if (t.length === 5) return t; if (t.length >= 8) return t.substring(0, 5); return t;
 }
-
-function minutesMeeting(id:number){
-    if (!id) return alert("Invalid meeting ID");
-    goto(`/minutes/${id}`);
-}
-
-async function deleteMeeting(id:number){
-    const ok = confirm("Delete this meeting?");
-    if(!ok) return;
-    
-    try {
-        await removeMeeting(id);
-    } catch (err: any) {
-        console.error('Delete error:', err);
-        alert("Failed to delete: " + err.message);
-    }
-}
-
-function resetFilters(){
-    search="";
-    selectedType="All";
-    showHistory=false;
-    currentPage=1;
-}
-
-function formatTime(time: string | null | undefined) {
-    if (!time) return "--:--";
-    if (time.length === 5) return time;
-    if (time.length >= 8) return time.substring(0, 5);
-    return time;
-}
-
-/* -------------------------
-   FILTERS
---------------------------*/
 $: filteredMeetings = $meetings.filter((m:any)=>{
     const text = (m.title + " " + (m.type || "") + " " + (m.location || "")).toLowerCase();
-    const matchSearch = text.includes(search.toLowerCase());
+    const matchSearch = search ? text.includes(search.toLowerCase()) : true;
     const matchType = selectedType === "All" || (m.type || "") === selectedType;
     const status = getMeetingStatus(m);
-    const history = showHistory ? status === "Completed" : status !== "Completed";
-    return matchSearch && matchType && history;
+    return showHistory ? (matchSearch && matchType && status === "Completed") : (matchSearch && matchType && status !== "Completed");
 });
-
-/* -------------------------
-   DASHBOARD
---------------------------*/
 $: totalMeetings = $meetings.length;
 $: todayMeetings = $meetings.filter(m => getMeetingStatus(m) === "Today").length;
-$: upcomingMeetings = $meetings.filter(m => getMeetingStatus(m) === "Upcoming").length;
+$: upcomingMeetings = $meetings.filter(m => { const s=getMeetingStatus(m); return s==="Upcoming"||s==="In Progress"; }).length;
 $: completedMeetings = $meetings.filter(m => getMeetingStatus(m) === "Completed").length;
-
-/* -------------------------
-   PAGINATION
---------------------------*/
 $: totalPages = Math.max(1, Math.ceil(filteredMeetings.length/pageSize));
 $: paginatedMeetings = filteredMeetings.slice((currentPage-1)*pageSize, currentPage*pageSize);
-
-function previousPage(){
-    if(currentPage>1) currentPage--;
-}
-
-function nextPage(){
-    if(currentPage<totalPages) currentPage++;
-}
+$: search, selectedType, showHistory, currentPage = 1;
+function previousPage(){ if(currentPage>1) currentPage--; }
+function nextPage(){ if(currentPage<totalPages) currentPage++; }
 </script>
 
-<!-- ===========================================
-MEETING SUMMARY CARDS
-=========================================== -->
-<h1>📋 Meeting Management</h1>
+<div class="page">
+  <div class="page-header">
+    <div><h1>📋 Meetings</h1><p>Manage all scheduled meetings</p></div>
+    <button class="new desktop-only" on:click={() => goto("/meetings")}>➕ New Meeting</button>
+  </div>
 
-<div class="cards">
-    <div class="card total">
-        <h3>Total Meetings</h3>
-        <h1>{totalMeetings}</h1>
-    </div>
-    <div class="card today">
-        <h3>Today's Meetings</h3>
-        <h1>{todayMeetings}</h1>
-    </div>
-    <div class="card upcoming">
-        <h3>Upcoming Meetings</h3>
-        <h1>{upcomingMeetings}</h1>
-    </div>
-    <div class="card completed">
-        <h3>Completed Meetings</h3>
-        <h1>{completedMeetings}</h1>
-    </div>
-</div>
+  <div class="cards">
+      <div class="kpi total"><span class="kpi-icon">📊</span><div><h3>Total</h3><h2>{totalMeetings}</h2></div></div>
+      <div class="kpi today"><span class="kpi-icon">📅</span><div><h3>Today</h3><h2>{todayMeetings}</h2></div></div>
+      <div class="kpi upcoming"><span class="kpi-icon">⏳</span><div><h3>Upcoming</h3><h2>{upcomingMeetings}</h2></div></div>
+      <div class="kpi completed"><span class="kpi-icon">✅</span><div><h3>Completed</h3><h2>{completedMeetings}</h2></div></div>
+  </div>
 
-<!-- ===========================================
-SEARCH & FILTER
-=========================================== -->
-<div class="toolbar">
-    <input
-        type="text"
-        bind:value={search}
-        placeholder="🔍 Search by title, meeting type or location..."
-    />
-    <select bind:value={selectedType}>
-        {#each meetingTypes as type}
-            <option value={type}>{type}</option>
-        {/each}
-    </select>
-    <button
-        class:active={!showHistory}
-        on:click={() => {
-            showHistory = false;
-            currentPage = 1;
-        }}
-    >📋 Active
-    </button>
-    <button
-        class:active={showHistory}
-        on:click={() => {
-            showHistory = true;
-            currentPage = 1;
-        }}
-    >📜 History
-    </button>
-    <button class="reset" on:click={resetFilters}>Reset</button>
-    <button class="new" on:click={() => goto("/meetings")}>➕ New Meeting</button>
-</div>
-	
-<!-- ===========================================
-MEETING TABLE
-=========================================== -->
-<div class="table-container">
-    {#if loading}
-        <div class="loading">Loading meetings...</div>
-    {:else}
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Title</th>
-                <th>Type</th>
-                <th>Priority</th>
-                <th>Date</th>
-                <th>Time</th>
-                <th>Location</th>
-                <th>Organizer</th>
-                <th>Status</th>
-                <th style="text-align:center;">Actions</th>
-            </tr>
-        </thead>
-       <tbody>
-    {#if paginatedMeetings.length === 0}
-        <tr>
-            <td colspan="10" class="empty">
-                📭 No meetings found.
-            </td>
-        </tr>
-    {:else}
-        {#each paginatedMeetings as meeting (meeting.id)}
-            <tr>
-                <td><strong>#{meeting.id}</strong></td>
-                <td>
-                    <div><strong>{meeting.title}</strong></div>
-                    {#if meeting.agenda}
-                        <small class="agenda">{meeting.agenda}</small>
-                    {/if}
-                </td>
-                <td>
-                    <span class="type-badge">{meeting.type || "-"}</span>
-                </td>
-                <td>
-                    {#if meeting.priority==="Critical"}
-                        <span class="priority critical">🔴 Critical</span>
-                    {:else if meeting.priority==="High"}
-                        <span class="priority high">🟠 High</span>
-                    {:else if meeting.priority==="Medium"}
-                        <span class="priority medium">🟡 Medium</span>
-                    {:else}
-                        <span class="priority low">🟢 Low</span>
-                    {/if}
-                </td>
-                <td>{formatDate(meeting.meeting_date)}</td>
-                <td class="time-cell">
-                    🕒 <strong>{formatTime(meeting.start_time)}</strong>
-                    {#if meeting.end_time}
-                        - <strong>{formatTime(meeting.end_time)}</strong>
-                    {/if}
-                </td>
-                <td>📍 {meeting.location || "-"}</td>
-                <td>👤 {meeting.organizer || "-"}</td>
-                <td>
-                    {#if getMeetingStatus(meeting) === "Completed"}
-                        <span class="badge completed">✅ Completed</span>
-                    {:else if getMeetingStatus(meeting) === "In Progress"}
-                        <span class="badge progress">🟢 In Progress</span>
-                    {:else if getMeetingStatus(meeting) === "Today"}
-                        <span class="badge today">📅 Today</span>
-                    {:else if getMeetingStatus(meeting) === "Upcoming"}
-                        <span class="badge upcoming">⏳ Upcoming</span>
-                    {:else}
-                        <span class="badge overdue">🔴 Overdue</span>
-                    {/if}
-                </td>
-                <td>
-                    <div class="actions">
-                        <button class="view" title="View Meeting" on:click={() => viewMeeting(meeting.id)}>👁</button>
-                        <button class="edit" title="Edit Meeting" on:click={() => editMeeting(meeting.id)}>✏</button>
-                        <button class="minutes" title="Meeting Minutes" on:click={() => minutesMeeting(meeting.id)}>📝</button>
-                        <button class="delete" title="Delete Meeting" on:click={() => deleteMeeting(meeting.id)}>🗑</button>
-                    </div>
-                </td>
-            </tr>
-        {/each}
-    {/if}
-</tbody>
-    </table>
-    {/if}
-</div>
+  <div class="toolbar">
+      <input type="text" bind:value={search} placeholder="🔍 Search title, type, location..." />
+      <select bind:value={selectedType}>
+          {#each meetingTypes as type}<option value={type}>{type}</option>{/each}
+      </select>
+      <div class="toolbar-row">
+        <button class:active={!showHistory} on:click={() => showHistory = false}>📋 Active</button>
+        <button class:active={showHistory} on:click={() => showHistory = true}>📜 History</button>
+        <button class="reset" on:click={resetFilters}>Reset</button>
+        <button class="new mobile-only" on:click={() => goto("/meetings")}>➕ New</button>
+      </div>
+  </div>
 
-<!-- ===========================================
-PAGINATION
-=========================================== -->
-<div class="pagination">
-    <button on:click={previousPage} disabled={currentPage === 1}>⬅ Previous</button>
-    <span>Page <strong>{currentPage}</strong> of <strong>{totalPages}</strong></span>
-    <button on:click={nextPage} disabled={currentPage === totalPages}>Next ➜</button>
+  <div class="table-container">
+      {#if loading}
+          <div class="loading">Loading meetings...</div>
+      {:else}
+      <table class="desktop-table">
+          <thead><tr><th>ID</th><th>Title</th><th>Type</th><th>Priority</th><th>Date</th><th>Time</th><th>Location</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody>
+          {#if paginatedMeetings.length === 0}
+              <tr><td colspan="9" class="empty">📭 No meetings found.</td></tr>
+          {:else}
+              {#each paginatedMeetings as meeting (meeting.id)}
+                  <tr>
+                      <td><strong>#{meeting.id}</strong></td>
+                      <td><strong>{meeting.title}</strong>{#if meeting.agenda}<br><small class="agenda">{meeting.agenda.slice(0,40)}</small>{/if}</td>
+                      <td><span class="type-badge">{meeting.type || "-"}</span></td>
+                      <td>
+                          {#if meeting.priority==="Critical"}<span class="priority critical">Critical</span>
+                          {:else if meeting.priority==="High"}<span class="priority high">High</span>
+                          {:else if meeting.priority==="Medium"}<span class="priority medium">Medium</span>
+                          {:else}<span class="priority low">Low</span>{/if}
+                      </td>
+                      <td>{formatDate(meeting.meeting_date)}</td>
+                      <td class="time-cell">{formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}</td>
+                      <td>📍 {meeting.location || "-"}</td>
+                      <td>
+                          {#if getMeetingStatus(meeting) === "Completed"}<span class="badge completed">Completed</span>
+                          {:else if getMeetingStatus(meeting) === "Today"}<span class="badge today">Today</span>
+                          {:else if getMeetingStatus(meeting) === "In Progress"}<span class="badge progress">In Progress</span>
+                          {:else if getMeetingStatus(meeting) === "Upcoming"}<span class="badge upcoming">Upcoming</span>
+                          {:else}<span class="badge overdue">Overdue</span>{/if}
+                      </td>
+                      <td><div class="actions"><button class="view" on:click={() => viewMeeting(meeting.id)}>👁</button><button class="edit" on:click={() => editMeeting(meeting.id)}>✏</button><button class="minutes" on:click={() => minutesMeeting(meeting.id)}>📝</button><button class="delete" on:click={() => handleDeleteMeeting(meeting.id)}>🗑</button></div></td>
+                  </tr>
+              {/each}
+          {/if}
+          </tbody>
+      </table>
+
+      <div class="mobile-list">
+        {#if paginatedMeetings.length === 0}
+          <div class="empty">📭 No meetings found.</div>
+        {:else}
+          {#each paginatedMeetings as meeting (meeting.id)}
+            <div class="m-card" on:click={() => viewMeeting(meeting.id)}>
+              <div class="m-head"><strong class="m-title">#{meeting.id} {meeting.title}</strong><span class="type-badge">{meeting.type || "-"}</span></div>
+              <div class="m-row"><span>📅 {formatDate(meeting.meeting_date)}</span><span>🕒 {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}</span></div>
+              <div class="m-row"><span>📍 {meeting.location || "-"}</span><span>👤 {meeting.organizer || "-"}</span></div>
+              <div class="m-foot">
+                {#if getMeetingStatus(meeting) === "Completed"}<span class="badge completed">✅ Completed</span>
+                {:else if getMeetingStatus(meeting) === "Today"}<span class="badge today">📅 Today</span>
+                {:else if getMeetingStatus(meeting) === "In Progress"}<span class="badge progress">🟢 Live</span>
+                {:else if getMeetingStatus(meeting) === "Upcoming"}<span class="badge upcoming">⏳ Upcoming</span>
+                {:else}<span class="badge overdue">🔴 Overdue</span>{/if}
+                <span class="priority {meeting.priority?.toLowerCase()}">{meeting.priority || "Low"}</span>
+              </div>
+              <div class="m-actions">
+                <button class="view" on:click|stopPropagation={() => viewMeeting(meeting.id)}>👁</button>
+                <button class="edit" on:click|stopPropagation={() => editMeeting(meeting.id)}>✏</button>
+                <button class="minutes" on:click|stopPropagation={() => minutesMeeting(meeting.id)}>📝</button>
+                <button class="delete" on:click|stopPropagation={() => handleDeleteMeeting(meeting.id)}>🗑</button>
+              </div>
+            </div>
+          {/each}
+        {/if}
+      </div>
+      {/if}
+  </div>
+
+  <div class="pagination"><button on:click={previousPage} disabled={currentPage === 1}>⬅ Prev</button><span>Page <b>{currentPage}</b> of <b>{totalPages}</b> ({filteredMeetings.length})</span><button on:click={nextPage} disabled={currentPage === totalPages}>Next ➜</button></div>
 </div>
 
 <style>
-* { box-sizing: border-box; transition: background-color .2s, color .2s, border-color .2s; }
-:global(body) { margin: 0; background: #f1f5f9; font-family: "Segoe UI", Arial, sans-serif; }
-h1 { margin-bottom: 20px; color: #1e293b; font-size: 28px; font-weight: 700; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; margin-bottom: 25px; }
-.priority{ padding:6px 12px; border-radius:20px; font-size:12px; font-weight:700; color:white; display:inline-block; min-width:90px; text-align:center; }
-.priority.critical{ background:#dc2626; }
-.priority.high{ background:#ea580c; }
-.priority.medium{ background:#ca8a04; }
-.priority.low{ background:#16a34a; }
-.card { background: white; border-radius: 14px; padding: 20px; box-shadow: 0 6px 18px rgba(0,0,0,.08); transition: .25s; }
-.time-cell{ white-space:nowrap; font-weight:600; color:#1e293b; font-family:Consolas,"Courier New",monospace; }
-.card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,.12); }
-.badge.progress{ background:#16a34a; color:white; }
-.badge.overdue{ background:#dc2626; color:white; }
-.card h3 { margin: 0; color: #64748b; font-size: 15px; }
-.card h1 { margin-top: 12px; margin-bottom: 0; font-size: 34px; }
-.total { border-left: 6px solid #2563eb; }
-.today { border-left: 6px solid #22c55e; }
-.upcoming { border-left: 6px solid #f59e0b; }
-.completed { border-left: 6px solid #64748b; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-bottom: 20px; }
-.toolbar input { flex: 1; min-width: 260px; padding: 12px; border-radius: 8px; border: 1px solid #d1d5db; font-size: 14px; }
-.toolbar select { padding: 12px; border-radius: 8px; border: 1px solid #d1d5db; }
-.toolbar button { padding: 11px 18px; border: none; border-radius: 8px; cursor: pointer; background: #e2e8f0; font-weight: 600; transition: .2s; }
-.toolbar button:hover { transform: translateY(-2px); opacity: .95; }
-.toolbar button.active { background: #2563eb; color: white; }
-.reset { background: #ef4444 !important; color: white; }
-.new { background: #16a34a !important; color: white; }
-.table-container { background: white; border-radius: 14px; overflow-x: auto; overflow-y: hidden; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
-table { width: 100%; border-collapse: collapse; }
-thead { background: #2563eb; color: white; }
-th { padding: 15px; text-align: left; white-space: nowrap; font-size: 14px; font-weight: 600; letter-spacing: .3px; }
-td { padding: 14px; border-bottom: 1px solid #e5e7eb; vertical-align: middle; }
-tbody tr:nth-child(even) { background: #fafafa; }
-tbody tr:hover { background: #eef6ff; transition: 0.2s; }
-.type-badge { background: #dbeafe; color: #1d4ed8; padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
-.badge { padding: 6px 12px; border-radius: 20px; color: white; font-size: 12px; font-weight: bold; }
-.badge.completed { background: #6b7280; }
-.badge.today { background: #16a34a; }
-.badge.upcoming { background: #2563eb; }
-.actions { display: flex; gap: 8px; justify-content: center; }
-.actions button { width: 36px; height: 36px; border: none; border-radius: 8px; cursor: pointer; color: white; font-size: 16px; transition: .2s; }
-.actions button:hover { transform: scale(1.1); box-shadow: 0 4px 10px rgba(0,0,0,.2); }
-.view { background: #2563eb; }
-.edit { background: #f59e0b; }
-.minutes { background: #16a34a; }
-.delete { background: #dc2626; }
-.pagination { margin-top: 20px; display: flex; justify-content: space-between; align-items: center; }
-.pagination button { background: #2563eb; color: white; border: none; border-radius: 8px; padding: 10px 18px; cursor: pointer; font-weight: 600; }
-.pagination button:disabled { background: #94a3b8; cursor: not-allowed; }
-.empty { text-align: center; padding: 50px; color: #64748b; font-size: 16px; font-weight: 500; }
-.loading { text-align: center; padding: 50px; color: #64748b; font-size: 16px; font-weight: 500; }
-.agenda { color: #64748b; font-size: 12px; }
-@media(max-width:900px) { 
-    .cards { grid-template-columns: 1fr; }
-    .toolbar { flex-direction: column; align-items: stretch; }
-    .toolbar input, .toolbar select, .toolbar button { width: 100%; }
-    table { font-size: 13px; }
-    th, td { padding: 10px; }
-    .actions { flex-wrap: wrap; }
+:global(html){ height:100%; overflow-y:auto; scroll-behavior:smooth; }
+:global(body){ margin:0; background:#f1f5f9; font-family:Inter,Segoe UI,Arial,sans-serif; height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+:global(#svelte){ min-height:100%; overflow-y:auto; }
+
+.page{ max-width:1400px; margin:0 auto; padding:14px; min-height:100vh; overflow-y:visible; display:flex; flex-direction:column; gap:12px; }
+.page-header{ display:flex; justify-content:space-between; align-items:center; }
+.page-header h1{ margin:0; font-size:24px; color:#1e293b; } .page-header p{ margin:2px 0 0; color:#64748b; font-size:12px; }
+
+.cards{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+.kpi{ background:white; border-radius:12px; padding:12px; display:flex; align-items:center; gap:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); border-left:4px solid transparent; }
+.kpi h3{ margin:0; font-size:11px; color:#64748b; font-weight:600; } .kpi h2{ margin:0; font-size:18px; color:#1e293b; }
+.total{ border-color:#2563eb; }.today{ border-color:#22c55e; }.upcoming{ border-color:#f59e0b; }.completed{ border-color:#94a3b8; }
+
+.toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:white; padding:10px; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+.toolbar input{ flex:1; min-width:200px; padding:10px 12px; border-radius:10px; border:1px solid #e2e8f0; font-size:14px; background:#f8fafc; }
+.toolbar select{ padding:10px; border-radius:10px; border:1px solid #e2e8f0; background:#f8fafc; }
+.toolbar-row{ display:flex; gap:6px; }
+.toolbar button{ padding:8px 14px; border:none; border-radius:20px; cursor:pointer; background:#eef2ff; color:#334155; font-weight:600; font-size:12px; }
+.toolbar button.active{ background:#2563eb; color:white; }
+.reset{ background:#fee2e2!important; color:#dc2626!important; }.new{ background:#16a34a!important; color:white!important; }
+
+.table-container{ background:white; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow-x:auto; }
+table{ width:100%; border-collapse:collapse; min-width:850px; }
+thead{ background:#f8fafc; color:#64748b; border-bottom:1px solid #e2e8f0; }
+th{ padding:12px 10px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
+td{ padding:12px 10px; border-bottom:1px solid #f1f5f9; font-size:12px; }
+
+.type-badge{ background:#eff6ff; color:#2563eb; padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; border:1px solid #dbeafe; }
+.badge{ padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; }
+.badge.completed{ background:#f1f5f9; color:#64748b; }.badge.today{ background:#dcfce7; color:#16a34a; }.badge.upcoming{ background:#dbeafe; color:#2563eb; }.badge.progress{ background:#dcfce7; color:#15803d; }.badge.overdue{ background:#fee2e2; color:#dc2626; }
+.priority{ padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; }
+.priority.critical{ background:#fee2e2; color:#dc2626; }.priority.high{ background:#ffedd5; color:#ea580c; }.priority.medium{ background:#fef9c3; color:#a16207; }.priority.low{ background:#dcfce7; color:#15803d; }
+.time-cell{ font-family:monospace; font-weight:600; }
+.actions{ display:flex; gap:5px; }
+.actions button{ width:32px; height:32px; border:none; border-radius:8px; cursor:pointer; color:white; display:flex; align-items:center; justify-content:center; }
+.view{ background:#2563eb; }.edit{ background:#f59e0b; }.minutes{ background:#16a34a; }.delete{ background:#ef4444; }
+.pagination{ display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#64748b; }
+.pagination button{ background:white; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; }
+.pagination button:disabled{ opacity:.5; }
+.empty,.loading{ text-align:center; padding:40px; color:#94a3b8; }
+.mobile-list{ display:none; }
+
+/* ===== MOBILE FIX ===== */
+@media(max-width:900px){
+ .page{ padding:8px; gap:8px; background:#f8fafc; }
+ .cards{ grid-template-columns:1fr 1fr; gap:6px; }
+ .kpi{ padding:10px; border-radius:10px; } .kpi h2{ font-size:16px; }
+ .toolbar{ padding:8px; gap:6px; border-radius:10px; }
+ .toolbar input{ font-size:16px; width:100%; min-width:0; }
+ .toolbar-row{ width:100%; } .toolbar-row button{ flex:1; }
+ .desktop-table{ display:none; }
+ .mobile-list{ display:flex; flex-direction:column; gap:8px; padding:0; }
+ .table-container{ background:transparent; box-shadow:none; overflow:visible; }
+
+ .m-card{
+   background:white; border-radius:16px; padding:12px 12px 10px;
+   box-shadow:0 1px 2px rgba(0,0,0,.06); border:1px solid #f1f5f9;
+   display:flex; flex-direction:column; gap:8px;
+ }
+ .m-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+ .m-title{ font-size:14px; font-weight:700; color:#0f172a; line-height:1.2; flex:1; }
+ .m-row{ display:flex; justify-content:space-between; font-size:12px; color:#475569; }
+ .m-row span{ display:flex; align-items:center; gap:4px; max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+ .m-foot{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+
+ /* FIXED ACTION BUTTONS - SMALL AND NICE */
+ .m-actions{
+   display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:4px;
+   border-top:1px solid #f8fafc; padding-top:8px;
+ }
+ .m-actions button{
+   height:38px; border-radius:10px; border:1px solid #f1f5f9;
+   font-size:16px; font-weight:600; cursor:pointer;
+   display:flex; align-items:center; justify-content:center;
+   transition:all .15s;
+ }
+ .m-actions .view{ background:#eff6ff; color:#2563eb; border-color:#dbeafe; }
+ .m-actions .edit{ background:#fffbeb; color:#d97706; border-color:#fde68a; }
+ .m-actions .minutes{ background:#f0fdf4; color:#16a34a; border-color:#bbf7d0; }
+ .m-actions .delete{ background:#fef2f2; color:#ef4444; border-color:#fecaca; }
+ .m-actions button:active{ transform:scale(.96); }
 }
 </style>

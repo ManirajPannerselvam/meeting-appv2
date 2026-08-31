@@ -7,8 +7,8 @@
  *   Shared Supabase clients.
  *
  * DATABASES
- *   1. Chat Database
- *   2. Template Database (Default)
+ *   1. Chat Database - Auth + profiles + settings + avatars
+ *   2. Template Database (Default) - templates only
  * ============================================================
  */
 
@@ -28,21 +28,18 @@ import {
 if (!PUBLIC_SUPABASE_CHAT_URL) {
 	throw new Error("Missing PUBLIC_SUPABASE_CHAT_URL");
 }
-
 if (!PUBLIC_SUPABASE_CHAT_ANON_KEY) {
 	throw new Error("Missing PUBLIC_SUPABASE_CHAT_ANON_KEY");
 }
-
 if (!PUBLIC_SUPABASE_TEMPLATES_URL) {
 	throw new Error("Missing PUBLIC_SUPABASE_TEMPLATES_URL");
 }
-
 if (!PUBLIC_SUPABASE_TEMPLATES_ANON_KEY) {
 	throw new Error("Missing PUBLIC_SUPABASE_TEMPLATES_ANON_KEY");
 }
 
 // =====================================================
-// CHAT DATABASE
+// CHAT DATABASE - AUTH SOURCE
 // =====================================================
 
 export const supabaseChat = createClient(
@@ -52,12 +49,11 @@ export const supabaseChat = createClient(
 		auth: {
 			autoRefreshToken: true,
 			persistSession: true,
-			detectSessionInUrl: true
+			detectSessionInUrl: true,
+			storageKey: 'temple-chat-auth'
 		},
 		realtime: {
-			params: {
-				eventsPerSecond: 10
-			}
+			params: { eventsPerSecond: 10 }
 		}
 	}
 );
@@ -73,18 +69,27 @@ export const supabaseTemplates = createClient(
 		auth: {
 			autoRefreshToken: true,
 			persistSession: true,
-			detectSessionInUrl: true
+			detectSessionInUrl: true,
+			storageKey: 'temple-templates-auth'
 		},
 		realtime: {
-			params: {
-				eventsPerSecond: 10
-			}
+			params: { eventsPerSecond: 10 }
 		}
 	}
 );
 
 // =====================================================
-// DEFAULT CLIENT
+// FIX: AUTH IS IN CHAT DB - USE IT FOR SETTINGS/PROFILES
+// =====================================================
+// settings, profiles, user_profiles, avatars MUST be in Chat DB
+// templates table only in Templates DB
+
+export const supabaseAuth = supabaseChat;
+export const supabaseSettings = supabaseChat;
+export const supabaseProfiles = supabaseChat;
+
+// =====================================================
+// DEFAULT CLIENT - KEEP SAME FOR BACKWARD COMPATIBILITY
 // =====================================================
 
 export const supabase = supabaseTemplates;

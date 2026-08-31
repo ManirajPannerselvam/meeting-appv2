@@ -77,7 +77,16 @@
         <div class="msg-meta">
           <span class="msg-time">{formatTime(msg.created_at)}</span>
           {#if isOwn}
-            <span class="msg-tick">✓✓</span>
+            <!-- FIXED TICKS: sent=1 grey, delivered=2 grey, read=2 blue -->
+            {#if msg.status==='read'}
+              <span class="msg-tick read">✓✓</span>
+            {:else if msg.status==='delivered'}
+              <span class="msg-tick delivered">✓✓</span>
+            {:else if msg.status==='sent'}
+              <span class="msg-tick sent">✓</span>
+            {:else}
+              <span class="msg-tick sent">✓</span>
+            {/if}
           {/if}
         </div>
       </div>
@@ -180,7 +189,10 @@
   margin-top:4px;
   user-select:none;
 }
-.message-bubble.own.msg-meta{ color:#53bdeb; }
+.msg-tick{ font-size:12px; line-height:1; }
+.msg-tick.sent{ color:#8696a0; }
+.msg-tick.delivered{ color:#8696a0; }
+.msg-tick.read{ color:#53bdeb; } /* blue for read */
 .empty-msg{
   flex:1;
   display:flex;
@@ -196,7 +208,7 @@
 .empty-msg span{ font-size:12px; color:#667781; }
 
 @media (max-width:768px){
- .message-bubble{ max-width:84%; }
- .messages-container{ padding:12px 10px 16px; }
+.message-bubble{ max-width:84%; }
+.messages-container{ padding:12px 10px 16px; }
 }
 </style>

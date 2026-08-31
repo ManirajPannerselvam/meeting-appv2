@@ -22,14 +22,30 @@
   let currentUserId = $state('');
   let bottomTab = $state('report');
 
+  // FIXED: Short system time
+  function fmtTime(v:any){
+    if(!v) return '-';
+    try { return dayjs(v).format('DD/MM/YY hh:mm A'); } catch { return String(v).slice(0,16); }
+  }
+
   let allFields = $derived(normalizeFields(selectedTemplate));
   let realKeysFromRecords = $derived.by(()=>{
     const keys = new Set<string>();
     records.forEach(r=>{
       Object.keys(r.data||{}).forEach(k=> keys.add(k));
-      Object.keys(r).forEach(k=> { if(!['id','ts','t_code','template_code','template_id','template_name','created_at','data','_template_name','_ts','owner_id','user_id','template_code','t_code'].includes(k)) keys.add(k); });
+      Object.keys(r).forEach(k=> {
+        if(!['id','ts','t_code','template_code','template_id','template_name','created_at','data','_template_name','_ts','owner_id','user_id','owner_email','user_email','template_code','t_code','owner','user'].includes(k)) keys.add(k);
+      });
     });
-    return Array.from(keys);
+    // FIXED: hide user id & owner id completely
+    return Array.from(keys).filter(k=>{
+      const lk = k.toLowerCase().replace(/\s+/g,'_');
+      if(lk.includes('owner_id') || lk.includes('user_id')) return false;
+      if(lk==='owner' || lk==='user') return false;
+      if(lk.includes('owner') && lk.includes('id')) return false;
+      if(lk.includes('user') && lk.includes('id')) return false;
+      return true;
+    });
   });
   let availableStations = $derived.by(()=>{
     const opt = allFields.find((f:any) => (f.field_name||f.name).toLowerCase().includes('station'))?.options || [];
@@ -48,14 +64,28 @@
     return realKeysFromRecords.map(k=>({name:k,label:k}));
   });
   let tableColumns = $derived.by(()=>{
-    if(records.length===0) return allFields.slice(0,6);
-    const real = realKeysFromRecords;
-    if(real.length===0) return allFields.slice(0,6);
-    const hasMatch = allFields.some(f=> real.includes(f.field_name));
-    if(!hasMatch){
-      return real.slice(0,6).map(k=>({field_name:k,label:k.replace(/_/g,' '),field_type:"text",name:k,options:[]}));
+    let cols: any[] = [];
+    if(records.length===0) cols = allFields.slice(0,6);
+    else {
+      const real = realKeysFromRecords;
+      if(real.length===0) cols = allFields.slice(0,6);
+      else {
+        const hasMatch = allFields.some(f=> real.includes(f.field_name));
+        if(!hasMatch){
+          cols = real.slice(0,6).map(k=>({field_name:k,label:k.replace(/_/g,' '),field_type:"text",name:k,options:[]}));
+        } else {
+          cols = allFields.slice(0,6);
+        }
+      }
     }
-    return allFields.slice(0,6);
+    // FINAL HIDE FILTER for columns
+    return cols.filter((c:any)=>{
+      const lk = String(c.field_name||'').toLowerCase();
+      if(lk.includes('owner_id') || lk.includes('user_id')) return false;
+      if(lk.includes('owner') && lk.includes('id')) return false;
+      if(lk.includes('user') && lk.includes('id')) return false;
+      return true;
+    });
   });
 
   function normalizeFields(t:any){
@@ -73,7 +103,13 @@
       type:f.type??f.field_type??"text",
       name:f.field_name??f.name,
       options: typeof f.options==="string"? JSON.parse(f.options||"[]") : f.options||[]
-    })).filter((f:any)=> f.field_name && f.label);
+    })).filter((f:any)=> f.field_name && f.label).filter((f:any)=>{
+      const lk = String(f.field_name).toLowerCase();
+      if(lk.includes('owner_id') || lk.includes('user_id')) return false;
+      if(lk.includes('owner') && lk.includes('id')) return false;
+      if(lk.includes('user') && lk.includes('id')) return false;
+      return true;
+    });
   }
 
   function getVal(row:any,key:string){
@@ -119,7 +155,7 @@
   onMount(async () => {
     if (browser) {
       const c = await import('chart.js/auto'); ChartJS=c.Chart;
-      try{ const { data: { user } } = await chatDB.auth.getUser(); if(user){ currentUser=user; currentUserId=user.id; console.log("Auth OK:", user.id); } }catch{}
+      try{ const { data: { user } } = await chatDB.auth.getUser(); if(user){ currentUser=user; currentUserId=user.id; } }catch{}
       if(!currentUserId){
         try{
           for(let k of Object.keys(localStorage)){
@@ -127,20 +163,19 @@
               const v = JSON.parse(localStorage.getItem(k)||'{}');
               const uid = v?.user?.id || v?.currentSession?.user?.id;
               const u = v?.user || v?.currentSession?.user;
-              if(uid){ currentUserId=uid; currentUser=u||currentUser; console.log("Recovered from",k,uid); break; }
+              if(uid){ currentUserId=uid; currentUser=u||currentUser; break; }
             }
           }
         }catch{}
       }
       if(!currentUserId) {
         currentUserId = '0dcad97e-8c13-4ab1-bfc4-f50c9b3cea75';
-        console.log("Using fallback ID:", currentUserId);
       }
     }
     try{
       const { data } = await supabaseTemplates.from('templates').select('*').order('created_at',{ascending:false});
       const dbTemplates = (data||[]).map((t:any)=>({
-    ...t,
+   ...t,
         template_code: t.template_code||t.t_code||t.data?.code||t.data?.t_code,
         t_code: t.t_code||t.template_code||t.data?.t_code||t.data?.code,
         code: t.code||t.template_code||t.data?.code,
@@ -190,22 +225,17 @@
         }catch{}
         if(!myId) myId='0dcad97e-8c13-4ab1-bfc4-f50c9b3cea75';
       }
-      console.log("LOAD:", { myId, myEmail, selectedTemplateId, range: dateRange });
       let q = supabaseTemplates.from("records").select("*").order("ts",{ascending:false}).limit(2000);
       const { data, error: dErr } = await q;
       if(dErr) throw dErr;
       let allRecs = (data||[]).map((r:any)=> ({...r.data,...r, _template_name: r.data?.template_name || r.template_name || r.t_code, _ts: r.ts, data: r.data }));
-      console.log("Total in DB:", allRecs.length, allRecs[0]);
-
       let filtered = allRecs.filter((r:any)=>{
         const selId = String(selectedTemplateId||'').toLowerCase();
         const rId = String(r.reference_template_id || r.data?.reference_template_id || '').toLowerCase();
-        // VENT ONLY strict ID
         if(selectedTemplateId!=='ALL'){
           if(!rId) return false;
           if(rId!==selId) return false;
         }
-        // owner secure
         const recOwner = String(r.owner_id || r.data?.owner_id || r.user_id || r.data?.user_id || '').toLowerCase();
         const recEmail = String(r.data?.owner_email || '').toLowerCase();
         if(recOwner){
@@ -217,8 +247,6 @@
         }
         return true;
       });
-
-      console.log("After filter:", filtered.length);
       records = filtered;
       if(records.length===0){
         error = selectedTemplateId!=='ALL' && selectedTemplate? `No records for ${selectedTemplate.name} - DB has ${allRecs.length} total` : `🔒 Secure: No private data - Total DB: ${allRecs.length}`;
@@ -226,7 +254,7 @@
         error = "";
       }
       await tick(); setTimeout(()=>{ renderAll(); }, 600);
-    }catch(e:any){ error=e.message; console.error(e); } finally{ loading=false; }
+    }catch(e:any){ error=e.message; } finally{ loading=false; }
   }
 
   async function renderAll(){
@@ -290,7 +318,7 @@
       <div class="table-box">
         <table>
           <thead><tr><th>Time</th><th>Template</th>{#each tableColumns as col}<th>{col.label}</th>{/each}</tr></thead>
-          <tbody>{#each displayRows as r}<tr><td>{dayjs(r.ts||r._ts).format('MM/DD HH:mm')}</td><td style="font-weight:700">{r._template_name||r.template_name||r.t_code}</td>{#each tableColumns as col}<td>{getVal(r, col.field_name)}</td>{/each}</tr>{/each}</tbody>
+          <tbody>{#each displayRows as r}<tr><td>{fmtTime(r.ts||r._ts)}</td><td style="font-weight:700">{r._template_name||r.template_name||r.t_code}</td>{#each tableColumns as col}<td>{getVal(r, col.field_name)}</td>{/each}</tr>{/each}</tbody>
         </table>
         {#if records.length>3}<div style="text-align:center;margin:6px 0;"><button class="more" onclick={()=>showMoreRows=!showMoreRows}>{showMoreRows?'▲ Less':'▼ All '+records.length}</button></div>{/if}
       </div>
@@ -330,6 +358,7 @@
 </div>
 
 <style>
+/* same css */
 .app{display:flex;flex-direction:column;height:100dvh;width:100vw;overflow:hidden;background:#f1f5f9;margin:0;}
 .top-fixed{flex:0 0 auto;background:#fff7ed;border-bottom:2px solid #fed7aa;padding:8px;z-index:30;}
 .scroll-area{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;background:white;padding:8px;}

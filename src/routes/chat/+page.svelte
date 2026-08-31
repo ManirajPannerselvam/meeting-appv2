@@ -32,6 +32,7 @@
 	let uploadingFiles = $state<File[]>([]);
 	let messagesChannel: any = $state(null);
 	let presenceChannel: any = $state(null);
+	let profileChannel: any = $state(null);
 	let templates = $state<any[]>([]);
 	let templateLoading = $state(false);
 	let replyingTo = $state<any>(null);
@@ -160,8 +161,25 @@
 		}
 		const uid = getCurrentUserId(); if(!uid) return;
 		await Promise.all([loadGroups(), loadContacts(), setupPresence()]);
+		setupProfileLive();
+		if(Notification.permission!== 'granted'){ Notification.requestPermission(); }
 	});
 	onDestroy(async () => { if (browser) window.removeEventListener('resize', checkMobile); await cleanupRealtime(); });
+
+	function setupProfileLive(){
+		if(profileChannel) return;
+		profileChannel = chatDB.channel('profiles-live')
+		.on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles'},(payload)=>{
+			const p = payload.new as any;
+			contacts = contacts.map(c=> (c.actual_user_id===p.id || c.id===p.id)? {...c, avatar_url:p.avatar_url, name: p.name || c.name} : c);
+			if(selectedContact && (selectedContact.actual_user_id===p.id || selectedContact.id===p.id)){
+				selectedContact = {...selectedContact, avatar_url:p.avatar_url, name: p.name || selectedContact.name};
+			}
+			if(currentUser?.id===p.id){
+				currentUser = {...currentUser, avatar_url:p.avatar_url};
+			}
+		}).subscribe();
+	}
 
 	function resizeTo128(file: File): Promise<Blob> {
 		return new Promise((resolve, reject) => {
@@ -192,6 +210,7 @@
 			if(avatarType === 'contact'){
 				const realId = avatarTarget.actual_user_id || avatarTarget.id;
 				await chatDB.from('profiles').update({ avatar_url: publicUrl }).eq('id', realId);
+				await chatDB.from('user_profiles').update({ avatar_url: publicUrl }).eq('id', realId);
 				contacts = contacts.map(c=> c.id===avatarTarget.id? {...c, avatar_url: publicUrl} : c);
 				if(selectedContact?.id === avatarTarget.id) selectedContact = {...selectedContact, avatar_url: publicUrl};
 				if(avatarTarget?.isSelf) currentUser = {...currentUser, avatar_url: publicUrl};
@@ -257,7 +276,7 @@
 
 	function handleOpenDetail(tpl: any, msg: any){ detailData = { template_name: tpl.template_name || tpl.template_code || 'Production Report', template_code: tpl.template_code, values: tpl.values || tpl.data || {}, t_code: tpl.template_code, user_name: msg.sender_name || msg.profiles?.name || currentUser?.email || 'User', created_at: msg.created_at, }; showDetailModal = true; }
 
-					async function sendTemplateReport(e:any){
+	async function sendTemplateReport(e:any){
 		const { template, values } = e.detail; if(!template) return;
 		const calculatedValues = calcAllFormulas(template, values);
 		let displayLines = [`📋 *${template.name}*`, ``];
@@ -267,19 +286,16 @@
 		const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: t_code, values: calculatedValues, created_at: new Date().toISOString() };
 		const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`;
 		try{
-		  // get uid from both projects - chatDB is where auth lives
 		  const { data: { user: chatUser } } = await chatDB.auth.getUser();
 		  const { data: { user: tmplUser } } = await supabaseTemplates.auth.getUser();
 		  const realUid = chatUser?.id || tmplUser?.id || getCurrentUserId();
 		  const email = chatUser?.email || tmplUser?.email || currentUser?.email || data?.user?.email || '';
 		  const nowIso = new Date().toISOString();
-
-		  // payload that matches real table: t_code, reference_template_id, data, ts, owner_id(uuid)
 		  const payload:any = {
 		    t_code: t_code,
 		    reference_template_id: template.id,
 		    data: {
-		      ...calculatedValues,
+		     ...calculatedValues,
 		      t_code: t_code,
 		      template_code: t_code,
 		      template_name: template.name,
@@ -295,14 +311,11 @@
 		  if(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(realUid)){
 		    payload.owner_id = realUid;
 		  }
-
-		  console.log("Saving to templates DB:", payload.t_code, payload.reference_template_id, payload.owner_id);
 		  const { data: inserted, error } = await supabaseTemplates.from("records").insert(payload).select().single();
 		  if(error) throw error;
-		  console.log("✅ VENT saved:", inserted.id);
 		}catch(err:any){
-		  console.error("FINAL fail", err?.message, err?.details, err?.hint);
-		  alert("Save failed: "+err?.message+" - Run SQL policy fix in rfckn project");
+		  console.error("FINAL fail", err?.message);
+		  alert("Save failed: "+err?.message);
 		}
 		showTemplateForm=false;
 		await sendMessage({ detail: { content: fullContent } } as any);
@@ -319,27 +332,77 @@
 	}
 	async function setupPresence() { const userId = getCurrentUserId(); if(!userId) return; if(presenceChannel) await chatDB.removeChannel(presenceChannel); presenceChannel = chatDB.channel("online-users", { config: { presence: { key: userId } } }); presenceChannel.on("presence", { event: "sync" }, () => { onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); }).subscribe(async (s) => { if(s==="SUBSCRIBED") await presenceChannel!.track({ user_id: userId }); }); }
 	function isUserOnline(id: string){ return onlineUsers.has(id); }
-	async function cleanupRealtime(){ const ch = [messagesChannel, presenceChannel].filter(Boolean); messagesChannel = null; presenceChannel = null; if(ch.length) await Promise.allSettled(ch.map((c:any) => chatDB.removeChannel(c))); }
+	async function cleanupRealtime(){ const ch = [messagesChannel, presenceChannel, profileChannel].filter(Boolean); messagesChannel = null; presenceChannel = null; profileChannel = null; if(ch.length) await Promise.allSettled(ch.map((c:any) => chatDB.removeChannel(c))); }
+
+	// --- UPDATED: LIVE + TICKS ---
 	async function loadMessages({ roomId, groupId }: any){
 	  if(isLoadingMessages) return; isLoadingMessages=true;
-	  try{ const uid = getCurrentUserId(); let query = chatDB.from("messages").select("*").order("created_at", {ascending:true}); if(groupId) query = query.eq("group_id", groupId); else if(roomId) query = query.eq("room_id", roomId); else query = query.eq("sender_id", uid).eq("receiver_id", uid); const { data, error } = await query; if(error){ messages=[]; } else messages=(data?? []).filter((m:any)=>!(m.deleted_by||[]).includes(uid)).map((m:any)=>({...m, is_own:m.sender_id===uid})); } finally { isLoadingMessages=false; }
+	  try{
+	    const uid = getCurrentUserId();
+	    let query = chatDB.from("messages").select("*").order("created_at", {ascending:true});
+	    if(groupId) query = query.eq("group_id", groupId);
+	    else if(roomId) query = query.eq("room_id", roomId);
+	    else query = query.eq("sender_id", uid).eq("receiver_id", uid);
+	    const { data, error } = await query;
+	    if(error){ messages=[]; }
+	    else messages=(data?? []).filter((m:any)=>!(m.deleted_by||[]).includes(uid)).map((m:any)=>({...m, is_own:m.sender_id===uid}));
+	    const unread = messages.filter((m:any)=>!m.is_own && m.status!=='read');
+	    if(unread.length>0){
+	      for(const m of unread){
+	        await chatDB.from("messages").update({ status:'read', read_at: new Date().toISOString() }).eq('id', m.id);
+	      }
+	      messages = messages.map((m:any)=>!m.is_own? {...m, status:'read'} : m);
+	    }
+	  } finally { isLoadingMessages=false; }
 	}
+
 	async function subscribeToMessages({ roomId, groupId }: any){
 	  if(messagesChannel) await chatDB.removeChannel(messagesChannel);
 	  const channelName = groupId? `group-${groupId}` : roomId? `room-${roomId}` : `self-${getCurrentUserId()}`;
-	  messagesChannel=chatDB.channel(channelName).on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},(payload)=>{ const newMsg = payload.new as any; const uid = getCurrentUserId(); if((newMsg.deleted_by||[]).includes(uid)) return; if(groupId && newMsg.group_id===groupId) { if(!messages.find(m=>m.id===newMsg.id)) messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}]; } else if(roomId && newMsg.room_id===roomId) { if(!messages.find(m=>m.id===newMsg.id)) messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}]; } else if(!roomId &&!groupId && newMsg.sender_id===uid && newMsg.receiver_id===uid) { if(!messages.find(m=>m.id===newMsg.id)) messages = [...messages, {...newMsg, is_own:true}]; } }).subscribe();
+	  messagesChannel=chatDB.channel(channelName)
+	 .on("postgres_changes",{event:"INSERT",schema:"public",table:"messages"},async (payload)=>{
+	    const newMsg = payload.new as any; const uid = getCurrentUserId();
+	    if((newMsg.deleted_by||[]).includes(uid)) return;
+	    // AUTO 2nd tick - delivered
+	    if(newMsg.sender_id!==uid){
+	      await chatDB.from("messages").update({ status:'delivered', delivered_at: new Date().toISOString() }).eq('id', newMsg.id);
+	      // if user is in this chat, make it blue instantly
+	      if((groupId && newMsg.group_id===groupId) || (roomId && newMsg.room_id===roomId) || (!roomId&&!groupId)){
+	        await chatDB.from("messages").update({ status:'read', read_at: new Date().toISOString() }).eq('id', newMsg.id);
+	        newMsg.status='read';
+	      } else {
+	        newMsg.status='delivered';
+	        if(Notification.permission==='granted'){
+	          new Notification(newMsg.sender_id, { body: newMsg.content?.slice(0,60) });
+	        }
+	        if(navigator.vibrate) navigator.vibrate([200,100,200]);
+	        try{ new Audio('/notify.mp3').play().catch(()=>{}); }catch{}
+	      }
+	    }
+	    if(groupId && newMsg.group_id===groupId) { if(!messages.find(m=>m.id===newMsg.id)) messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}]; }
+	    else if(roomId && newMsg.room_id===roomId) { if(!messages.find(m=>m.id===newMsg.id)) messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}]; }
+	    else if(!roomId &&!groupId && newMsg.sender_id===uid && newMsg.receiver_id===uid) { if(!messages.find(m=>m.id===newMsg.id)) messages = [...messages, {...newMsg, is_own:true}]; }
+	  })
+	 .on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"},(payload)=>{
+	    const upd = payload.new as any;
+	    messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status, delivered_at:upd.delivered_at, read_at:upd.read_at} : m);
+	  })
+	 .subscribe((s)=>{ console.log('Messages Realtime:', s); });
 	}
+
 	async function sendMessage(event: any){
 	  const detail = event.detail || event; let content = (detail.content || "").trim(); if(!content &&!(detail.files?.length)) return;
 	  if(replyingTo){ content = `> ${replyingTo.content?.slice(0,100)}\n${content}`; }
 	  const uid = getCurrentUserId(); const tempId = 'temp_'+Date.now();
-	  const optimistic = { id: tempId, sender_id: uid, content, room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact? (selectedContact.actual_user_id || selectedContact.id) : null, created_at: new Date().toISOString(), is_own: true, reply_to: replyingTo?.id || null };
+	  const optimistic = { id: tempId, sender_id: uid, content, room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact? (selectedContact.actual_user_id || selectedContact.id) : null, created_at: new Date().toISOString(), is_own: true, status:'sent', reply_to: replyingTo?.id || null };
 	  messages = [...messages, optimistic];
-	  const payload: any = { sender_id: uid, content: content, room_id: selectedRoomId || null, group_id: selectedGroupId || null, receiver_id: selectedGroupId? null : (selectedContact?.actual_user_id || selectedContact?.id || uid), reply_to: replyingTo?.id || null };
+	  const payload: any = { sender_id: uid, content: content, room_id: selectedRoomId || null, group_id: selectedGroupId || null, receiver_id: selectedGroupId? null : (selectedContact?.actual_user_id || selectedContact?.id || uid), reply_to: replyingTo?.id || null, status:'sent' };
 	  replyingTo = null;
 	  const { data, error } = await chatDB.from("messages").insert(payload).select().single();
 	  if(error){ messages = messages.filter(m=>m.id!==tempId); } else if(data){ messages = messages.map(m=> m.id===tempId? {...data, is_own:true} : m); }
 	}
+	// --- END UPDATED ---
+
 	async function getOrCreateRoom(otherId: string){
 		if(!otherId) return null; const currentUserId = getCurrentUserId(); if(!currentUserId || otherId === currentUserId) return null;
 		try{ const { data }=await chatDB.rpc("get_or_create_room",{p_user1:getCurrentUserId(),p_user2:otherId}); const r=Array.isArray(data)?data[0]:data; if(r?.id) return r.id; if(typeof r === 'string') return r; }catch(e){}
@@ -363,7 +426,7 @@
 	function handleForward(msg:any){ forwardMessage = msg; showForwardModal = true; showMessageOptions = false; }
 	async function handleForwardToContact(contact:any){
 		if(!forwardMessage) return; const roomId = contact.room_id || await getOrCreateRoom(contact.actual_user_id || contact.id); if(!roomId) return;
-		await chatDB.from("messages").insert({ sender_id: getCurrentUserId(), content: `Forwarded: ${forwardMessage.content}`, room_id: roomId, receiver_id: contact.actual_user_id || contact.id });
+		await chatDB.from("messages").insert({ sender_id: getCurrentUserId(), content: `Forwarded: ${forwardMessage.content}`, room_id: roomId, receiver_id: contact.actual_user_id || contact.id, status:'sent' });
 		showForwardModal = false; forwardMessage = null;
 	}
 	function handleBackToList(){ selectedContact = null; selectedGroup = null; selectedRoomId = null; selectedGroupId = null; messages = []; chatMode='chat'; }

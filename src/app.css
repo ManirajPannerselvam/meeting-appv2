@@ -2,7 +2,61 @@
     margin:0;
     padding:0;
     box-sizing:border-box;
-    -webkit-tap-highlight-color: transparent; /* FIX: remove blue flash late feeling */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ===== THEME VARIABLES - 10 SOCIAL THEMES ===== */
+:root{
+  --bg:#111b21; --card:#202c33; --card-2:#1f2c34; --text:#e9edef; --text-2:#aebac1;
+  --border:#2a3942; --accent:#00a884; --input-bg:#2a3942; --top-bg:#202c33; --bottom-bg:#111b21;
+}
+[data-theme="light"]{
+  --bg:#f5f7fb; --card:#ffffff; --card-2:#ffffff; --text:#1f2937; --text-2:#6b7280;
+  --border:#e5e7eb; --accent:#2563eb; --input-bg:#ffffff; --top-bg:#ffffff; --bottom-bg:#111827;
+}
+[data-theme="dark"]{
+  --bg:#0f172a; --card:#1e293b; --card-2:#1e293b; --text:#e2e8f0; --text-2:#94a3b8;
+  --border:#334155; --accent:#3b82f6; --input-bg:#1e293b; --top-bg:#1e293b; --bottom-bg:#0f172a;
+}
+[data-theme="whatsapp"]{
+  --bg:#111b21; --card:#202c33; --card-2:#1f2c34; --text:#e9edef; --text-2:#aebac1;
+  --border:#2a3942; --accent:#00a884; --input-bg:#2a3942; --top-bg:#202c33; --bottom-bg:#111b21;
+}
+[data-theme="telegram"]{
+  --bg:#e6f3ff; --card:#ffffff; --card-2:#ffffff; --text:#000000; --text-2:#556070;
+  --border:#d1e7ff; --accent:#2b88d8; --input-bg:#ffffff; --top-bg:#ffffff; --bottom-bg:#2b88d8;
+}
+[data-theme="instagram"]{
+  --bg:#fafafa; --card:#ffffff; --card-2:#ffffff; --text:#262626; --text-2:#8e8e8e;
+  --border:#dbdbdb; --accent:#d62976; --input-bg:#efefef; --top-bg:#ffffff; --bottom-bg:#262626;
+}
+[data-theme="discord"]{
+  --bg:#313338; --card:#2b2d31; --card-2:#313338; --text:#f2f3f5; --text-2:#b5bac1;
+  --border:#3f4147; --accent:#5865f2; --input-bg:#383a40; --top-bg:#2b2d31; --bottom-bg:#1e1f22;
+}
+[data-theme="snapchat"]{
+  --bg:#fffef0; --card:#ffffff; --card-2:#ffffff; --text:#000000; --text-2:#444;
+  --border:#fde047; --accent:#000000; --input-bg:#ffffff; --top-bg:#fffc00; --bottom-bg:#000;
+}
+[data-theme="slack"]{
+  --bg:#350d36; --card:#ffffff; --card-2:#f8f8f8; --text:#1d1c1d; --text-2:#616061;
+  --border:#522653; --accent:#1264a3; --input-bg:#ffffff; --top-bg:#350d36; --bottom-bg:#350d36;
+}
+[data-theme="messenger"]{
+  --bg:#e7f3ff; --card:#ffffff; --card-2:#ffffff; --text:#050505; --text-2:#65676b;
+  --border:#c2d9ff; --accent:#0099ff; --input-bg:#f0f2f5; --top-bg:#ffffff; --bottom-bg:#0099ff;
+}
+[data-theme="twitter"]{
+  --bg:#000000; --card:#16181c; --card-2:#1c1f24; --text:#e7e9ea; --text-2:#71767b;
+  --border:#2f3336; --accent:#1d9bf0; --input-bg:#202327; --top-bg:#000000; --bottom-bg:#000;
+}
+[data-theme="minimal"]{
+  --bg:#ffffff; --card:#ffffff; --card-2:#fafafa; --text:#111111; --text-2:#666;
+  --border:#eeeeee; --accent:#111; --input-bg:#ffffff; --top-bg:#ffffff; --bottom-bg:#111;
+}
+[data-theme="imessage"]{
+  --bg:#f5f5f7; --card:#ffffff; --card-2:#ffffff; --text:#000000; --text-2:#6e6e73;
+  --border:#e5e5e5; --accent:#0a84ff; --input-bg:#ffffff; --top-bg:#ffffff; --bottom-bg:#f5f5f7;
 }
 
 html,
@@ -12,14 +66,15 @@ body{
     min-height:100dvh;
     overflow-x:hidden;
     font-family:"Segoe UI",Arial,sans-serif;
-    background:#f5f7fb;
-    color:#1f2937;
+    background:var(--bg) !important;
+    color:var(--text) !important;
     -webkit-font-smoothing:antialiased;
     text-rendering:optimizeLegibility;
     overscroll-behavior:none;
-    touch-action: pan-y; /* FIX: allow vertical scroll, block horizontal swipe */
-    user-select: none; /* FIX: prevent text selection feeling like lag */
+    touch-action: pan-y;
+    user-select: none;
     -webkit-user-select: none;
+    transition: background 0.25s ease, color 0.25s ease;
 }
 
 body{
@@ -33,6 +88,8 @@ body{
     min-height:100dvh;
     display:flex;
     flex-direction:column;
+    background:var(--bg);
+    color:var(--text);
 }
 
 /* Fixed layout helpers - used in dashboard/report */
@@ -42,12 +99,16 @@ body{
     height:100dvh;
     height:100svh;
     overflow:hidden;
-    background:#f5f7fb;
+    background:var(--bg);
+    color:var(--text);
 }
 
 .top-fixed{
     flex:0 0 auto;
     z-index:30;
+    background:var(--top-bg) !important;
+    color:var(--text) !important;
+    border-bottom:1px solid var(--border);
 }
 
 .scroll-area{
@@ -55,7 +116,9 @@ body{
     overflow-y:auto;
     overflow-x:hidden;
     -webkit-overflow-scrolling:touch;
-    touch-action: pan-y; /* FIX: smooth scroll area */
+    touch-action: pan-y;
+    background:var(--bg);
+    color:var(--text);
 }
 
 .bottom-fixed{
@@ -64,7 +127,9 @@ body{
     bottom:0;
     z-index:30;
     padding-bottom: max(0px, env(safe-area-inset-bottom));
-    background:#111827;
+    background:var(--bottom-bg) !important;
+    color:var(--text) !important;
+    border-top:1px solid var(--border);
     touch-action: manipulation;
 }
 
@@ -73,6 +138,8 @@ body{
     max-width:1800px;
     margin:0 auto;
     padding:20px;
+    background:var(--bg);
+    color:var(--text);
 }
 
 .cards{
@@ -85,31 +152,33 @@ body{
     width:100%;
     overflow-x:auto;
     -webkit-overflow-scrolling:touch;
-    touch-action: pan-x pan-y; /* FIX: allow table scroll without triggering page swipe */
+    touch-action: pan-x pan-y;
 }
 
 table{
     width:100%;
     border-collapse:collapse;
+    background:var(--card);
+    color:var(--text);
 }
 
 img{
     max-width:100%;
     height:auto;
     display:block;
-    pointer-events: none; /* FIX: images not stealing touch */
+    pointer-events: none;
 }
 
 button{
     cursor:pointer;
     font:inherit;
-    touch-action: manipulation; /* FIX: removes 300ms delay */
+    touch-action: manipulation;
     user-select: none;
     -webkit-user-select: none;
 }
 
 button:active{
-    transform: scale(0.98); /* FIX: instant feedback */
+    transform: scale(0.98);
     opacity: 0.9;
 }
 
@@ -124,9 +193,12 @@ input,
 select,
 textarea{
     width:100%;
-    user-select: text; /* FIX: allow typing */
+    user-select: text;
     -webkit-user-select: text;
     touch-action: manipulation;
+    background:var(--input-bg) !important;
+    color:var(--text) !important;
+    border:1px solid var(--border) !important;
 }
 
 a{
@@ -171,6 +243,6 @@ a{
     input,
     select,
     textarea{
-        font-size:16px; /* FIX: prevents zoom on iOS */
+        font-size:16px;
     }
 }
