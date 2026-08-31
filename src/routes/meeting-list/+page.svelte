@@ -55,9 +55,12 @@ function getMeetingStatus(meeting: any): string {
     }
     if (meetingDateTime > now) return "Upcoming"; return "Overdue";
 }
-function viewMeeting(id:number){ goto(`/meeting/${id}`); }
-function editMeeting(id:number){ goto(`/meeting/edit/${id}`); }
+
+// YOUR FOLDERS: meetings/[id] , meetings/edit/[id] , minutes/[id]
+function viewMeeting(id:number){ goto(`/meetings/${id}`); }
+function editMeeting(id:number){ goto(`/meetings/edit/${id}`); }
 function minutesMeeting(id:number){ goto(`/minutes/${id}`); }
+
 async function handleDeleteMeeting(id:number){
     if(!confirm("Delete this meeting?")) return;
     await removeMeeting(id); await refreshMeetings();
@@ -66,6 +69,7 @@ function resetFilters(){ search=""; selectedType="All"; showHistory=false; curre
 function formatTime(t: string | null | undefined) {
     if (!t) return "--:--"; if (t.length === 5) return t; if (t.length >= 8) return t.substring(0, 5); return t;
 }
+
 $: filteredMeetings = $meetings.filter((m:any)=>{
     const text = (m.title + " " + (m.type || "") + " " + (m.location || "")).toLowerCase();
     const matchSearch = search ? text.includes(search.toLowerCase()) : true;
@@ -79,7 +83,8 @@ $: upcomingMeetings = $meetings.filter(m => { const s=getMeetingStatus(m); retur
 $: completedMeetings = $meetings.filter(m => getMeetingStatus(m) === "Completed").length;
 $: totalPages = Math.max(1, Math.ceil(filteredMeetings.length/pageSize));
 $: paginatedMeetings = filteredMeetings.slice((currentPage-1)*pageSize, currentPage*pageSize);
-$: search, selectedType, showHistory, currentPage = 1;
+
+function onFilterChange(){ currentPage = 1; }
 function previousPage(){ if(currentPage>1) currentPage--; }
 function nextPage(){ if(currentPage<totalPages) currentPage++; }
 </script>
@@ -91,20 +96,20 @@ function nextPage(){ if(currentPage<totalPages) currentPage++; }
   </div>
 
   <div class="cards">
-      <div class="kpi total"><span class="kpi-icon">📊</span><div><h3>Total</h3><h2>{totalMeetings}</h2></div></div>
-      <div class="kpi today"><span class="kpi-icon">📅</span><div><h3>Today</h3><h2>{todayMeetings}</h2></div></div>
-      <div class="kpi upcoming"><span class="kpi-icon">⏳</span><div><h3>Upcoming</h3><h2>{upcomingMeetings}</h2></div></div>
-      <div class="kpi completed"><span class="kpi-icon">✅</span><div><h3>Completed</h3><h2>{completedMeetings}</h2></div></div>
+      <div class="kpi total"><span>📊</span><div><h3>Total</h3><h2>{totalMeetings}</h2></div></div>
+      <div class="kpi today"><span>📅</span><div><h3>Today</h3><h2>{todayMeetings}</h2></div></div>
+      <div class="kpi upcoming"><span>⏳</span><div><h3>Upcoming</h3><h2>{upcomingMeetings}</h2></div></div>
+      <div class="kpi completed"><span>✅</span><div><h3>Completed</h3><h2>{completedMeetings}</h2></div></div>
   </div>
 
   <div class="toolbar">
-      <input type="text" bind:value={search} placeholder="🔍 Search title, type, location..." />
-      <select bind:value={selectedType}>
+      <input type="text" bind:value={search} on:input={onFilterChange} placeholder="🔍 Search title, type, location..." />
+      <select bind:value={selectedType} on:change={onFilterChange}>
           {#each meetingTypes as type}<option value={type}>{type}</option>{/each}
       </select>
       <div class="toolbar-row">
-        <button class:active={!showHistory} on:click={() => showHistory = false}>📋 Active</button>
-        <button class:active={showHistory} on:click={() => showHistory = true}>📜 History</button>
+        <button class:active={!showHistory} on:click={() => { showHistory = false; onFilterChange(); }}>📋 Active</button>
+        <button class:active={showHistory} on:click={() => { showHistory = true; onFilterChange(); }}>📜 History</button>
         <button class="reset" on:click={resetFilters}>Reset</button>
         <button class="new mobile-only" on:click={() => goto("/meetings")}>➕ New</button>
       </div>
@@ -137,7 +142,7 @@ function nextPage(){ if(currentPage<totalPages) currentPage++; }
                       <td>
                           {#if getMeetingStatus(meeting) === "Completed"}<span class="badge completed">Completed</span>
                           {:else if getMeetingStatus(meeting) === "Today"}<span class="badge today">Today</span>
-                          {:else if getMeetingStatus(meeting) === "In Progress"}<span class="badge progress">In Progress</span>
+                          {:else if getMeetingStatus(meeting) === "In Progress"}<span class="badge progress">Live</span>
                           {:else if getMeetingStatus(meeting) === "Upcoming"}<span class="badge upcoming">Upcoming</span>
                           {:else}<span class="badge overdue">Overdue</span>{/if}
                       </td>
@@ -182,86 +187,37 @@ function nextPage(){ if(currentPage<totalPages) currentPage++; }
 </div>
 
 <style>
-:global(html){ height:100%; overflow-y:auto; scroll-behavior:smooth; }
-:global(body){ margin:0; background:#f1f5f9; font-family:Inter,Segoe UI,Arial,sans-serif; height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch; }
-:global(#svelte){ min-height:100%; overflow-y:auto; }
-
-.page{ max-width:1400px; margin:0 auto; padding:14px; min-height:100vh; overflow-y:visible; display:flex; flex-direction:column; gap:12px; }
-.page-header{ display:flex; justify-content:space-between; align-items:center; }
-.page-header h1{ margin:0; font-size:24px; color:#1e293b; } .page-header p{ margin:2px 0 0; color:#64748b; font-size:12px; }
-
+:global(html){ height:100%; overflow-y:auto; } :global(body){ margin:0; background:#f1f5f9; font-family:Inter,Segoe UI,Arial,sans-serif; height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+.page{ max-width:1400px; margin:0 auto; padding:14px; min-height:100vh; display:flex; flex-direction:column; gap:12px; }
+.page-header{ display:flex; justify-content:space-between; align-items:center; } .page-header h1{ margin:0; font-size:24px; color:#1e293b; } .page-header p{ margin:2px 0 0; color:#64748b; font-size:12px; }
 .cards{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
 .kpi{ background:white; border-radius:12px; padding:12px; display:flex; align-items:center; gap:10px; box-shadow:0 1px 3px rgba(0,0,0,.08); border-left:4px solid transparent; }
-.kpi h3{ margin:0; font-size:11px; color:#64748b; font-weight:600; } .kpi h2{ margin:0; font-size:18px; color:#1e293b; }
+.kpi h3{ margin:0; font-size:11px; color:#64748b; } .kpi h2{ margin:0; font-size:18px; }
 .total{ border-color:#2563eb; }.today{ border-color:#22c55e; }.upcoming{ border-color:#f59e0b; }.completed{ border-color:#94a3b8; }
-
 .toolbar{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:white; padding:10px; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.06); }
-.toolbar input{ flex:1; min-width:200px; padding:10px 12px; border-radius:10px; border:1px solid #e2e8f0; font-size:14px; background:#f8fafc; }
-.toolbar select{ padding:10px; border-radius:10px; border:1px solid #e2e8f0; background:#f8fafc; }
-.toolbar-row{ display:flex; gap:6px; }
-.toolbar button{ padding:8px 14px; border:none; border-radius:20px; cursor:pointer; background:#eef2ff; color:#334155; font-weight:600; font-size:12px; }
-.toolbar button.active{ background:#2563eb; color:white; }
-.reset{ background:#fee2e2!important; color:#dc2626!important; }.new{ background:#16a34a!important; color:white!important; }
-
+.toolbar input{ flex:1; min-width:200px; padding:10px 12px; border-radius:10px; border:1px solid #e2e8f0; background:#f8fafc; }
+.toolbar select{ padding:10px; border-radius:10px; border:1px solid #e2e8f0; }
+.toolbar-row{ display:flex; gap:6px; } .toolbar button{ padding:8px 14px; border:none; border-radius:20px; cursor:pointer; background:#eef2ff; font-weight:600; font-size:12px; } .toolbar button.active{ background:#2563eb; color:white; } .reset{ background:#fee2e2!important; color:#dc2626!important; }.new{ background:#16a34a!important; color:white!important; }
 .table-container{ background:white; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,.06); overflow-x:auto; }
-table{ width:100%; border-collapse:collapse; min-width:850px; }
-thead{ background:#f8fafc; color:#64748b; border-bottom:1px solid #e2e8f0; }
-th{ padding:12px 10px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; }
-td{ padding:12px 10px; border-bottom:1px solid #f1f5f9; font-size:12px; }
-
+table{ width:100%; border-collapse:collapse; min-width:850px; } thead{ background:#f8fafc; } th{ padding:12px 10px; text-align:left; font-size:11px; font-weight:700; text-transform:uppercase; } td{ padding:12px 10px; border-bottom:1px solid #f1f5f9; font-size:12px; }
 .type-badge{ background:#eff6ff; color:#2563eb; padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; border:1px solid #dbeafe; }
-.badge{ padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; }
-.badge.completed{ background:#f1f5f9; color:#64748b; }.badge.today{ background:#dcfce7; color:#16a34a; }.badge.upcoming{ background:#dbeafe; color:#2563eb; }.badge.progress{ background:#dcfce7; color:#15803d; }.badge.overdue{ background:#fee2e2; color:#dc2626; }
-.priority{ padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; }
-.priority.critical{ background:#fee2e2; color:#dc2626; }.priority.high{ background:#ffedd5; color:#ea580c; }.priority.medium{ background:#fef9c3; color:#a16207; }.priority.low{ background:#dcfce7; color:#15803d; }
-.time-cell{ font-family:monospace; font-weight:600; }
-.actions{ display:flex; gap:5px; }
-.actions button{ width:32px; height:32px; border:none; border-radius:8px; cursor:pointer; color:white; display:flex; align-items:center; justify-content:center; }
+.badge{ padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; } .badge.completed{ background:#f1f5f9; color:#64748b; }.badge.today{ background:#dcfce7; color:#16a34a; }.badge.upcoming{ background:#dbeafe; color:#2563eb; }.badge.progress{ background:#dcfce7; color:#15803d; }.badge.overdue{ background:#fee2e2; color:#dc2626; }
+.priority{ padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; } .priority.critical{ background:#fee2e2; color:#dc2626; }.priority.high{ background:#ffedd5; color:#ea580c; }.priority.medium{ background:#fef9c3; color:#a16207; }.priority.low{ background:#dcfce7; color:#15803d; }
+.actions{ display:flex; gap:5px; } .actions button{ width:32px; height:32px; border:none; border-radius:8px; cursor:pointer; color:white; }
 .view{ background:#2563eb; }.edit{ background:#f59e0b; }.minutes{ background:#16a34a; }.delete{ background:#ef4444; }
-.pagination{ display:flex; justify-content:space-between; align-items:center; font-size:12px; color:#64748b; }
-.pagination button{ background:white; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; font-weight:600; cursor:pointer; }
-.pagination button:disabled{ opacity:.5; }
-.empty,.loading{ text-align:center; padding:40px; color:#94a3b8; }
-.mobile-list{ display:none; }
-
-/* ===== MOBILE FIX ===== */
+.pagination{ display:flex; justify-content:space-between; align-items:center; font-size:12px; } .pagination button{ background:white; border:1px solid #e2e8f0; border-radius:8px; padding:8px 12px; font-weight:600; } .pagination button:disabled{ opacity:.5; }
+.empty,.loading{ text-align:center; padding:40px; color:#94a3b8; } .mobile-list{ display:none; }
 @media(max-width:900px){
  .page{ padding:8px; gap:8px; background:#f8fafc; }
  .cards{ grid-template-columns:1fr 1fr; gap:6px; }
- .kpi{ padding:10px; border-radius:10px; } .kpi h2{ font-size:16px; }
- .toolbar{ padding:8px; gap:6px; border-radius:10px; }
- .toolbar input{ font-size:16px; width:100%; min-width:0; }
- .toolbar-row{ width:100%; } .toolbar-row button{ flex:1; }
- .desktop-table{ display:none; }
- .mobile-list{ display:flex; flex-direction:column; gap:8px; padding:0; }
- .table-container{ background:transparent; box-shadow:none; overflow:visible; }
-
- .m-card{
-   background:white; border-radius:16px; padding:12px 12px 10px;
-   box-shadow:0 1px 2px rgba(0,0,0,.06); border:1px solid #f1f5f9;
-   display:flex; flex-direction:column; gap:8px;
- }
- .m-head{ display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
- .m-title{ font-size:14px; font-weight:700; color:#0f172a; line-height:1.2; flex:1; }
+ .toolbar{ flex-direction:column; align-items:stretch; } .toolbar input{ width:100%; font-size:16px; } .toolbar-row{ width:100%; } .toolbar-row button{ flex:1; }
+ .desktop-table{ display:none; } .mobile-list{ display:flex; flex-direction:column; gap:8px; } .table-container{ background:transparent; box-shadow:none; }
+ .m-card{ background:white; border-radius:16px; padding:12px; box-shadow:0 1px 2px rgba(0,0,0,.06); border:1px solid #f1f5f9; display:flex; flex-direction:column; gap:8px; }
+ .m-head{ display:flex; justify-content:space-between; gap:8px; } .m-title{ font-size:14px; font-weight:700; color:#0f172a; flex:1; }
  .m-row{ display:flex; justify-content:space-between; font-size:12px; color:#475569; }
- .m-row span{ display:flex; align-items:center; gap:4px; max-width:50%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
- .m-foot{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
-
- /* FIXED ACTION BUTTONS - SMALL AND NICE */
- .m-actions{
-   display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-top:4px;
-   border-top:1px solid #f8fafc; padding-top:8px;
- }
- .m-actions button{
-   height:38px; border-radius:10px; border:1px solid #f1f5f9;
-   font-size:16px; font-weight:600; cursor:pointer;
-   display:flex; align-items:center; justify-content:center;
-   transition:all .15s;
- }
- .m-actions .view{ background:#eff6ff; color:#2563eb; border-color:#dbeafe; }
- .m-actions .edit{ background:#fffbeb; color:#d97706; border-color:#fde68a; }
- .m-actions .minutes{ background:#f0fdf4; color:#16a34a; border-color:#bbf7d0; }
- .m-actions .delete{ background:#fef2f2; color:#ef4444; border-color:#fecaca; }
- .m-actions button:active{ transform:scale(.96); }
+ .m-foot{ display:flex; gap:6px; flex-wrap:wrap; }
+ .m-actions{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; border-top:1px solid #f8fafc; padding-top:8px; }
+ .m-actions button{ height:38px; border-radius:10px; border:1px solid #f1f5f9; font-size:16px; display:flex; align-items:center; justify-content:center; }
+ .m-actions .view{ background:#eff6ff; color:#2563eb; border-color:#dbeafe; } .m-actions .edit{ background:#fffbeb; color:#d97706; border-color:#fde68a; } .m-actions .minutes{ background:#f0fdf4; color:#16a34a; border-color:#bbf7d0; } .m-actions .delete{ background:#fef2f2; color:#ef4444; border-color:#fecaca; }
 }
 </style>

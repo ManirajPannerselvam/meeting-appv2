@@ -4,128 +4,110 @@ import { getMeetings, saveMeeting, deleteMeeting, getMeeting } from "$lib/db/dat
 import { supabaseChat } from "$lib/supabase/client";
 
 export const meetings = writable<any[]>([]);
-
+export const meetingsLoading = writable(false);
 const supabase = supabaseChat;
 
-// 1. READ = Try Supabase first (real), fallback to local DB
+// READ
 export async function refreshMeetings(){
-    if(!browser) return [];
-    try{
-        // Try Supabase Chat DB - primary source
-        const { data: sbData, error } = await supabase
-            .from('meetings')
-            .select('*')
-            .order('meeting_date', { ascending: false })
-            .order('id', { ascending: false });
+  if(!browser) return [];
+  meetingsLoading.set(true);
+  try{
+    const { data, error } = await supabase.from('meetings')
+      .select('*')
+      .order('meeting_date', { ascending:false })
+      .order('id', { ascending:false });
 
-        if(!error && sbData && sbData.length > 0){
-            meetings.set(sbData);
-            // also sync to local for offline
-            try{ for(const m of sbData) await saveMeeting(m); }catch{}
-            return sbData;
-        }
-
-        // Fallback to local IndexedDB if Supabase empty/error
-        const localData = await getMeetings();
-        meetings.set(localData || []);
-        return localData || [];
-
-    } catch(err){
-        console.error("refreshMeetings()", err);
-        try{
-            const localData = await getMeetings();
-            meetings.set(localData || []);
-            return localData || [];
-        }catch{
-            meetings.set([]);
-            return [];
-        }
+    if(!error && data && data.length>0){
+      meetings.set(data);
+      // sync local async no await loop
+      data.forEach(m=>saveMeeting(m).catch(()=>{}));
+      return data;
     }
+    // fallback local
+    const local = await getMeetings();
+    meetings.set(local||[]);
+    return local||[];
+  }catch(err){
+    console.error("refreshMeetings",err);
+    const local = await getMeetings().catch(()=>[]);
+    meetings.set(local||[]);
+    return local||[];
+  }finally{
+    meetingsLoading.set(false);
+  }
 }
 
-// 2. ADD = Save to BOTH Supabase + local
-export async function addMeeting(data:any){
-    try{
-        // save to supabase first
-        if(data.id){
-            const { data: result, error } = await supabase.from('meetings').upsert(data).select().single();
-            if(error) throw error;
-            await saveMeeting(result); // sync local
-            await refreshMeetings();
-            return result;
-        } else {
-            const { data: result, error } = await supabase.from('meetings').insert(data).select().single();
-            if(error) throw error;
-            await saveMeeting(result);
-            await refreshMeetings();
-            return result;
-        }
-    } catch(err){
-        console.error("addMeeting() supabase failed, saving local", err);
-        // fallback local only
-        const result = await saveMeeting(data);
-        await refreshMeetings();
-        return result;
-    }
+// CREATE
+export async function addMeeting(payload:any){
+  try{
+    const { data, error } = await supabase.from('meetings').insert(payload).select().single();
+    if(error) throw error;
+    await saveMeeting(data);
+    await refreshMeetings();
+    return data;
+  }catch(err){
+    console.warn("supabase insert failed, local fallback",err);
+    const local = await saveMeeting(payload);
+    await refreshMeetings();
+    return local;
+  }
 }
 
-export async function editMeeting(id:string | number, data:any){
-    try{
-        const payload = { id: Number(id), ...data };
-        const { data: result, error } = await supabase.from('meetings').upsert(payload).select().single();
-        if(error) throw error;
-        await saveMeeting(result);
-        await refreshMeetings();
-        return result;
-    } catch(err){
-        console.error("editMeeting()", err);
-        const result = await saveMeeting({ id: Number(id), ...data });
-        await refreshMeetings();
-        return result;
-    }
+// UPDATE - both names for compatibility
+export async function editMeeting(id:string|number, data:any){
+  return updateMeeting(id,data);
 }
 
-export async function removeMeeting(id:string | number){
-    try{
-        await supabase.from('meetings').delete().eq('id', Number(id));
-        await deleteMeeting(Number(id));
-        await refreshMeetings();
-        return true;
-    } catch(err){
-        console.error("removeMeeting()", err);
-        await deleteMeeting(Number(id));
-        await refreshMeetings();
-        return true;
-    }
+export async function updateMeeting(id:string|number, data:any){
+  const numId = Number(id);
+  try{
+    const { data:result, error } = await supabase.from('meetings')
+      .update({ ...data, updated_at:new Date().toISOString() })
+      .eq('id', numId)
+      .select().single();
+    if(error) throw error;
+    await saveMeeting(result);
+    await refreshMeetings();
+    return result;
+  }catch(err){
+    console.warn("supabase update failed, local fallback",err);
+    const merged = { id:numId, ...data, updated_at:new Date().toISOString() };
+    const local = await saveMeeting(merged);
+    await refreshMeetings();
+    return local;
+  }
 }
 
-export async function getMeetingById(id:string | number){
-    try{
-        // try supabase first
-        const { data } = await supabase.from('meetings').select('*').eq('id', Number(id)).maybeSingle();
-        if(data) return data;
-        return await getMeeting(Number(id));
-    } catch(err){
-        console.error("getMeetingById()", err);
-        return await getMeeting(Number(id));
-    }
+// DELETE
+export async function removeMeeting(id:string|number){
+  const numId = Number(id);
+  try{ await supabase.from('meetings').delete().eq('id', numId); }catch{}
+  await deleteMeeting(numId);
+  await refreshMeetings();
+  return true;
 }
 
+// GET ONE - try both string and number
+export async function getMeetingById(id:string|number){
+  const numId = Number(id);
+  try{
+    let { data } = await supabase.from('meetings').select('*').eq('id', numId).maybeSingle();
+    if(data) return data;
+    // try string id
+    const { data:data2 } = await supabase.from('meetings').select('*').eq('id', id).maybeSingle();
+    if(data2) return data2;
+    return await getMeeting(numId) || await getMeeting(id as any);
+  }catch{
+    return await getMeeting(numId) || await getMeeting(id as any);
+  }
+}
+
+// EVENTS
 if(browser){
-    window.addEventListener("meetings:updated", async()=>{
-        await refreshMeetings();
-    });
-    // auto refresh on focus - so after you save and goto list, it refreshes
-    window.addEventListener("focus", () => refreshMeetings());
-    window.addEventListener("storage", () => refreshMeetings());
-    refreshMeetings();
+  window.addEventListener("meetings:updated", ()=>refreshMeetings());
+  window.addEventListener("focus", ()=>refreshMeetings());
+  window.addEventListener("storage", (e)=>{ if(e.key==="meetings_updated") refreshMeetings(); });
+  refreshMeetings();
 }
 
-export default {
-    meetings,
-    refreshMeetings,
-    addMeeting,
-    editMeeting,
-    removeMeeting,
-    getMeetingById
-};
+export default { meetings, meetingsLoading, refreshMeetings, addMeeting, editMeeting, updateMeeting, removeMeeting, getMeetingById };

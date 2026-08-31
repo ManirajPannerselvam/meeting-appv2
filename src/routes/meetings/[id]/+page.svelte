@@ -2,257 +2,162 @@
     import { page } from '$app/stores';
     import { goto } from "$app/navigation";
     import { onMount } from "svelte";
-  //  import { getMeetingById } from "$lib/stores/meetings";
+    import { browser } from "$app/environment";
+    import { getMeetingById } from "$lib/stores/meetings";
+    import { supabaseChat } from "$lib/supabase/client";
 
     let meeting: any = null;
     let loading = true;
-
     $: id = $page.params.id;
 
     onMount(async () => {
+        if(!browser) return;
         loading = true;
-        meeting = await getMeetingById(Number(id));
-        loading = false;
+        try{
+          let m:any = await getMeetingById(id);
+          if(m) meeting = m;
+          try{
+            const { data } = await supabaseChat.from('meetings').select('*').eq('id', id).maybeSingle();
+            if(data) meeting = data;
+            if(!data && !isNaN(Number(id))){
+              const { data:data2 } = await supabaseChat.from('meetings').select('*').eq('id', Number(id)).maybeSingle();
+              if(data2) meeting = data2;
+            }
+          }catch{}
+        }catch(e){ console.error(e); }
+        finally{ loading=false; }
     });
 
     function formatDate(date: string) {
         if (!date) return "-";
         const d = new Date(date);
-        if (isNaN(d.getTime())) return "-";
-        return d.toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric"
-        });
+        return isNaN(d.getTime()) ? date : d.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
     }
-
-    function formatTime(time: string | null | undefined) {
-        if (!time) return "--:--";
-        if (time.length === 5) return time;
-        if (time.length >= 8) return time.substring(0, 5);
-        return time;
-    }
-
-    function getMeetingStatus(m: any): string {
-        if (!m?.meeting_date) return "Unknown";
+    function formatTime(t: any){ if(!t) return "--:--"; return String(t).substring(0,5); }
+    function getStatus(m: any): string {
+        if (!m?.meeting_date) return "Upcoming";
         if (m.completed || m.status === 'completed') return "Completed";
-
         const now = new Date();
-        const meetingDateTime = new Date(`${m.meeting_date}T${m.start_time || "00:00"}`);
-
-        if (isNaN(meetingDateTime.getTime())) return "Unknown";
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const meetingDay = new Date(meetingDateTime);
-        meetingDay.setHours(0, 0, 0, 0);
-
-        if (meetingDay.getTime() === today.getTime()) {
-            if (meetingDateTime > now) return "Today";
-            const endTime = new Date(`${m.meeting_date}T${m.end_time || "23:59"}`);
-            if (endTime < now) return "Completed";
-            return "In Progress";
+        const mt = new Date(`${m.meeting_date}T${m.start_time || "00:00"}`);
+        if(isNaN(mt.getTime())) return "Upcoming";
+        const today = new Date(); today.setHours(0,0,0,0);
+        const mDay = new Date(mt); mDay.setHours(0,0,0,0);
+        if(mDay.getTime()===today.getTime()){
+          if(mt>now) return "Today";
+          const end = new Date(`${m.meeting_date}T${m.end_time || "23:59"}`);
+          if(end < now) return "Completed";
+          return "In Progress";
         }
-
-        if (meetingDateTime > now) return "Upcoming";
-        return "Overdue";
+        return mt > now ? "Upcoming" : "Overdue";
+    }
+    function goMinutes(){
+      // safe navigation - if minutes folder not exist, show alert
+      goto(`/minutes/${id}`).catch(()=>{ alert("Create src/routes/minutes/[id]/+page.svelte first"); });
     }
 </script>
 
-<div class="page">
-    <div class="header">
-        <h1>📋 Meeting Details</h1>
-        <button class="back-btn" on:click={() => goto("/meeting-list")}>
-            ← Back to list
-        </button>
+<svelte:head>
+<style>
+  html,body{ overflow:auto!important; height:auto!important; }
+  body{ background:#f6f8fb; -webkit-overflow-scrolling:touch; }
+</style>
+</svelte:head>
+
+<div class="app">
+  <div class="topbar">
+    <button class="icon-btn" on:click={()=>goto("/meeting-list")}>‹</button>
+    <div class="crumbs"><span class="c" on:click={()=>goto("/meeting-list")}>Meetings</span><span>/</span><b>#{id}</b></div>
+    <div class="acts">
+      <button class="btn light" on:click={()=>goto(`/meetings/edit/${id}`)}>Edit</button>
+      <button class="btn dark" on:click={goMinutes}>Minutes</button>
     </div>
+  </div>
 
+  <div class="wrap">
     {#if loading}
-        <div class="loading">Loading meeting...</div>
+      <div class="card"><div class="sk h"></div><div class="sk w60"></div><div class="sk card"></div></div>
     {:else if !meeting}
-        <div class="error">
-            <h2>❌ Meeting Not Found</h2>
-            <p>Meeting with ID #{id} does not exist.</p>
-            <button class="primary" on:click={() => goto("/meeting-list")}>
-                Back to Meeting List
-            </button>
-        </div>
+      <div class="card center"><h3>Meeting #{id} not found</h3><button class="btn dark" on:click={()=>goto("/meeting-list")}>Back to list</button></div>
     {:else}
-        <div class="details-grid">
-            <!-- Main Info Card -->
-            <div class="card main-card">
-                <div class="card-header">
-                    <h2>{meeting.title}</h2>
-                    <span class="badge {getMeetingStatus(meeting).toLowerCase().replace(' ', '-')}">
-                        {getMeetingStatus(meeting)}
-                    </span>
-                </div>
-
-                <div class="info-grid">
-                    <div class="info-item">
-                        <span class="label">📝 Type</span>
-                        <strong>{meeting.type || "-"}</strong>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">🏢 Department</span>
-                        <strong>{meeting.department || "-"}</strong>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">⚠️ Priority</span>
-                        <strong class="priority-{meeting.priority?.toLowerCase()}">{meeting.priority || "-"}</strong>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">📅 Date</span>
-                        <strong>{formatDate(meeting.meeting_date)}</strong>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">🕒 Time</span>
-                        <strong>{formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}</strong>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">📍 Location</span>
-                        <strong>{meeting.location || "-"}</strong>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">💻 Mode</span>
-                        <strong>{meeting.meeting_mode || "-"}</strong>
-                    </div>
-                    <div class="info-item">
-                        <span class="label">👤 Organizer</span>
-                        <strong>{meeting.organizer || "-"}</strong>
-                    </div>
-                    {#if meeting.meeting_link}
-                    <div class="info-item full-width">
-                        <span class="label">🔗 Meeting Link</span>
-                        <a href={meeting.meeting_link} target="_blank" class="link">{meeting.meeting_link}</a>
-                    </div>
-                    {/if}
-                </div>
-            </div>
-
-            <!-- Participants Card -->
-            {#if meeting.participants && meeting.participants.length > 0}
-            <div class="card">
-                <h3>👥 Participants</h3>
-                <div class="participants">
-                    {#each meeting.participants as p}
-                        <span class="participant-tag">{p}</span>
-                    {/each}
-                </div>
-            </div>
-            {/if}
-
-            <!-- Objective Card -->
-            {#if meeting.meeting_objective}
-            <div class="card">
-                <h3>🎯 Meeting Objective</h3>
-                <p class="text-content">{meeting.meeting_objective}</p>
-            </div>
-            {/if}
-
-            <!-- Agenda Card -->
-            {#if meeting.agenda}
-            <div class="card">
-                <h3>📝 Agenda</h3>
-                <p class="text-content">{meeting.agenda}</p>
-            </div>
-            {/if}
-
-            <!-- Additional Info Card -->
-            <div class="card">
-                <h3>📎 Additional Information</h3>
-                <div class="info-grid">
-                    <div class="info-item">
-                        <span class="label">🔔 Reminder</span>
-                        <strong>{meeting.reminder_minutes} minutes before</strong>
-                    </div>
-                    {#if meeting.reference_no}
-                    <div class="info-item">
-                        <span class="label">📄 Reference No</span>
-                        <strong>{meeting.reference_no}</strong>
-                    </div>
-                    {/if}
-                    {#if meeting.attachment}
-                    <div class="info-item">
-                        <span class="label">📎 Attachment</span>
-                        <strong>{meeting.attachment}</strong>
-                    </div>
-                    {/if}
-                </div>
-            </div>
-
-            <!-- Actions -->
-            <div class="actions">
-                <button class="primary" on:click={() => goto(`/meeting/edit/${meeting.id}`)}>
-                    ✏ Edit Meeting
-                </button>
-                <button class="secondary" on:click={() => goto(`/minutes/${meeting.id}`)}>
-                    📝 Meeting Minutes
-                </button>
-                <button class="danger" on:click={() => goto("/meeting-list")}>
-                    ← Back to List
-                </button>
-            </div>
+      <div class="hero">
+        <div class="meta">
+          <span class="pill black">#M-{meeting.id}</span>
+          <span class="pill">{meeting.type || "Meeting"}</span>
+          <span class="pill pri-{meeting.priority?.toLowerCase()}">{meeting.priority || 'Low'}</span>
+          <span class="st s-{getStatus(meeting).toLowerCase().replace(' ','-')}">{getStatus(meeting)}</span>
         </div>
+        <h1>{meeting.title}</h1>
+        <div class="sub">By <b>{meeting.organizer || "-"}</b> • {meeting.department || "General"} • 📅 {formatDate(meeting.meeting_date)} • ⏰ {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}</div>
+      </div>
+
+      <div class="grid">
+        <div class="left">
+          <div class="card"><h4>Overview</h4>
+            <div class="tbl">
+              <div><label>Location</label><span>📍 {meeting.location || "-"}</span></div>
+              <div><label>Mode</label><span>{meeting.meeting_mode || "-"}</span></div>
+              <div><label>Department</label><span>{meeting.department || "-"}</span></div>
+              <div><label>Reminder</label><span>{meeting.reminder_minutes || 15} min</span></div>
+              {#if meeting.reference_no}<div><label>Ref</label><span class="mono">{meeting.reference_no}</span></div>{/if}
+              {#if meeting.meeting_link}<div><label>Link</label><a href={meeting.meeting_link} target="_blank">{meeting.meeting_link}</a></div>{/if}
+            </div>
+          </div>
+          {#if meeting.meeting_objective}<div class="card"><h4>Objective</h4><div class="prose">{meeting.meeting_objective}</div></div>{/if}
+          {#if meeting.agenda}<div class="card"><h4>Agenda</h4><div class="prose">{meeting.agenda}</div></div>{/if}
+        </div>
+
+        <div class="right">
+          <div class="card sticky">
+            <h4>Participants • {meeting.participants?.length || 0}</h4>
+            {#if meeting.participants?.length}
+              <div class="peeps">{#each meeting.participants as p,i}<div class="p"><div class="av" style="background:hsl({(i*47)%360} 70% 92%)">{p[0]?.toUpperCase()}</div><span>{p}</span></div>{/each}</div>
+            {:else}<p class="muted">No participants</p>{/if}
+            <div class="stack">
+              <button class="btn dark full" on:click={()=>goto(`/meetings/edit/${id}`)}>✏️ Edit</button>
+              <button class="btn light full" on:click={goMinutes}>📝 Minutes</button>
+              <button class="btn ghost full" on:click={()=>goto("/meeting-list")}>Back</button>
+            </div>
+          </div>
+        </div>
+      </div>
     {/if}
+    <div class="spacer"></div>
+  </div>
+
+  <div class="mob">
+    <button class="btn light" on:click={()=>goto("/meeting-list")}>List</button>
+    <button class="btn light" on:click={()=>goto(`/meetings/edit/${id}`)}>Edit</button>
+    <button class="btn dark" on:click={goMinutes}>Minutes</button>
+  </div>
 </div>
 
 <style>
-.page { padding: 25px; max-width: 1200px; margin: auto; }
-.header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
-.header h1 { margin: 0; font-size: 28px; color: #1e293b; }
-.back-btn { padding: 10px 20px; background: #64748b; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; }
-.back-btn:hover { background: #475569; }
+.app{ min-height:100dvh; display:flex; flex-direction:column; background:#f6f8fb; font-family:Inter,system-ui; }
+.topbar{ position:sticky; top:0; z-index:20; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px 12px; background:rgba(255,255,255,.92); backdrop-filter:blur(12px); border-bottom:1px solid #eef2f7; }
+.icon-btn{ width:36px; height:36px; border-radius:10px; border:1px solid #e2e8f0; background:white; cursor:pointer; }
+.crumbs{ display:flex; gap:6px; align-items:center; font-size:13px; flex:1; } .c{ color:#64748b; cursor:pointer; }
+.btn{ padding:9px 14px; border-radius:10px; font-weight:600; font-size:12px; cursor:pointer; border:1px solid #e2e8f0; background:white; }.btn.dark{ background:#0f172a; color:white; border-color:#0f172a; }.btn.light{ background:white; }.btn.ghost{ background:#f8fafc; }.full{ width:100%; }
+.acts{ display:flex; gap:8px; }
 
-.loading, .error { text-align: center; padding: 60px; background: white; border-radius: 16px; }
-.error h2 { color: #dc2626; margin-bottom: 10px; }
+.wrap{ max-width:1100px; width:100%; margin:0 auto; padding:14px; flex:1; }
+.hero{ background:white; border:1px solid #eef2f7; border-radius:18px; padding:18px; } .hero h1{ margin:10px 0 6px; font-size:20px; font-weight:800; } .sub{ font-size:12px; color:#64748b; }
+.meta{ display:flex; gap:6px; flex-wrap:wrap; } .pill{ padding:4px 10px; border-radius:20px; font-size:10px; font-weight:700; text-transform:uppercase; background:#f8fafc; border:1px solid #eef2f7; } .pill.black{ background:#0f172a; color:white; } .pill.pri-critical{ background:#fef2f2; color:#dc2626; } .pill.pri-high{ background:#fff7ed; color:#ea580c; } .st{ padding:4px 10px; border-radius:20px; font-size:10px; font-weight:800; text-transform:uppercase; } .s-today,.s-in-progress{ background:#dcfce7; color:#15803d; } .s-upcoming{ background:#dbeafe; color:#1d4ed8; } .s-completed{ background:#f1f5f9; color:#64748b; } .s-overdue{ background:#fee2e2; color:#b91c1c; }
 
-.details-grid { display: flex; flex-direction: column; gap: 20px; }
-.card { background: white; border-radius: 16px; padding: 25px; box-shadow: 0 6px 18px rgba(0,0,0,.08); }
-.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #e5e7eb; }
-.card-header h2 { margin: 0; color: #1e293b; }
-.card h3 { margin: 0 0 15px 0; color: #1e293b; font-size: 18px; }
+.grid{ display:grid; grid-template-columns:1fr 320px; gap:14px; margin-top:14px; }
+.card{ background:white; border:1px solid #eef2f7; border-radius:16px; padding:16px; } .card h4{ margin:0 0 12px; font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.4px; }
+.tbl div{ display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid #f8fafc; font-size:13px; } .tbl label{ color:#64748b; font-size:12px; } .tbl span{ font-weight:600; text-align:right; max-width:60%; word-break:break-all; } .mono{ font-family:monospace; } a{ color:#2563eb; text-decoration:none; }
+.prose{ background:#fbfdff; border:1px solid #f1f5f9; border-radius:12px; padding:12px; font-size:13px; line-height:1.6; white-space:pre-wrap; }
+.peeps{ display:flex; flex-direction:column; gap:8px; } .p{ display:flex; gap:10px; align-items:center; font-size:13px; } .av{ width:28px; height:28px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:11px; }
+.stack{ display:flex; flex-direction:column; gap:8px; margin-top:14px; }
+.sticky{ position:sticky; top:66px; }
+.center{ text-align:center; } .muted{ color:#94a3b8; font-size:12px; }
+.sk{ background:#eef2f7; border-radius:10px; height:16px; margin:8px 0; animation:pulse 1.2s infinite; } .sk.h{ height:70px; } .sk.w60{ width:60%; } .sk.card{ height:120px; } @keyframes pulse{ 0%{ opacity:.6; } 50%{ opacity:1; } 100%{ opacity:.6; } }
+.spacer{ height:80px; }
+.mob{ display:none; }
 
-.info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; }
-.info-item { display: flex; flex-direction: column; gap: 5px; }
-.info-item.full-width { grid-column: 1/3; }
-.info-item .label { color: #64748b; font-size: 13px; font-weight: 600; }
-.info-item strong { color: #1e293b; font-size: 15px; }
-.link { color: #2563eb; text-decoration: none; word-break: break-all; }
-.link:hover { text-decoration: underline; }
-
-.badge { padding: 8px 16px; border-radius: 20px; font-size: 13px; font-weight: 700; color: white; }
-.badge.completed { background: #6b7280; }
-.badge.today { background: #16a34a; }
-.badge.upcoming { background: #2563eb; }
-.badge.in-progress { background: #16a34a; }
-.badge.overdue { background: #dc2626; }
-
-.priority-low { color: #16a34a; }
-.priority-medium { color: #ca8a04; }
-.priority-high { color: #ea580c; }
-.priority-critical { color: #dc2626; }
-
-.participants { display: flex; flex-wrap: wrap; gap: 10px; }
-.participant-tag { background: #dbeafe; color: #1d4ed8; padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; }
-
-.text-content { color: #475569; line-height: 1.6; white-space: pre-wrap; }
-
-.actions { display: flex; gap: 15px; }
-button { cursor: pointer; border: none; border-radius: 10px; padding: 12px 24px; font-weight: 600; transition: .2s; }
-button:hover { transform: translateY(-2px); }
-.primary { background: #2563eb; color: white; }
-.primary:hover { background: #1d4ed8; }
-.secondary { background: #16a34a; color: white; }
-.secondary:hover { background: #15803d; }
-.danger { background: #dc2626; color: white; }
-.danger:hover { background: #b91c1c; }
-
-@media(max-width: 768px) {
-    .info-grid { grid-template-columns: 1fr; }
-    .info-item.full-width { grid-column: 1; }
-    .header { flex-direction: column; align-items: flex-start; gap: 15px; }
-    .actions { flex-direction: column; }
-    .actions button { width: 100%; }
+@media(max-width:900px){
+ .grid{ grid-template-columns:1fr; } .sticky{ position:static; } .acts{ display:none; }
+ .mob{ display:flex; position:fixed; bottom:0; left:0; right:0; background:white; border-top:1px solid #e2e8f0; padding:10px; gap:8px; z-index:30; padding-bottom:calc(10px + env(safe-area-inset-bottom)); } .mob .btn{ flex:1; height:44px; }
+ .wrap{ padding:10px; padding-bottom:90px; } .hero h1{ font-size:17px; }
 }
 </style>
