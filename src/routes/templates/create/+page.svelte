@@ -43,9 +43,8 @@
   $: timeLabel = creatingTime.toLocaleTimeString();
 
   let templateName="Daily Tracker"; let templateCode="PROD-01"; let category="Production";
-  let cols=38; let rows=22; let gap=16; // gap same
+  let cols=38; let rows=22; let gap=16;
   type Placed = { id:string, defId:string, label:string, field_name:string, type:FieldType, metric?:string, options:string[], formula:string, x:number, y:number, w:number, h:number, color:string, border:string, required?:boolean };
-  // 25% REDUCED: w 5->3.7, h 3->2.2
   let placed: Placed[] = [
     { id:uuid(), defId:"", label:"Daily Tracker", field_name:"daily_tracker", type:"text", options:[], formula:"", x:1, y:0, w:3.7, h:2.2, color:"#3b82f6", border:"#3b82f6" },
     { id:uuid(), defId:"", label:"Enter input", field_name:"enter_input", type:"number", metric:"input", options:[], formula:"", x:1, y:3, w:3.7, h:2.2, color:"#111827", border:"#111827" },
@@ -86,13 +85,12 @@
   function loadSaved(){ try{ let t=JSON.parse(localStorage.getItem("templates")||"[]"); savedTemplates = Array.isArray(t)? t.slice(0,100):[]; savedCount=t.length; }catch{ savedCount=0; } }
 
   function quickAdd(def:FieldDef){
-    const w=3.7; const h=2.2; // 25% reduced
+    const w=3.7; const h=2.2;
     const x=(placed.length*5)%(cols-w); const y=(placed.length*3)%(rows-h);
     placed=[...placed, { id:uuid(), defId:def.id, label:sanitizeText(def.label), field_name:sanitizeFieldName(def.label)+"_"+uuid().slice(0,3), type:def.type, metric:def.metric, options:[...(def.options||[])].map(s=>sanitizeText(s)), formula:def.type==='formula'? "{enter_output} ÷ {enter_input} × 100" : "", x, y, w, h, color:def.color, border:def.border, required:def.required }];
     selectedId=placed[placed.length-1].id; if(placed[placed.length-1].type==='formula') editFormula=placed[placed.length-1].formula; isDirty=true;
   }
 
-  // --- MOBILE TOUCH + DRAG WORK LEVEL - POINTER EVENTS ---
   let boardEl: HTMLDivElement;
   function getPos(e: MouseEvent | TouchEvent | PointerEvent){
     const b=boardEl.getBoundingClientRect();
@@ -184,7 +182,6 @@
         <div bind:this={boardEl} id="board" class="board" style="height:{rows*gap+16}px; width:{cols*gap+24}px;">
           {#each Array(rows) as _,r}{#each Array(cols) as _,c}<div class="dot" style="left:{c*gap+12}px; top:{r*gap+12}px;"></div>{/each}{/each}
           {#each placed as p}
-            <!-- 25% reduced + pointer events for mobile -->
             <div class="mod reduced" class:active={selectedId===p.id}
               style="left:{p.x*gap+8}px; top:{p.y*gap+8}px; width:{p.w*gap}px; height:{p.h*gap}px; border-color:{p.border}; color:{p.color};"
               on:pointerdown={(e)=>startDrag(e,p)}
@@ -199,7 +196,6 @@
       <div class="creating-info" style="background:{selectedTheme.light}; border-top:1px solid {selectedTheme.color}"><b>📅 {creatingTime.toLocaleString()}</b><span style="color:{selectedTheme.color}; font-weight:800;">{selectedTheme.color}</span></div>
     </div>
 
-    <!-- PREVIEW ONE BY ONE VERTICAL (fixed) -->
     <div class="preview-wrap linked onebyone" style="border-color:{selectedTheme.color}">
       <div class="preview-head">◉ Preview - {selectedTheme.name} <span style="background:{selectedTheme.color}; color:white; padding:2px 6px; border-radius:10px; font-size:7px;">one by one</span></div>
       <div class="preview-white">
@@ -258,21 +254,39 @@
   .search-box{display:flex; gap:4px; align-items:center; border:1px solid #e5e7eb; border-radius:6px; padding:0 4px; background:white; height:26px; font-size:10px;}
   .search-box input{border:none; outline:none; font-size:9px; width:100%;}
   .field-grid{display:grid; grid-template-columns:1fr 1fr; gap:3px;}
-  .field-row.small{height:42px; min-height:42px; border:1px solid #f1f5f9; border-left:3px solid #111827; background:white; border-radius:6px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px; padding:2px 1px;}
-  .f-icon{font-size:13px;} .f-label-down{font-size:6px; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; max-width:100%;}
+
+  /* 1. LEFT - ALL SAME SIZE - FIXED */
+  .field-row.small{
+    height:38px !important; min-height:38px !important; max-height:38px !important;
+    border:1px solid #f1f5f9; border-left:3px solid #111827;
+    background:white; border-radius:6px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:1px !important; padding:2px 1px !important;
+  }
+  .f-icon{font-size:13px !important; line-height:1; width:16px; height:16px; display:flex; align-items:center; justify-content:center;}
+  .f-label-down{font-size:6.5px !important; font-weight:700; text-align:center; white-space:nowrap; overflow:hidden; max-width:100%; line-height:1;}
+
   .board-wrap{width:100%; background:white; border:1.5px solid #0ea5e9; border-radius:6px; height:52%; min-height:220px; overflow:hidden; display:flex; flex-direction:column; touch-action:none;}
   .board-scroll{flex:1; overflow:auto; touch-action:none; -webkit-overflow-scrolling:touch;}
   .board{position:relative; touch-action:none;}
   .dot{position:absolute; width:2px; height:2px; background:#cbd5e1; border-radius:50%; opacity:.5;}
-  /* 25% REDUCED BOX */
-  .mod.reduced{position:absolute; background:white; border:2px solid; border-radius:8px; display:flex; align-items:center; justify-content:space-between; padding:0 5px; font-size:8px; font-weight:700; box-shadow:0 1px 3px rgba(0,0,0,.12); touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab;}
+
+  /* 2. MIDDLE X - REDUCED SIZE - FIXED */
+  .mod.reduced{position:absolute; background:white; border:2px solid; border-radius:8px; display:flex; align-items:center; justify-content:space-between; padding:0 4px; font-size:7px; font-weight:700; box-shadow:0 1px 3px rgba(0,0,0,.12); touch-action:none; user-select:none; -webkit-user-select:none; cursor:grab;}
   .mod.reduced:active{cursor:grabbing; z-index:20; transform:scale(1.02);}
-  .mod-label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:80%;}
-  .x{border:none; background:#f1f5f9; width:14px; height:14px; border-radius:3px; font-size:8px; flex-shrink:0;}
+  .mod-label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:78%; font-size:7px;}
+  .x{
+    border:none; background:#f1f5f9; 
+    width:12px !important; height:12px !important; min-width:12px !important; min-height:12px !important;
+    border-radius:2px; font-size:7px !important; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; padding:0;
+  }
+
   .creating-info{padding:4px 6px; display:flex; justify-content:space-between; font-size:8px; flex-shrink:0;}
   .preview-wrap.linked.onebyone{flex:1; overflow:auto; background:white; border:1.5px solid #0ea5e9; border-radius:6px; padding:4px;}
   .preview-head{font-size:8px; font-weight:700; margin-bottom:4px; display:flex; justify-content:space-between;}
-  .preview-white{display:flex; flex-direction:column; gap:6px;} /* one by one */
+  .preview-white{display:flex; flex-direction:column; gap:6px;}
   .p-preview-item{display:flex; flex-direction:column; gap:2px; background:#f8fafc; border-radius:4px; padding:4px; border:1px solid #e2e8f0; border-left:3px solid #0ea5e9;}
   .p-l{font-size:9px; font-weight:700;} .p-input{height:24px; font-size:9px; border:1px dashed #cbd5e1; border-radius:4px; padding:0 6px;}
   .p-formula{font-size:8px; padding:6px; border-radius:4px; font-weight:700; text-align:center; background:#e0f2fe;}
@@ -281,12 +295,22 @@
   .edit-in{height:22px; border:1px solid #e2e8f0; border-radius:4px; padding:0 6px; font-size:9px;}
   .formula-builder{border:1px solid #bbf7d0; border-radius:6px; padding:4px; display:flex; flex-direction:column; gap:4px;}
   .fb-head{font-size:10px; font-weight:700;} .fb-ta{width:100%; border:1px solid #bbf7d0; border-radius:4px; padding:4px; font-size:9px; resize:none; box-sizing:border-box;}
-  .fb-ops{display:grid; grid-template-columns:repeat(4,1fr); gap:3px;} .fb-ops button{height:28px; border:1px solid #e5e7eb; background:white; border-radius:6px; font-weight:700;}
-  .fb-sec{display:flex; flex-direction:column; gap:3px;} .fb-field{width:100%; min-height:26px; border:1px solid #e5e7eb; border-radius:12px; font-size:8px; background:white; padding:4px 6px; text-align:left;}
+
+  /* 3. RIGHT () + * - REDUCED SIZE - FIXED */
+  .fb-ops{display:grid; grid-template-columns:repeat(4,1fr); gap:4px;}
+  .fb-ops button{
+    height:24px !important; min-height:24px !important;
+    border:1px solid #e5e7eb; background:white; border-radius:5px;
+    font-weight:700; font-size:11px !important;
+    display:flex; align-items:center; justify-content:center; padding:0;
+  }
+  .fb-sec{display:flex; flex-direction:column; gap:3px;} 
+  .fb-field{width:100%; min-height:26px; border:1px solid #e5e7eb; border-radius:12px; font-size:8px; background:white; padding:4px 6px; text-align:left;}
   .savef{height:28px; border:none; border-radius:6px; color:white; font-weight:700; font-size:9px;}
   @media (max-width:480px){
     .layout{grid-template-columns: 20% 44% 36%;}
-    .mod.reduced{font-size:7px; border-radius:6px;}
-    .field-row.small{height:36px;}
+    .mod.reduced{font-size:6px; border-radius:6px;}
+    .field-row.small{height:34px !important; min-height:34px !important;}
+    .fb-ops button{height:22px !important; font-size:10px !important;}
   }
 </style>

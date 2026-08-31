@@ -133,7 +133,7 @@
     <a href="/" class="b active">🏠<span>Home</span></a>
     <a href="/chat" class="b">💬<span>Chat</span></a>
     <a href="/report" class="b">📊<span>Report</span></a>
-    <a href="/profile" class="b">👤<span>Me</span></a>
+    <a href="/settings" class="b">👤<span>Me</span></a>
   </div>
 </div>
 

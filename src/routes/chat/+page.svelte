@@ -374,7 +374,7 @@
 		bottomTab=tab;
 		if(tab==='dashboard' && browser) window.location.href='/dashboard';
 		if(tab==='report' && browser) window.location.href='/reports';
-		if(tab==='user' && browser) window.location.href='/profile';
+		if(tab==='user' && browser) window.location.href='/settings';
 	}
 </script>
 

@@ -267,7 +267,7 @@
     if(tab==='dashboard' && browser) window.location.href='/';
     if(tab==='chat' && browser) window.location.href='/chat';
     if(tab==='report' && browser) window.location.href='/report';
-    if(tab==='user' && browser) window.location.href='/profile';
+    if(tab==='user' && browser) window.location.href='/settings';
   }
 </script>
 

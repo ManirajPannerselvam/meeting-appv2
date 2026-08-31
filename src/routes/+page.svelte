@@ -166,7 +166,7 @@
     if(tab === 'chat') window.location.href = '/chat';
     if(tab === 'dashboard') window.location.href = '/dashboard';
     if(tab === 'report') window.location.href = '/reports';
-    if(tab === 'user') window.location.href = '/profile';
+    if(tab === 'user') window.location.href = '/settings';
   }
 </script>
 
