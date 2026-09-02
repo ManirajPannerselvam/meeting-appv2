@@ -70,14 +70,16 @@
 
   async function measureResponse(){
     if(!browser) return;
+    // Don't ping if tab is hidden - save requests
+    if(document.hidden) return;
     const t0 = performance.now();
     try {
-      await fetch('/api/ping', { method: 'HEAD', cache: 'no-store' }).catch(()=>fetch('/', { method:'HEAD', cache:'no-store' }));
+      // Direct '/' ping only - /api/ping removed to stop 50K
+      await fetch('/', { method:'HEAD', cache:'no-store' });
       responseTime = Math.round(performance.now() - t0);
     } catch { responseTime = null; }
   }
 
-  // THEME: full app theme apply
   function applyThemeFromStorage(){
     if(!browser) return;
     let saved = 'whatsapp';
@@ -109,11 +111,9 @@
   let interval: any;
   onMount(() => {
     if(!browser) return;
-    // theme first - instant
     applyThemeFromStorage();
     loadThemeFromSettings();
 
-    // listen system change
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{
       const saved = localStorage.getItem('ems_theme');
       if(saved?.toLowerCase()==='system') applyThemeFromStorage();
@@ -131,8 +131,11 @@
     }
     window.addEventListener('online', ()=> online = true);
     window.addEventListener('offline', ()=> online = false);
+
     measureResponse();
-    interval = setInterval(measureResponse, 10000);
+    // FIXED: 10 sec -> 60 sec ku maathitten, 50K stop agum
+    interval = setInterval(measureResponse, 60000);
+
     window.addEventListener('touchstart', onTouchStart, { passive: true } as any);
     window.addEventListener('touchend', onTouchEnd, { passive: true } as any);
   });
@@ -174,8 +177,6 @@
 .dot{ width:6px; height:6px; border-radius:50%; background:#3a4a54; opacity:0.5; }
 .dot.active{ background:#00a884; opacity:1; width:18px; border-radius:3px; }
   @media(min-width:769px){.module-dots{ display:none; } }
-
-  /* GLOBAL THEME VARIABLES - full app */
   :global(:root){ --bg:#111b21; --card:#202c33; --text:#e9edef; --border:#2a3942; --accent:#00a884; }
   :global([data-theme="light"]){ --bg:#ffffff; --card:#ffffff; --text:#0f172a; --border:#e2e8f0; --accent:#2563eb; }
   :global([data-theme="dark"]){ --bg:#0f172a; --card:#1e293b; --text:#e2e8f0; --border:#334155; --accent:#3b82f6; }
