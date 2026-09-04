@@ -1,36 +1,24 @@
 /**
- * ============================================================
  * Temple Operations Reporting System
- * File        : src/lib/services/auth.service.ts
- * ============================================================
+ * File: src/lib/services/auth.service.ts - FIXED
  */
 
 import { supabase } from "$lib/supabase/client";
 import { authStore } from "$lib/stores/auth";
 import { toast } from "$lib/stores/toast";
-
 import type { Session, User } from "@supabase/supabase-js";
 import type { UserRecord } from "$lib/types/database";
 
-type AuthUser = User & Partial<UserRecord>; // <-- helper type
+type AuthUser = User & Partial<UserRecord>;
 
 class AuthService {
-	private authListener: {
-		subscription: {
-			unsubscribe(): void;
-		};
-	} | null = null;
+	private authListener: { subscription: { unsubscribe(): void; }; } | null = null;
 
-	private setLoading(value: boolean): void {
-		authStore.setLoading(value);
-	}
+	private setLoading(value: boolean): void { authStore.setLoading(value); }
 
-	private handleError(
-		error: unknown,
-		message = "Authentication error"
-	): never {
+	private handleError(error: unknown, message = "Authentication error"): never {
 		console.error(message, error);
-		const err = error instanceof Error ? error : new Error(String(error));
+		const err = error instanceof Error? error : new Error(String(error));
 		toast.error(err.message);
 		throw err;
 	}
@@ -46,9 +34,7 @@ class AuthService {
 			toast.success("OTP sent to your email.");
 		} catch (error) {
 			this.handleError(error, "Failed to send OTP");
-		} finally {
-			this.setLoading(false);
-		}
+		} finally { this.setLoading(false); }
 	}
 
 	async verifyOtp(email: string, token: string): Promise<Session | null> {
@@ -63,39 +49,45 @@ class AuthService {
 			return data.session;
 		} catch (error) {
 			this.handleError(error, "Invalid OTP");
-		} finally {
-			this.setLoading(false);
-		}
+		} finally { this.setLoading(false); }
 	}
 
+	// FIXED: profiles table with id column
 	private async loadUserProfile(authUser: User): Promise<void> {
 		try {
 			const { data: profile, error } = await supabase
-				.from("users")
+				.from("profiles")
 				.select("*")
-				.eq("user_id", authUser.id)
+				.eq("id", authUser.id)
 				.maybeSingle();
 
-			if (error) throw error;
+			if (error) {
+				console.warn("Profile fetch error:", error.message);
+				authStore.setUser({...authUser } as AuthUser);
+				return;
+			}
 
 			if (profile) {
-				const userWithProfile: AuthUser = { // <-- typed
-					...authUser,
-					...profile
-				};
+				const userWithProfile: AuthUser = {...authUser,...profile };
 				authStore.setUser(userWithProfile);
-
-				if (!authUser.user_metadata?.role && profile.role) {
+				if (!authUser.user_metadata?.role && (profile as any).role) {
 					await supabase.auth.updateUser({
-						data: { role: profile.role, full_name: profile.full_name }
+						data: { role: (profile as any).role, full_name: (profile as any).full_name || (profile as any).name }
 					});
 				}
 			} else {
-				authStore.setUser({ ...authUser } as AuthUser); // <-- FIX 1
+				// Auto-create profile if not exists
+				await supabase.from("profiles").insert({
+					id: authUser.id,
+					email: authUser.email,
+					name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0],
+					avatar_url: authUser.user_metadata?.avatar_url || null
+				}).select().maybeSingle();
+				authStore.setUser({...authUser } as AuthUser);
 			}
-	} catch (error) {
+		} catch (error) {
 			console.error("Failed to load profile", error);
-			authStore.setUser({ ...authUser } as AuthUser); // <-- FIX 2
+			authStore.setUser({...authUser } as AuthUser);
 		}
 	}
 
@@ -104,11 +96,8 @@ class AuthService {
 		try {
 			const { data: { user } } = await supabase.auth.getUser();
 			if (user) await this.loadUserProfile(user);
-	} catch (error) {
-			this.handleError(error, "Failed to refresh user");
-		} finally {
-			this.setLoading(false);
-		}
+		} catch (error) { this.handleError(error, "Failed to refresh user"); }
+		finally { this.setLoading(false); }
 	}
 
 	async restoreSession(): Promise<Session | null> {
@@ -120,11 +109,8 @@ class AuthService {
 			if (session?.user) await this.loadUserProfile(session.user);
 			this.initAuthListener();
 			return session;
-	} catch (error) {
-			this.handleError(error, "Failed to restore session");
-	} finally {
-			this.setLoading(false);
-		}
+		} catch (error) { this.handleError(error, "Failed to restore session"); }
+		finally { this.setLoading(false); }
 	}
 
 	async getCurrentUser(): Promise<AuthUser | null> {
@@ -138,16 +124,13 @@ class AuthService {
 		if (this.authListener) return;
 		const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
 			authStore.setSession(session);
-			if (session?.user) {
-				await this.loadUserProfile(session.user);
-			} else {
-				authStore.setUser(null);
-			}
+			if (session?.user) { await this.loadUserProfile(session.user); }
+			else { authStore.setUser(null); }
 			switch (event) {
 				case "SIGNED_IN": toast.success("Welcome back!"); break;
 				case "SIGNED_OUT": toast.info("Logged out."); break;
 			}
-	});
+		});
 		this.authListener = data;
 	}
 
@@ -164,16 +147,13 @@ class AuthService {
 			authStore.reset();
 			this.destroyAuthListener();
 			toast.success("Logged out successfully.");
-	} catch (error) {
-			this.handleError(error, "Logout failed");
-		} finally {
-			this.setLoading(false);
-		}
+		} catch (error) { this.handleError(error, "Logout failed"); }
+		finally { this.setLoading(false); }
 	}
 
 	async isAuthenticated(): Promise<boolean> {
 		const { data: { session } } = await supabase.auth.getSession();
-		return !!session;
+		return!!session;
 	}
 
 	async updatePassword(newPassword: string): Promise<void> {

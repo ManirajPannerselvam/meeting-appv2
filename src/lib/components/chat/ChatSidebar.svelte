@@ -61,23 +61,30 @@
     document.addEventListener('mousedown', handle, true);
     return { destroy() { document.removeEventListener('mousedown', handle, true); } };
   }
+
+  // FIXED - NOW SENDS {detail: c} TO MATCH PAGE
   function handleContactClick(c:any, e: MouseEvent){
-    e.stopPropagation(); if(showDeleteMenu){ showDeleteMenu=null; return; }
-    if(c.status==='pending') return; if(c.status==='invite_received') return; onSelectContact(c);
+    e.stopPropagation();
+    if(showDeleteMenu){ showDeleteMenu=null; return; }
+    if(c.status==='pending') return;
+    if(c.status==='invite_received') return;
+    onSelectContact({detail: c});
   }
   function handleGroupClick(g:any, e: MouseEvent){
-    e.stopPropagation(); if(showDeleteMenu){ showDeleteMenu=null; return; } onSelectGroup(g);
+    e.stopPropagation();
+    if(showDeleteMenu){ showDeleteMenu=null; return; }
+    onSelectGroup({detail: g});
   }
   function onTouchStart(c:any){
     longPressTimer = setTimeout(()=>{ deleteTarget=c; showDeleteMenu=c.id; if(navigator.vibrate) navigator.vibrate(50); },600);
   }
   function onTouchEnd(){ clearTimeout(longPressTimer); }
   function onContextMenu(e: MouseEvent, c:any){ e.preventDefault(); deleteTarget=c; showDeleteMenu=c.id; }
-  function confirmDelete(){ if(deleteTarget){ onDeleteContact(deleteTarget); showDeleteMenu=null; } }
+  function confirmDelete(){ if(deleteTarget){ onDeleteContact({detail: deleteTarget}); showDeleteMenu=null; } }
   function triggerAvatarUpload(c:any, e: MouseEvent){
     e.stopPropagation(); if(!c.isSelf) return;
     const input=document.createElement('input'); input.type='file'; input.accept='image/*';
-    input.onchange=async(ev:any)=>{ const file=(ev.target as HTMLInputElement).files?.[0]; if(file) onUpdateAvatar({contact:c,file}); };
+    input.onchange=async(ev:any)=>{ const file=(ev.target as HTMLInputElement).files?.[0]; if(file) onUpdateAvatar({detail:{contact:c,file}}); };
     input.click();
   }
   function getLastMessage(c:any){
@@ -89,7 +96,6 @@
 </script>
 
 <div class="sidebar">
-  <!-- FIXED TOP - NOT MOVABLE -->
   <div class="sidebar-top-fixed">
     <div class="sidebar-header">
       <h1>Chat</h1>
@@ -120,11 +126,10 @@
     </div>
   </div>
 
-  <!-- ONLY CONTACTS MOVING TOP TO BOTTOM -->
   <div class="chat-list">
     {#each displayGroups as g (g.id)}
       <div class="chat-row" class:selected={selectedGroup?.id===g.id} role="button" tabindex="0"
-        onclick={(e)=>handleGroupClick(g,e)} ontouchstart={()=>onTouchStart(g)} ontouchend={onTouchEnd} oncontextmenu={(e)=>onContextMenu(e,g)} onkeydown={(e)=>{ if(e.key==='Enter') onSelectGroup(g)}}>
+        onclick={(e)=>handleGroupClick(g,e)} ontouchstart={()=>onTouchStart(g)} ontouchend={onTouchEnd} oncontextmenu={(e)=>onContextMenu(e,g)} onkeydown={(e)=>{ if(e.key==='Enter') handleGroupClick(g,e)}}>
         <div class="avatar group"><span>👥</span></div>
         <div class="info">
           <div class="top"><span class="name">{g.name}</span><span class="time">{g.last_time||''}</span></div>
@@ -172,18 +177,8 @@
 </div>
 
 <style>
-.sidebar{
-  width:100%; max-width:430px;
-  height:100%; max-height:100%;
-  background:#111b21;
-  display:flex; flex-direction:column;
-  overflow:hidden;
-}
-.sidebar-top-fixed{
-  flex-shrink:0;
-  background:#111b21;
-  z-index:5;
-}
+.sidebar{width:100%; max-width:430px;height:100%; max-height:100%;background:#111b21;display:flex; flex-direction:column;overflow:hidden;}
+.sidebar-top-fixed{flex-shrink:0;background:#111b21;z-index:5;}
 .sidebar-header{height:59px;background:#202c33;display:flex;justify-content:space-between;align-items:center;padding:0 16px;color:#fff;}
 .sidebar-header h1{margin:0;font-size:19px;font-weight:700;}
 .header-actions{display:flex;gap:4px;align-items:center;}
@@ -202,41 +197,18 @@
 .filters::-webkit-scrollbar{display:none;}
 .filters button{background:#182229;color:#8696a0;border:none;border-radius:18px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0;}
 .filters button.active{background:#0a332c;color:#53bdeb;font-weight:600;}
-
-/* CONTACTS ONLY SCROLL TOP TO BOTTOM */
-.chat-list{
-  flex:1; min-height:0;
-  overflow-y:auto; overflow-x:hidden;
-  -webkit-overflow-scrolling:touch;
-  background:#111b21;
-}
-
-/* WHATSAPP STYLE ROW */
-.chat-row{
-  display:flex; align-items:center;
-  padding:0 12px;
-  cursor:pointer;
-  position:relative;
-  min-height:72px;
-}
+.chat-list{flex:1; min-height:0;overflow-y:auto; overflow-x:hidden;-webkit-overflow-scrolling:touch;background:#111b21;}
+.chat-row{display:flex; align-items:center;padding:0 12px;cursor:pointer;position:relative;min-height:72px;}
 .chat-row:hover{background:#202c33;}
 .chat-row.selected{background:#2a3942;}
 .chat-row.disabled{opacity:0.5;cursor:default;}
-.avatar{
-  width:49px; height:49px; border-radius:50%;
-  background:#2a3942; color:#fff;
-  display:flex; align-items:center; justify-content:center;
-  margin:8px 12px 8px 0;
-  font-weight:600; flex-shrink:0; font-size:16px;
-  overflow:hidden;
-}
+.avatar{width:49px; height:49px; border-radius:50%;background:#2a3942; color:#fff;display:flex; align-items:center; justify-content:center;margin:8px 12px 8px 0;font-weight:600; flex-shrink:0; font-size:16px;overflow:hidden;}
 .avatar img{width:100%;height:100%;object-fit:cover;}
 .avatar.group{background:#00a884;}
 .avatar.self-avatar{background:#00a884;cursor:pointer;}
 .info{flex:1; min-width:0; padding:12px 0; border-top:1px solid #222d34;}
 .top{display:flex; justify-content:space-between; align-items:center; gap:8px;}
 .name{color:#e9edef;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;font-weight:400;}
-.chat-row.selected.name{font-weight:500;}
 .time{color:#8696a0;font-size:12px;flex-shrink:0;}
 .bottom{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:4px;}
 .sub{color:#8696a0;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}

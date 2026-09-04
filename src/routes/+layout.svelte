@@ -68,18 +68,6 @@
     }
   }
 
-  async function measureResponse(){
-    if(!browser) return;
-    // Don't ping if tab is hidden - save requests
-    if(document.hidden) return;
-    const t0 = performance.now();
-    try {
-      // Direct '/' ping only - /api/ping removed to stop 50K
-      await fetch('/', { method:'HEAD', cache:'no-store' });
-      responseTime = Math.round(performance.now() - t0);
-    } catch { responseTime = null; }
-  }
-
   function applyThemeFromStorage(){
     if(!browser) return;
     let saved = 'whatsapp';
@@ -108,7 +96,6 @@
     }catch{}
   }
 
-  let interval: any;
   onMount(() => {
     if(!browser) return;
     applyThemeFromStorage();
@@ -132,17 +119,12 @@
     window.addEventListener('online', ()=> online = true);
     window.addEventListener('offline', ()=> online = false);
 
-    measureResponse();
-    // FIXED: 10 sec -> 60 sec ku maathitten, 50K stop agum
-    interval = setInterval(measureResponse, 60000);
-
     window.addEventListener('touchstart', onTouchStart, { passive: true } as any);
     window.addEventListener('touchend', onTouchEnd, { passive: true } as any);
   });
 
   onDestroy(()=>{
     if(!browser) return;
-    clearInterval(interval);
     window.removeEventListener('touchstart', onTouchStart);
     window.removeEventListener('touchend', onTouchEnd);
   });
@@ -153,7 +135,6 @@
   <span>{online? '● Online' : '○ Offline'}</span>
   {#if rtt!==null}<span>RTT {rtt}ms</span>{/if}
   {#if downlink}<span>{downlink}Mb/s</span>{/if}
-  {#if responseTime!==null}<span>Resp {responseTime}ms</span>{/if}
   <button class="net-close" on:click={()=>showNet=false}>✕</button>
 </div>
 {/if}

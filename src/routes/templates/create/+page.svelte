@@ -45,13 +45,14 @@
   let cols=38; let rows=22; let gap=14;
   type Placed = { id:string, defId:string, label:string, field_name:string, type:FieldType, metric?:string, options:string[], formula:string, x:number, y:number, w:number, h:number, color:string, border:string, required?:boolean };
   let placed: Placed[] = [
-    { id:uuid(), defId:"", label:"Daily Tracker", field_name:"daily_tracker", type:"text", options:[], formula:"", x:1, y:0, w:3.2, h:1.8, color:"#3b82f6", border:"#3b82f6" },
-    { id:uuid(), defId:"", label:"Enter input", field_name:"enter_input", type:"number", metric:"input", options:[], formula:"", x:1, y:3, w:3.2, h:1.8, color:"#111827", border:"#111827" },
-    { id:uuid(), defId:"", label:"Enter Output", field_name:"enter_output", type:"number", metric:"output", options:[], formula:"", x:1, y:6, w:3.2, h:1.8, color:"#111827", border:"#111827" },
-    { id:uuid(), defId:"", label:"Formula", field_name:"formula", type:"formula", options:[], formula:"{enter_output} ÷ {enter_input} × 100", x:1, y:9, w:3.2, h:1.8, color:"#16a34a", border:"#f59e0b" },
-    { id:uuid(), defId:"", label:"number", field_name:"number_a4v", type:"number", options:[], formula:"", x:7, y:0, w:3.2, h:1.8, color:"#111827", border:"#111827" },
+    { id:uuid(), defId:"", label:"Daily Tracker", field_name:"daily_tracker", type:"text", options:[], formula:"", x:1, y:0, w:4.5, h:2.2, color:"#3b82f6", border:"#3b82f6" },
+    { id:uuid(), defId:"", label:"Enter input", field_name:"enter_input", type:"number", metric:"input", options:[], formula:"", x:1, y:3, w:4.5, h:2.2, color:"#111827", border:"#111827" },
+    { id:uuid(), defId:"", label:"Enter Output", field_name:"enter_output", type:"number", metric:"output", options:[], formula:"", x:1, y:6, w:4.5, h:2.2, color:"#111827", border:"#111827" },
+    { id:uuid(), defId:"", label:"Formula", field_name:"formula", type:"formula", options:[], formula:"{enter_output} ÷ {enter_input} × 100", x:1, y:9, w:4.5, h:2.2, color:"#16a34a", border:"#f59e0b" },
+    { id:uuid(), defId:"", label:"number", field_name:"number_a4v", type:"number", options:[], formula:"", x:7, y:0, w:4.5, h:2.2, color:"#111827", border:"#111827" },
   ];
   let drag:Placed|null=null; let dragOff={x:0,y:0}; let selectedId=placed[3].id;
+  let isDragging=false; let startPt={x:0,y:0};
   $: selected = placed.find(p=>p.id===selectedId);
   $: numberFields = placed.filter(p=>p.metric || p.type==='number' || p.type==='dropdown');
   let editFormula = "{enter_output} ÷ {enter_input} × 100";
@@ -65,7 +66,7 @@
   function loadSaved(){ try{ let t=JSON.parse(localStorage.getItem("templates")||"[]"); savedTemplates = Array.isArray(t)? t.slice(0,100):[]; savedCount=t.length; }catch{ savedCount=0; } }
 
   function quickAdd(def:FieldDef){
-    const w=3.2; const h=1.8;
+    const w=4.5; const h=2.2; // FIXED: was 3.2 -> now wider to hold X inside
     const x=(placed.length*5)%(cols-w); const y=(placed.length*3)%(rows-h);
     placed=[...placed, { id:uuid(), defId:def.id, label:sanitizeText(def.label), field_name:sanitizeFieldName(def.label)+"_"+uuid().slice(0,3), type:def.type, metric:def.metric, options:[...(def.options||[])].map(s=>sanitizeText(s)), formula:def.type==='formula'? "{enter_output} ÷ {enter_input} × 100" : "", x, y, w, h, color:def.color, border:def.border, required:def.required }];
     selectedId=placed[placed.length-1].id; if(placed[placed.length-1].type==='formula') editFormula=placed[placed.length-1].formula; isDirty=true;
@@ -80,27 +81,26 @@
   }
   function startDrag(e: PointerEvent | MouseEvent | TouchEvent, p:Placed){
     if((e.target as HTMLElement).closest('.x')) return;
-    e.preventDefault(); drag=p; selectedId=p.id; editFormula=p.formula||"";
-    const {b,cx,cy}=getPos(e); dragOff.x=cx-b.left-p.x*gap; dragOff.y=cy-b.top-p.y*gap;
-    if((e as PointerEvent).pointerId!==undefined){ (e.target as Element).setPointerCapture((e as PointerEvent).pointerId); }
+    const {b,cx,cy}=getPos(e);
+    startPt={x:cx,y:cy}; dragOff.x=cx-b.left-p.x*gap; dragOff.y=cy-b.top-p.y*gap;
+    drag=p; isDragging=false; selectedId=p.id; editFormula=p.formula||"";
     window.addEventListener("pointermove", onPointerMove as any, {passive:false});
     window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("mousemove", onMove as any);
-    window.addEventListener("mouseup", onUp);
     window.addEventListener("touchmove", onTouchMove as any, {passive:false});
     window.addEventListener("touchend", onTouchEnd);
   }
   function onPointerMove(e: PointerEvent){
-    if(!drag) return; e.preventDefault();
+    if(!drag) return;
+    const dx=Math.abs(e.clientX-startPt.x), dy=Math.abs(e.clientY-startPt.y);
+    if(!isDragging && dx<6 && dy<6) return; // allow scroll on small move
+    isDragging=true; e.preventDefault();
     const {b,cx,cy}=getPos(e); let nx=Math.round((cx-b.left-dragOff.x)/gap); let ny=Math.round((cy-b.top-dragOff.y)/gap);
     nx=Math.max(0,Math.min(cols-drag.w,nx)); ny=Math.max(0,Math.min(rows-drag.h,ny));
     placed=placed.map(pl=> pl.id===drag!.id? {...pl, x:nx, y:ny}:pl); isDirty=true;
   }
-  function onPointerUp(e: PointerEvent){ drag=null; window.removeEventListener("pointermove", onPointerMove as any); window.removeEventListener("pointerup", onPointerUp); onUp(); onTouchEnd(); }
-  function onMove(e:MouseEvent){ if(!drag) return; const b=boardEl.getBoundingClientRect(); let nx=Math.round((e.clientX-b.left-dragOff.x)/gap); let ny=Math.round((e.clientY-b.top-dragOff.y)/gap); nx=Math.max(0,Math.min(cols-drag.w,nx)); ny=Math.max(0,Math.min(rows-drag.h,ny)); placed=placed.map(pl=> pl.id===drag!.id? {...pl, x:nx, y:ny}:pl); isDirty=true; }
-  function onUp(){ drag=null; window.removeEventListener("mousemove",onMove as any); window.removeEventListener("mouseup",onUp); }
-  function onTouchMove(ev:TouchEvent){ if(!drag) return; ev.preventDefault(); const t=ev.touches[0]; const b=boardEl.getBoundingClientRect(); let nx=Math.round((t.clientX-b.left-dragOff.x)/gap); let ny=Math.round((t.clientY-b.top-dragOff.y)/gap); nx=Math.max(0,Math.min(cols-drag.w,nx)); ny=Math.max(0,Math.min(rows-drag.h,ny)); placed=placed.map(pl=> pl.id===drag!.id? {...pl, x:nx, y:ny}:pl); isDirty=true; }
-  function onTouchEnd(){ drag=null; window.removeEventListener("touchmove", onTouchMove as any); window.removeEventListener("touchend", onTouchEnd); window.removeEventListener("pointermove", onPointerMove as any); }
+  function onPointerUp(e: PointerEvent){ drag=null; isDragging=false; window.removeEventListener("pointermove", onPointerMove as any); window.removeEventListener("pointerup", onPointerUp); window.removeEventListener("touchmove", onTouchMove as any); window.removeEventListener("touchend", onTouchEnd); }
+  function onTouchMove(ev:TouchEvent){ if(!drag) return; const t=ev.touches[0]; const dx=Math.abs(t.clientX-startPt.x), dy=Math.abs(t.clientY-startPt.y); if(!isDragging && dx<8 && dy<8) return; isDragging=true; ev.preventDefault(); const b=boardEl.getBoundingClientRect(); let nx=Math.round((t.clientX-b.left-dragOff.x)/gap); let ny=Math.round((t.clientY-b.top-dragOff.y)/gap); nx=Math.max(0,Math.min(cols-drag.w,nx)); ny=Math.max(0,Math.min(rows-drag.h,ny)); placed=placed.map(pl=> pl.id===drag!.id? {...pl, x:nx, y:ny}:pl); isDirty=true; }
+  function onTouchEnd(){ drag=null; isDragging=false; window.removeEventListener("touchmove", onTouchMove as any); window.removeEventListener("touchend", onTouchEnd); window.removeEventListener("pointermove", onPointerMove as any); }
 
   function insertOp(t:string){ if(!/^[\(\)\+\-×÷%0-9\s]+$/.test(t)) return; editFormula+= (editFormula?" ":"") + t + " "; saveFormula(); }
   function insertField(fn:string){ let safe=sanitizeFieldName(fn); editFormula+= `{${safe}} `; if(selected){ selected.formula=editFormula.slice(0,200); placed=[...placed]; } isDirty=true; }
@@ -143,7 +143,6 @@
       <button class="save" style="background:{selectedTheme.color}" on:click={saveTemplate}>Save to DB</button>
     </div>
   </div>
-
   <div class="top-line line2">
     <div class="t-inputs-2">
       <div class="t-field"><label>Template</label><input bind:value={templateName} maxlength="60" placeholder="Daily Tracker" /></div>
@@ -182,15 +181,10 @@
             <div class="mod reduced" class:active={selectedId===p.id}
               style="left:{p.x*gap+8}px; top:{p.y*gap+8}px; width:{p.w*gap}px; height:{p.h*gap}px; border-color:{p.border}; color:{p.color};"
               on:pointerdown={(e)=>startDrag(e,p)}
-              on:mousedown={(e)=>startDrag(e,p)}
               on:touchstart|nonpassive={(e)=>startDrag(e,p)}
-              on:click={()=>{selectedId=p.id; editFormula=p.formula;}}>
+              on:click={()=>{ if(!isDragging){selectedId=p.id; editFormula=p.formula;}}}>
               <span class="mod-label">{p.label}</span>
-              <button class="x" 
-                on:pointerdown|stopPropagation
-                on:mousedown|stopPropagation
-                on:touchstart|stopPropagation
-                on:click|stopPropagation={()=>deleteField(p.id)}>✕</button>
+              <button class="x" on:pointerdown|stopPropagation on:touchstart|stopPropagation on:click|stopPropagation={()=>deleteField(p.id)}>✕</button>
             </div>
           {/each}
         </div>
@@ -242,8 +236,6 @@
 
 <style>
   :global(body){margin:0; font-family:system-ui; background:#f8fafc;}
-
-  /* TOP 2 LINES */
   .top-fixed.two-line{position:fixed; top:0; left:0; right:0; z-index:1000; background:white; border-bottom:1px solid #e5e7eb; display:flex; flex-direction:column; gap:0;}
   .top-line{display:flex; justify-content:space-between; align-items:center; padding:4px 6px;}
   .line1{background:#f8fafc; border-bottom:1px solid #f1f5f9; height:32px;}
@@ -259,7 +251,6 @@
   .t-field label{font-size:6px; font-weight:700; color:#64748b; text-transform:uppercase;}
   .t-field input, .t-field select{height:22px; border:1px solid #e5e7eb; border-radius:4px; padding:0 5px; font-size:8px; width:100%; box-sizing:border-box;}
   .toast{position:fixed; top:70px; right:8px; background:#111827; color:white; padding:6px 10px; border-radius:6px; font-size:10px; z-index:2000;}
-
   .layout.two-top{display:grid; grid-template-columns: 14% 50% 36%; gap:2px; margin-top:72px; height:calc(100vh - 72px); overflow:hidden;}
   .left{overflow-y:auto; background:white; border-right:1px solid #e5e7eb; padding:2px; display:flex; flex-direction:column; gap:2px;}
   .center{overflow-y:auto; background:#fcfcfc; padding:2px; display:flex; flex-direction:column; gap:3px;}
@@ -270,14 +261,29 @@
   .field-row.vertical{height:34px !important; min-height:34px !important; width:100% !important; border:1px solid #f1f5f9; border-left-width:3px !important; background:white; border-radius:5px; display:flex; flex-direction:row; align-items:center; gap:6px; padding:0 6px !important;}
   .field-row.vertical .f-icon{font-size:12px !important; width:18px; height:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
   .field-row.vertical .f-label-down{font-size:7px !important; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-  .board-wrap{width:100%; background:white; border:1.5px solid #0ea5e9; border-radius:5px; height:52%; min-height:200px; overflow:hidden; display:flex; flex-direction:column; touch-action:none;}
-  .board-scroll{flex:1; overflow:auto; touch-action:none;}
-  .board{position:relative; touch-action:none;}
+
+  /* === FIXED AREAS === */
+  .board-wrap{width:100%; background:white; border:1.5px solid #0ea5e9; border-radius:5px; height:52%; min-height:200px; overflow:hidden; display:flex; flex-direction:column; touch-action:auto; }
+  .board-scroll{flex:1; overflow:auto; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;}
+  .board{position:relative; touch-action:pan-x pan-y;}
   .dot{position:absolute; width:1.5px; height:1.5px; background:#cbd5e1; border-radius:50%; opacity:.4;}
-  .mod.reduced{position:absolute; background:white; border:1.5px solid; border-radius:6px; display:flex; align-items:center; justify-content:space-between; padding:0 3px; font-weight:700; box-shadow:0 1px 2px rgba(0,0,0,.1); touch-action:none; user-select:none; cursor:grab; box-sizing:border-box;}
-  .mod.reduced.active{border-width:2px; z-index:10;}
-  .mod-label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:68%; font-size:6px !important;}
-  .x{border:none; background:#fee2e2; color:#991b1b; width:14px !important; height:14px !important; min-width:14px !important; border-radius:3px; font-size:7px !important; display:flex; align-items:center; justify-content:center; flex-shrink:0; cursor:pointer; z-index:5;}
+
+  .mod.reduced{
+    position:absolute; background:white; border:1.5px solid; border-radius:6px; 
+    display:flex; align-items:center; 
+    padding:0 18px 0 5px; /* FIX: space for X inside */
+    font-weight:700; box-shadow:0 1px 2px rgba(0,0,0,.1); 
+    touch-action:none; user-select:none; cursor:grab; box-sizing:border-box; overflow:hidden;
+    min-width:60px;
+  }
+  .mod.reduced.active{border-width:2.2px; z-index:10;}
+  .mod-label{overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; font-size:7px !important; line-height:1.1;}
+  .x{
+    position:absolute !important; right:2px !important; top:50% !important; transform:translateY(-50%);
+    width:16px !important; height:16px !important; border:none; background:#fee2e2; color:#dc2626; border-radius:4px; 
+    font-size:10px !important; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:20;
+  }
+
   .creating-info{padding:3px 5px; display:flex; justify-content:space-between; font-size:7px; flex-shrink:0;}
   .preview-wrap.linked.onebyone{flex:1; overflow:auto; background:white; border:1.5px solid #0ea5e9; border-radius:5px; padding:3px;}
   .preview-head{font-size:7px; font-weight:700; margin-bottom:3px;}
@@ -288,10 +294,10 @@
   .edit-box{background:white; border:1px solid #e5e7eb; border-radius:5px; padding:3px; display:flex; flex-direction:column; gap:2px;}
   .edit-head{display:flex; justify-content:space-between; font-size:8px;} .edit-box label{font-size:7px; font-weight:700;}
   .edit-in{height:20px; border:1px solid #e2e8f0; border-radius:3px; padding:0 4px; font-size:8px;}
-  .formula-builder{border:1px solid #bbf7d0; border-radius:5px; padding:3px; display:flex; flex-direction:column; gap:3px;}
+  .formula-builder{border:1px solid #bbf7d0; border-radius:5px; padding:3px; display:flex; flex-direction:column; gap:3px; position:static !important; touch-action:auto;}
   .fb-head{font-size:8px; font-weight:700;} .fb-ta{width:100%; border:1px solid #bbf7d0; border-radius:3px; padding:3px; font-size:8px; resize:none; box-sizing:border-box;}
-  .fb-ops.all-sym{display:grid; grid-template-columns:repeat(4,1fr); gap:3px; width:100%;}
-  .fb-ops.all-sym button{height:20px !important; min-height:20px !important; border:1px solid #d1d5db; background:white; border-radius:4px; font-weight:700; font-size:9px !important; display:flex; align-items:center; justify-content:center; padding:0 !important; line-height:1; cursor:pointer;}
+  .fb-ops.all-sym{display:grid; grid-template-columns:repeat(4,1fr); gap:6px; width:100%; position:static !important; touch-action:manipulation;}
+  .fb-ops.all-sym button{height:32px !important; border:1px solid #d1d5db; background:white; border-radius:8px; font-weight:700; font-size:12px !important; cursor:pointer; touch-action:manipulation;}
   .fb-sec{display:flex; flex-direction:column; gap:2px; font-size:7px;} .fb-field{width:100%; min-height:22px; border:1px solid #e5e7eb; border-radius:10px; font-size:7px; background:white; padding:3px 5px; text-align:left;}
   .savef{height:26px; border:none; border-radius:5px; color:white; font-weight:700; font-size:8px;}
   @media (max-width:480px){

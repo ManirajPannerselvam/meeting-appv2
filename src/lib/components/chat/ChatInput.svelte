@@ -5,18 +5,21 @@
         sending = false,
         uploadingFiles = [] as File[],
         onSendMessage,
-        onOpenTemplate
+        onOpenTemplate,
+        onSendLocation
     }: {
         sending?: boolean,
         uploadingFiles?: File[],
         onSendMessage?: (detail:{content:string, files:File[], voiceMessage?:boolean, duration?:number})=>void,
-        onOpenTemplate?: ()=>void
+        onOpenTemplate?: ()=>void,
+        onSendLocation?: (e:{detail:{latitude:number, longitude:number, url:string}})=>void
     } = $props();
 
     let text = $state("");
     let fileInput: HTMLInputElement | undefined = $state();
     let selectedFiles: File[] = $state([]);
     let showEmojiPicker = $state(false);
+    let sendingLoc = $state(false);
 
     const emojis = ["😀","😃","😄","😁","😆","😅","😂","🤣","😊","😇","🙂","🙃","😉","😌","😍","🥰","😘","😗","😙","😚","😋","😛","😝","😜","🤪","🤨","🧐","🤓","😎","🤩","🥳","😏","😒","😞","😔","😟","😕","🙁","☹️","😣","😖","😫","😩","🥺","😢","😭","😤","😠","😡","🤬","🤯","😳","🥵","🥶","😱","😨","😰","😥","😓","🤗","🤔","🤭","🤫","🤥","😶","😐","😑","😬","🙄","😯","😦","😧","😮","😲","🥱","😴","🤤","😪","😵","🤐","🤢","🤮","🤧","😷","🤒","🤕","❤️","🧡","💛","💚","💙","💜","🖤","🤍","🤎","💔","💕","💖","💗","💓","💞","💯","👍","👎","👏","🙌","🙏","🤝","👌","✌️","🤞","💪","🔥","⭐","✨","🎉","🎊","✅","❌","⚡","🚀","💡","📌","📋","📎","🎯","🏆"];
 
@@ -48,7 +51,9 @@
     function send() {
         const msg = text.trim();
         if ((!msg && selectedFiles.length === 0) || sending || isRecording) return;
-        onSendMessage?.({ content: msg, files: selectedFiles });
+        const payload = { content: msg, files: selectedFiles };
+        onSendMessage?.(payload as any);
+        onSendMessage?.({ detail: payload } as any);
         text = "";
         selectedFiles = [];
         if (fileInput) fileInput.value = "";
@@ -70,6 +75,28 @@
     }
     function removeFile(index: number) { selectedFiles = selectedFiles.filter((_, i) => i!== index); }
 
+    // NEW LOCATION - isolated
+    async function sendLocation(){
+        if(sending || isRecording || sendingLoc) return;
+        if(!navigator.geolocation){ alert("Geolocation not supported"); return; }
+        sendingLoc = true;
+        try{
+            const pos: any = await new Promise((res, rej)=> navigator.geolocation.getCurrentPosition(res, rej, {enableHighAccuracy:true, timeout:10000}));
+            const latitude = pos.coords.latitude;
+            const longitude = pos.coords.longitude;
+            const url = `https://maps.google.com/?q=${latitude},${longitude}`;
+            if(onSendLocation){
+                onSendLocation({detail:{latitude, longitude, url}});
+            } else {
+                const locPayload = { content: `📍 Location: ${url} __LOCATION_DATA__${JSON.stringify({latitude, longitude})}`, files: [] as File[] };
+                onSendMessage?.(locPayload as any);
+                onSendMessage?.({detail: locPayload} as any);
+            }
+        }catch(err:any){
+            alert("Location failed: " + (err.message || "permission denied"));
+        }finally{ sendingLoc = false; }
+    }
+
     async function startVoice() {
         if (sending) return;
         if (isRecording) { stopVoiceRecording(); return; }
@@ -87,7 +114,9 @@
                 if (audioBlob.size > 0) {
                     const extension = finalMimeType.includes("mp4")? "m4a" : "webm";
                     const audioFile = new File([audioBlob], `voice-message-${Date.now()}.${extension}`, { type: finalMimeType });
-                    onSendMessage?.({ content: "", files: [audioFile], voiceMessage: true, duration: recordingSeconds });
+                   const vPayload = { content: "", files: [audioFile], voiceMessage: true, duration: recordingSeconds };
+                   onSendMessage?.(vPayload as any);
+                   onSendMessage?.({ detail: vPayload } as any);
                 }
                 audioChunks = []; mediaRecorder = null;
             };
@@ -142,6 +171,8 @@
         <button type="button" class="icon-btn" title="Template" disabled={sending || isRecording} onclick={chooseTemplate}>📋</button>
         <button type="button" class:active={showEmojiPicker} class="icon-btn" title="Emoji" disabled={sending || isRecording} onclick={chooseEmoji}>😊</button>
         <button type="button" class="icon-btn" title="Attachment" disabled={sending || isRecording} onclick={chooseAttachment}>📎</button>
+        <!-- NEW LOCATION BUTTON - added here, no other change -->
+        <button type="button" class="icon-btn loc" title="Location" disabled={sending || isRecording || sendingLoc} onclick={sendLocation}>{#if sendingLoc}⌛{:else}📍{/if}</button>
         <input bind:this={fileInput} type="file" multiple hidden onchange={handleFileSelect} accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.txt" />
         <textarea bind:value={text} rows="1" placeholder={isRecording? "Recording..." : "Type a message"} disabled={sending || isRecording} onkeydown={keyDown}></textarea>
         {#if text.trim() || selectedFiles.length > 0}
@@ -154,7 +185,6 @@
 
 <style>
 .chat-input-wrapper { position:relative; background:#202c33; border-top:1px solid #2a3942; }
-/* hide second copy if rendered twice */
 .chat-input-wrapper[data-single="true"] ~.chat-input-wrapper[data-single="true"]{ display:none!important; }
 .recording-bar{ display:flex; justify-content:space-between; padding:9px 15px; background:#233138; border-bottom:1px solid #2a3942; color:#e9edef; }
 .recording-left{ display:flex; gap:9px; align-items:center; }
@@ -182,6 +212,7 @@ textarea:focus{ box-shadow:0 0 0 1px #00a884; }
 .icon-btn:hover:not(:disabled){ background:#2a3942; color:#e9edef; }
 .icon-btn.active{ background:#0a332c; color:#00a884; }
 .icon-btn:disabled{ opacity:.45; cursor:not-allowed; }
+.icon-btn.loc{ background:#0a332c; color:#00a884; }
 .send-btn{ width:46px; height:46px; border:none; border-radius:50%; background:#00a884; color:white; font-size:18px; cursor:pointer; display:flex; justify-content:center; align-items:center; flex-shrink:0; }
 .send-btn:hover:not(:disabled){ background:#06cf9c; }
 .voice{ color:#8696a0; }.voice.recording{ background:#3a1a1a; color:#ff6b6b; }
