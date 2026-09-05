@@ -59,9 +59,7 @@
         const result = new Function(`return (${expression})`)();
         if (!isFinite(result)) return 0;
         return Number(Number(result).toFixed(2));
-    } catch (err) {
-        return 0;
-    }
+    } catch { return 0; }
   }
 
   onMount(async () => {
@@ -126,19 +124,12 @@
             sender: userId,
             room_id: 'factory-floor',
             report_date: new Date().toISOString(),
-            values: {
-             ...formData,
-             ...calculated,
-                shift,
-                station,
-                t_code: selectedTemplate.template_code
-            },
+            values: {...formData,...calculated, shift, station, t_code: selectedTemplate.template_code },
             created_at: new Date().toISOString()
         }]).select().single();
 
         if (error) throw error;
 
-        // FIXED - TEXT id, no foreign key
         await supabase.from("messages").insert([{
             sender_id: userId,
             room_id: 'factory-floor',
@@ -164,7 +155,7 @@
 
   function goTab(tab: string){
     if(tab === 'chat') window.location.href = '/chat';
-    if(tab === 'dashboard') window.location.href = '/dashboard';
+    if(tab === 'dashboard') window.location.href = '/';
     if(tab === 'report') window.location.href = '/reports';
     if(tab === 'user') window.location.href = '/settings';
   }
@@ -269,7 +260,6 @@
 .brand h1{margin:0;color:#1e293b;font-size:24px;line-height:1;}
 .brand small{color:#64748b;font-size:12px;font-weight:600;letter-spacing:0.5px;}
 .logo-img{border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.12);}
-h1{margin:0;color:#1e293b;font-size:28px;}
 .btn-reports{background:#16a34a;color:white;padding:10px 16px;border-radius:8px;font-weight:600;text-decoration:none;white-space:nowrap;}
 .card{background:white;padding:24px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.08);max-width:850px;width:100%;margin:0 auto;box-sizing:border-box;}
 label{display:block;margin-bottom:6px;font-weight:600;color:#374151;font-size:14px;}

@@ -10,8 +10,7 @@
   let online = true;
   let rtt: number | null = null;
   let downlink: any = null;
-  let responseTime: number | null = null;
-  let showNet = true;
+  let showNet = false; // set false so no top bar delay
 
   const modules = ['/', '/chat', '/reports', '/dashboard', '/templates'];
   let startX = 0;
@@ -32,7 +31,7 @@
     if(!target) return false;
     const tag = target.tagName?.toLowerCase();
     if(['button','input','select','textarea','a'].includes(tag)) return true;
-    if(target.closest('button, input, select, textarea, a,.table-wrapper, [data-no-swipe]')) return true;
+    if(target.closest('button, input, select, textarea, a,.table-wrapper, table, canvas, [data-no-swipe]')) return true;
     return false;
   }
 
@@ -53,16 +52,15 @@
     const diffX = endX - startX;
     const diffY = endY - startY;
     const elapsed = Date.now() - startTime;
-    if(Math.abs(diffX) < 120) return;
-    if(Math.abs(diffY) > 50) return;
-    if(elapsed > 500) return;
-    if(Math.abs(diffX) < Math.abs(diffY) * 1.5) return;
+    if(Math.abs(diffX) < 100) return;
+    if(Math.abs(diffY) > 80) return;
+    if(elapsed > 600) return;
     const currentPath = $page.url.pathname;
     let idx = getModuleIndex(currentPath);
-    if(diffX < -120){
+    if(diffX < -100){
       const next = (idx + 1) % modules.length;
       goto(modules[next]);
-    } else if(diffX > 120){
+    } else if(diffX > 100){
       const prev = (idx - 1 + modules.length) % modules.length;
       goto(modules[prev]);
     }
@@ -139,7 +137,7 @@
 </div>
 {/if}
 
-<div class="swipe-root" data-no-swipe>
+<div class="swipe-root">
   <slot />
 </div>
 
@@ -153,24 +151,15 @@
 .net-bar{ height:24px; background:#111b21; color:#aebac1; display:flex; gap:12px; align-items:center; padding:0 12px; font-size:11px; font-family:monospace; border-bottom:1px solid #222d34; position:sticky; top:0; z-index:999; }
 .net-bar.offline{ background:#5a1a1a; color:#ffb4b4; }
 .net-close{ margin-left:auto; background:transparent; border:none; color:inherit; cursor:pointer; }
-.swipe-root{ min-height:calc(100vh - 24px); touch-action: pan-y; }
-.module-dots{ position:fixed; bottom:60px; left:50%; transform:translateX(-50%); display:flex; gap:6px; z-index:50; pointer-events:none; }
-.dot{ width:6px; height:6px; border-radius:50%; background:#3a4a54; opacity:0.5; }
+.swipe-root{ min-height:100vh; touch-action: pan-y; }
+.module-dots{ position:fixed; bottom:70px; left:50%; transform:translateX(-50%); display:flex; gap:6px; z-index:50; pointer-events:none; }
+.dot{ width:6px; height:6px; border-radius:50%; background:#3a4a54; opacity:0.5; transition:all 0.2s; }
 .dot.active{ background:#00a884; opacity:1; width:18px; border-radius:3px; }
   @media(min-width:769px){.module-dots{ display:none; } }
   :global(:root){ --bg:#111b21; --card:#202c33; --text:#e9edef; --border:#2a3942; --accent:#00a884; }
   :global([data-theme="light"]){ --bg:#ffffff; --card:#ffffff; --text:#0f172a; --border:#e2e8f0; --accent:#2563eb; }
   :global([data-theme="dark"]){ --bg:#0f172a; --card:#1e293b; --text:#e2e8f0; --border:#334155; --accent:#3b82f6; }
   :global([data-theme="whatsapp"]){ --bg:#111b21; --card:#202c33; --text:#e9edef; --border:#2a3942; --accent:#00a884; }
-  :global([data-theme="telegram"]){ --bg:#e6f3ff; --card:#ffffff; --text:#000000; --border:#d1e7ff; --accent:#2b88d8; }
-  :global([data-theme="instagram"]){ --bg:#fafafa; --card:#ffffff; --text:#262626; --border:#dbdbdb; --accent:#d62976; }
-  :global([data-theme="imessage"]){ --bg:#f5f5f7; --card:#ffffff; --text:#000000; --border:#e5e5e5; --accent:#0a84ff; }
-  :global([data-theme="discord"]){ --bg:#313338; --card:#2b2d31; --text:#f2f3f5; --border:#3f4147; --accent:#5865f2; }
-  :global([data-theme="snapchat"]){ --bg:#fffef0; --card:#ffffff; --text:#000000; --border:#ffe500; --accent:#fffc00; }
-  :global([data-theme="slack"]){ --bg:#350d36; --card:#ffffff; --text:#1d1c1d; --border:#522653; --accent:#1264a3; }
-  :global([data-theme="messenger"]){ --bg:#f0f8ff; --card:#ffffff; --text:#050505; --border:#c2d9ff; --accent:#0099ff; }
-  :global([data-theme="twitter"]){ --bg:#000000; --card:#16181c; --text:#e7e9ea; --border:#2f3336; --accent:#1d9bf0; }
-  :global([data-theme="minimal"]){ --bg:#fefefe; --card:#ffffff; --text:#111111; --border:#eeeeee; --accent:#111111; }
   :global(html){ background:var(--bg)!important; color:var(--text)!important; }
-  :global(body){ background:var(--bg)!important; color:var(--text)!important; transition: background 0.25s, color 0.25s; }
+  :global(body){ background:var(--bg)!important; color:var(--text)!important; transition: background 0.25s, color 0.25s; margin:0; }
 </style>

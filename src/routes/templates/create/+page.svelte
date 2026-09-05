@@ -174,7 +174,7 @@
   </div>
   <div class="top-line line2">
     <div class="t-inputs-2">
-      <div class="t-field"><label>Template</label><input bind:value={templateName} maxlength="60" placeholder="Daily Tracker" /></div>
+      <div class="t-field"><label>Template</label><input bind:value={templateName} maxlength="20" placeholder="Daily Tracker" /></div>
       <div class="t-field small"><label>Code</label><input bind:value={templateCode} maxlength="20" class="code-in" /></div>
       <div class="t-field small"><label>Category</label><select bind:value={category}><option>Production</option><option>Quality</option><option>Maintenance</option></select></div>
       <div class="t-field small">

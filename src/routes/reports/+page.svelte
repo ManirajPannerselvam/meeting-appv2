@@ -294,7 +294,7 @@
     bottomTab=tab;
     if(tab==='dashboard' && browser) window.location.href='/';
     if(tab==='chat' && browser) window.location.href='/chat';
-    if(tab==='report' && browser) window.location.href='/report';
+    if(tab==='reports' && browser) window.location.href='/reports';
     if(tab==='user' && browser) window.location.href='/settings';
   }
 </script>
