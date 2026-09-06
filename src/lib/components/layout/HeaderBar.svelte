@@ -19,6 +19,17 @@
 		return user?.email ?? user?.name ?? 'maniraj.panneerselvam@gmail.com';
 	}
 	function navigate(p:string){ userMenuOpen=false; goto(p); }
+
+	function handleLogout(){
+		userMenuOpen = false;
+		localStorage.clear();
+		sessionStorage.clear();
+		window.location.replace('/logout');
+	}
+	function handleLogin(){
+		userMenuOpen = false;
+		window.location.replace('/login');
+	}
 </script>
 
 <header class="header">
@@ -40,10 +51,16 @@
 			<div class="dropdown">
 				<div class="email">{displayEmail()}</div>
 				<div class="line"></div>
-				<button on:click={()=>navigate('/users')}>👥 Users</button>
-				<button on:click={()=>navigate('/settings')}>⚙️ Settings</button>
-				<button on:click={()=>navigate('/admin')}>🛡️ Admin</button>
-				<button on:click={()=>navigate('/templates')}>📄 Templates</button>
+				<button on:click={()=>navigate('/users')}><span>👥</span> Users</button>
+				<button on:click={()=>navigate('/settings')}><span>⚙️</span> Settings</button>
+				<button on:click={()=>navigate('/admin')}><span>🛡️</span> Admin</button>
+				<button on:click={()=>navigate('/templates')}><span>📄</span> Templates</button>
+				<div class="line"></div>
+				{#if user}
+					<button class="logout-btn" on:click={handleLogout}><span>🚪</span> Logout</button>
+				{:else}
+					<button class="login-btn" on:click={handleLogin}><span>🔑</span> Login</button>
+				{/if}
 			</div>
 			{/if}
 		</div>
@@ -65,8 +82,24 @@ nav a:hover{background:#1e293b; color:white;}
 .user-wrap{position:relative;}
 .user-pill{border:1px solid #334155; background:#1e293b; color:white; padding:6px 12px; border-radius:20px; cursor:pointer; max-width:260px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .dropdown{position:absolute; right:0; top:40px; width:240px; background:white; color:#0f172a; border:1px solid #e2e8f0; border-radius:12px; box-shadow:0 10px 20px rgba(0,0,0,.2); z-index:100; padding:8px; display:flex; flex-direction:column;}
-.dropdown .email{font-size:12px; color:#64748b; padding:6px; overflow:hidden; text-overflow:ellipsis;}
+.dropdown .email{font-size:12px; color:#64748b !important; padding:6px; overflow:hidden; text-overflow:ellipsis;}
 .line{height:1px; background:#e2e8f0; margin:6px 0;}
-.dropdown button{border:none; background:none; text-align:left; padding:10px; border-radius:8px; cursor:pointer;}
-.dropdown button:hover{background:#f1f5f9;}
+.dropdown button{
+  border:none; 
+  background:none; 
+  text-align:left; 
+  padding:10px; 
+  border-radius:8px; 
+  cursor:pointer;
+  color:#0f172a !important; /* FIX: visible black text */
+  font-size:14px;
+  font-weight:500;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  width:100%;
+}
+.dropdown button:hover{background:#f1f5f9 !important;}
+.logout-btn{ color:#dc2626 !important; font-weight:700 !important; }
+.login-btn{ color:#16a34a !important; font-weight:700 !important; }
 </style>

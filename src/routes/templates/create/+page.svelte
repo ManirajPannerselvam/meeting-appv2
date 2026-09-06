@@ -41,7 +41,7 @@
   let selectedTheme = themes[1];
   let creatingTime = new Date();
 
-  let templateName="Daily Tracker"; let templateCode="PROD-01"; let category="Production";
+  let templateName=""; let templateCode=""; let category="Production";
   let cols=38; let rows=22; let gap=14;
   type Placed = { id:string, defId:string, label:string, field_name:string, type:FieldType, metric?:string, options:string[], formula:string, x:number, y:number, w:number, h:number, color:string, border:string, required?:boolean };
   let placed: Placed[] = [
@@ -55,8 +55,10 @@
   let isDragging=false; let startPt={x:0,y:0};
   $: selected = placed.find(p=>p.id===selectedId);
   $: numberFields = placed.filter(p=>p.metric || p.type==='number' || p.type==='dropdown');
+  $: isValid = templateName.trim().length >=2 && templateCode.trim().length >=2;
   let editFormula = "{enter_output} ÷ {enter_input} × 100";
   let savedCount = 0; let isDirty = true; let toast = ""; let showSavedPopup = false; let savedTemplates: any[] = [];
+  let newOptionText = "";
 
   onMount(async ()=>{
     creatingTime = new Date(); setInterval(()=> creatingTime = new Date(), 1000);
@@ -74,7 +76,6 @@
 
   let boardEl: HTMLDivElement;
   
-  // FIXED DRAG LOGIC
   function startDrag(e: PointerEvent, p:Placed){
     if((e.target as HTMLElement).closest('.x')) return;
     e.stopPropagation();
@@ -136,11 +137,17 @@
   function insertField(fn:string){ let safe=sanitizeFieldName(fn); editFormula+= `{${safe}} `; if(selected){ selected.formula=editFormula.slice(0,200); placed=[...placed]; } isDirty=true; }
   function saveFormula(){ if(selected){ selected.formula=editFormula.replace(/[^a-z0-9_{}\s\+\-\*\/\(\)÷×%\.\s]/gi,"").slice(0,200); placed=[...placed]; } isDirty=true; }
   function updateSelectedLabel(val:string){ if(!selected) return; let s=sanitizeText(val); if(!s) return; selected.label=s; selected.field_name=sanitizeFieldName(s); placed=[...placed]; isDirty=true; }
+  function updateOption(idx:number, val:string){ if(!selected) return; let s=sanitizeText(val); selected.options[idx]=s; placed=[...placed]; isDirty=true; }
+  function addOption(){ if(!selected) return; let v=sanitizeText(newOptionText); if(!v) return; selected.options=[...(selected.options||[]), v]; placed=[...placed]; newOptionText=""; isDirty=true; }
+  function removeOption(idx:number){ if(!selected) return; selected.options=(selected.options||[]).filter((_,i)=>i!==idx); placed=[...placed]; isDirty=true; }
   function deleteField(id:string){ placed=placed.filter(x=>x.id!==id); isDirty=true; }
 
   async function saveTemplate(){
-    let cleanName=sanitizeText(templateName); if(!cleanName){ toast="Enter valid Name"; setTimeout(()=>toast="",2000); return; }
-    let cleanCode=sanitizeCode(templateCode)||`PROD-${Date.now().toString().slice(-4)}`; templateName=cleanName; templateCode=cleanCode;
+    let cleanName=sanitizeText(templateName);
+    let cleanCode=sanitizeCode(templateCode);
+    if(!cleanName || cleanName.length < 2){ toast="❌ Enter Template Name *"; setTimeout(()=>toast="",2500); return; }
+    if(!cleanCode || cleanCode.length < 2){ toast="❌ Enter Template Code *"; setTimeout(()=>toast="",2500); return; }
+    templateName=cleanName; templateCode=cleanCode;
     let all:any[]=[]; try{ all=JSON.parse(localStorage.getItem("templates")||"[]"); }catch{ all=[]; }
     let owner=getTemplateOwner(); let realIdStr=owner.owner_id; let realEmail=sanitizeText(owner.owner_name||owner.owner_email||"user"); let realUUID:string|null=null;
     try{ const { data:{user} }=await supabaseTemplates.auth.getUser(); if(user){ realEmail=sanitizeText(user.email||user.id); realIdStr=user.email||user.id; if(isValidUUID(user.id)) realUUID=user.id; } }catch{}
@@ -169,15 +176,15 @@
     <div class="tr1">
       <span class="count-badge">Saved: {savedCount} ▼</span>
       <button class="preview-btn">💬 Chat</button>
-      <button class="save" style="background:{selectedTheme.color}" on:click={saveTemplate}>Save to DB</button>
+      <button class="save" style="background:{selectedTheme.color}; opacity:{isValid?1:0.5}" disabled={!isValid} on:click={saveTemplate}>{isValid? 'Save to DB' : 'Enter Name/Code *'}</button>
     </div>
   </div>
   <div class="top-line line2">
     <div class="t-inputs-2">
-      <div class="t-field"><label>Template</label><input bind:value={templateName} maxlength="20" placeholder="Daily Tracker" /></div>
-      <div class="t-field small"><label>Code</label><input bind:value={templateCode} maxlength="20" class="code-in" /></div>
-      <div class="t-field small"><label>Category</label><select bind:value={category}><option>Production</option><option>Quality</option><option>Maintenance</option></select></div>
-      <div class="t-field small">
+      <div class="t-field"><label class="required">Template</label><input bind:value={templateName} maxlength="20" placeholder="Enter Name" class:invalid={!templateName.trim()} /></div>
+      <div class="t-field"><label class="required">Code</label><input bind:value={templateCode} maxlength="20" class="code-in" placeholder="PROD-01" class:invalid={!templateCode.trim()} /></div>
+      <div class="t-field"><label>Category</label><select bind:value={category}><option>Production</option><option>Quality</option><option>Maintenance</option></select></div>
+      <div class="t-field">
         <label>Theme</label>
         <select value={selectedTheme.id} on:change={(e)=>{ const v=(e.target as HTMLSelectElement).value; const th=themes.find(t=>t.id===v); if(th) pickTheme(th); }}>
           {#each themes as th}<option value={th.id}>{th.name}</option>{/each}
@@ -231,7 +238,9 @@
         {#each placed as p (p.id)}
           <div class="p-preview-item" style="border-left:3px solid {p.border}">
             <b class="p-l">{p.label}</b>
-            {#if p.type!=='formula'}
+            {#if p.type==='dropdown'}
+              <select class="p-input"><option>Select {p.label}</option>{#each p.options as opt}<option>{opt}</option>{/each}</select>
+            {:else if p.type!=='formula'}
               <input class="p-input" placeholder="Enter {p.label}" value={p.type==='number'?'0':''} maxlength="20" />
             {:else}
               <div class="p-formula" style="background:{selectedTheme.light}; border:1px solid {selectedTheme.color};">{p.formula || "⚡ Auto Calculated"}</div>
@@ -244,23 +253,48 @@
 
   <div class="right">
     {#if selected}
-      <div class="edit-box" style="border-color:{selectedTheme.color}"><div class="edit-head"><b>✏️ {selected.label}</b><small>{selected.type}</small></div>
+      <div class="edit-box" style="border-color:{selectedTheme.color}">
+        <div class="edit-head"><b>✏️ {selected.label}</b><small>{selected.type} {selected.metric?`• ${selected.metric}`:''}</small></div>
         <label>Label</label><input class="edit-in" value={selected.label} on:input={(e)=>updateSelectedLabel(e.currentTarget.value)} maxlength="60" />
+        {#if selected.type==='dropdown'}
+          <label style="margin-top:8px;">Options - Drop-down Values</label>
+          <div class="options-list">
+            {#each selected.options as opt, i}
+              <div class="opt-row">
+                <span class="opt-index">{i+1}.</span>
+                <input class="opt-in" value={opt} on:input={(e)=>updateOption(i, (e.target as HTMLInputElement).value)} maxlength="20" placeholder="A,B,C" />
+                <button class="opt-del" on:click={()=>removeOption(i)}>✕</button>
+              </div>
+            {/each}
+            {#if !selected.options || selected.options.length===0}
+              <div class="no-opt">No options - add below (sample A,B,C)</div>
+            {/if}
+          </div>
+          <div class="opt-add-row">
+            <input class="opt-add-in" bind:value={newOptionText} maxlength="20" placeholder="New option e.g. Night" on:keydown={(e)=>{ if(e.key==='Enter') addOption(); }} />
+            <button class="opt-add-btn" style="background:{selectedTheme.color}" on:click={addOption}>+ Add Option</button>
+          </div>
+          <div class="opt-hint">User can add unlimited options. Press Enter to add quickly.</div>
+        {/if}
+        {#if selected.metric}
+          <label style="margin-top:6px;">Metric</label>
+          <input class="edit-in" value={selected.metric} disabled />
+        {/if}
       </div>
     {/if}
     <div class="formula-builder" style="border-color:{selectedTheme.color}; background:{selectedTheme.light}">
       <div class="fb-head"><b>Formula - {selectedTheme.name}</b></div>
       <textarea bind:value={editFormula} on:input={saveFormula} rows="4" class="fb-ta" maxlength="200" placeholder="Select fields"></textarea>
       <div class="fb-ops all-sym three-rows">
-  <button on:click={()=>insertOp("(")}>(</button>
-  <button on:click={()=>insertOp(")")}>)</button>
-  <button on:click={()=>insertOp("+")}>+</button>
-  <button on:click={()=>insertOp("-")}>−</button>
-  <button on:click={()=>insertOp("×")}>×</button>
-  <button on:click={()=>insertOp("÷")}>÷</button>
-  <button on:click={()=>insertOp("%")}>%</button>
-  <button class="span-2" on:click={()=>insertOp("100")}>100</button>
-</div>
+        <button on:click={()=>insertOp("(")}>(</button>
+        <button on:click={()=>insertOp(")")}>)</button>
+        <button on:click={()=>insertOp("+")}>+</button>
+        <button on:click={()=>insertOp("-")}>−</button>
+        <button on:click={()=>insertOp("×")}>×</button>
+        <button on:click={()=>insertOp("÷")}>÷</button>
+        <button on:click={()=>insertOp("%")}>%</button>
+        <button class="span-2" on:click={()=>insertOp("100")}>100</button>
+      </div>
       <div class="fb-sec"><b>Available Fields</b>{#each numberFields as bf}<button class="fb-field" on:click={()=>insertField(bf.field_name)}>📥 {bf.label} → {'{'+bf.field_name+'}'}</button>{/each}</div>
       <button class="savef" style="background:{selectedTheme.color}" on:click={saveFormula}>💾 Save Formula</button>
     </div>
@@ -268,88 +302,81 @@
 </div>
 
 <style>
-  :global(body){margin:0; font-family:system-ui; background:#f8fafc;}
-  .top-fixed.two-line{position:fixed; top:0; left:0; right:0; z-index:1000; background:white; border-bottom:1px solid #e5e7eb; display:flex; flex-direction:column; gap:0;}
-  .top-line{display:flex; justify-content:space-between; align-items:center; padding:4px 6px;}
-  .line1{background:#f8fafc; border-bottom:1px solid #f1f5f9; height:32px;}
-  .line2{background:white; height:36px;}
+  :global(body){margin:0; font-family:system-ui; background:var(--bg, #f8fafc) !important; color:var(--text, #111827) !important;}
+  :global(html){background:var(--bg, #f8fafc) !important;}
+  .top-fixed.two-line{position:fixed; top:0; left:0; right:0; z-index:1000; background:var(--card, white); border-bottom:1px solid var(--border, #e5e7eb); display:flex; flex-direction:column; gap:0;}
+  .top-line{display:flex; justify-content:space-between; align-items:center; padding:5px 8px;}
+  .line1{background:var(--bg, #f8fafc); border-bottom:1px solid var(--border, #f1f5f9); height:36px;}
+  .line2{background:var(--card, white); min-height:52px; height:auto; padding:8px 10px; overflow:visible; display:flex; align-items:center;}
   .tl1{display:flex; gap:6px; align-items:center;} .tr1{display:flex; gap:4px; align-items:center;}
-  .back{width:24px; height:24px; border:none; background:#f1f5f9; border-radius:5px;}
-  .dirty{font-size:7px; color:#ef4444; font-weight:700;} .saved{font-size:7px; color:#16a34a;}
-  .count-badge{background:#111827; color:white; padding:0 6px; height:22px; border-radius:10px; font-size:8px; font-weight:700; display:flex; align-items:center;}
-  .preview-btn{height:22px; border:1px solid #e5e7eb; background:white; border-radius:5px; font-size:8px; padding:0 6px;}
-  .save{height:22px; border:none; border-radius:5px; color:white; font-weight:800; font-size:8px; padding:0 8px;}
-  .t-inputs-2{display:flex; gap:6px; align-items:center; width:100%;}
-  .t-field{display:flex; flex-direction:column; gap:1px; flex:1;} .t-field.small{flex:0 0 80px;}
-  .t-field label{font-size:6px; font-weight:700; color:#64748b; text-transform:uppercase;}
-  .t-field input, .t-field select{height:22px; border:1px solid #e5e7eb; border-radius:4px; padding:0 5px; font-size:8px; width:100%; box-sizing:border-box;}
-  .toast{position:fixed; top:70px; right:8px; background:#111827; color:white; padding:6px 10px; border-radius:6px; font-size:10px; z-index:2000;}
-  .layout.two-top{display:grid; grid-template-columns: 14% 50% 36%; gap:2px; margin-top:72px; height:calc(100vh - 72px); overflow:hidden;}
-  .left{overflow-y:auto; background:white; border-right:1px solid #e5e7eb; padding:2px; display:flex; flex-direction:column; gap:2px;}
-  .center{overflow-y:auto; background:#fcfcfc; padding:2px; display:flex; flex-direction:column; gap:3px;}
-  .right{overflow-y:auto; background:#f0fdf4; padding:2px; display:flex; flex-direction:column; gap:3px;}
-  .search-box{display:flex; gap:3px; align-items:center; border:1px solid #e5e7eb; border-radius:5px; padding:0 3px; background:white; height:22px; font-size:9px;}
-  .search-box input{border:none; outline:none; font-size:8px; width:100%;}
-  .field-grid.single-col{display:flex; flex-direction:column; gap:3px;}
-  .field-row.vertical{height:34px !important; min-height:34px !important; width:100% !important; border:1px solid #f1f5f9; border-left-width:3px !important; background:white; border-radius:5px; display:flex; flex-direction:row; align-items:center; gap:6px; padding:0 6px !important;}
-  .field-row.vertical .f-icon{font-size:12px !important; width:18px; height:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
-  .field-row.vertical .f-label-down{font-size:7px !important; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-
-  /* FIXED BOARD + FIELD + FORMULA */
-  .board-wrap{width:100%; background:white; border:1.5px solid #0ea5e9; border-radius:5px; height:52%; min-height:200px; overflow:hidden; display:flex; flex-direction:column;}
+  .back{width:26px; height:26px; border:none; background:var(--bg, #f1f5f9); border-radius:6px; color:var(--text); cursor:pointer; font-weight:800;}
+  .dirty{font-size:9px; color:#ef4444; font-weight:700;} .saved{font-size:9px; color:#16a34a;}
+  .count-badge{background:#111827; color:white; padding:0 8px; height:24px; border-radius:10px; font-size:9px; font-weight:700; display:flex; align-items:center;}
+  .preview-btn{height:24px; border:1px solid var(--border, #e5e7eb); background:var(--card, white); color:var(--text); border-radius:6px; font-size:9px; padding:0 8px; cursor:pointer; font-weight:700;}
+  .save{height:26px; border:none; border-radius:6px; color:white; font-weight:800; font-size:9px; padding:0 10px; cursor:pointer; transition:opacity 0.2s;}
+  .save:disabled{cursor:not-allowed;}
+  .t-inputs-2{display:grid; grid-template-columns: 1.4fr 0.9fr 1fr 1fr; gap:10px; align-items:end; width:100%;}
+  .t-field{display:flex; flex-direction:column; gap:4px; min-width:0;}
+  .t-field label{font-size:10px; font-weight:800; color:#111827; text-transform:uppercase; white-space:nowrap; line-height:1; letter-spacing:0.3px;}
+  .t-field label.required::after{content:' *'; color:#ef4444; font-weight:900;}
+  .t-field input, .t-field select{height:30px; border:1.5px solid #cbd5e1; border-radius:6px; padding:0 10px; font-size:12px; width:100%; min-width:0; box-sizing:border-box; background:#ffffff !important; color:#111827 !important; font-weight:700 !important;}
+  .t-field input.invalid{border-color:#ef4444 !important; background:#fef2f2 !important;}
+  .toast{position:fixed; top:80px; right:8px; background:#111827; color:white; padding:8px 12px; border-radius:8px; font-size:11px; z-index:2000;}
+  .layout.two-top{display:grid; grid-template-columns: 14% 50% 36%; gap:2px; margin-top:90px; height:calc(100vh - 90px); overflow:hidden; background:var(--bg);}
+  .left{overflow-y:auto; background:var(--card, white); border-right:1px solid var(--border, #e5e7eb); padding:4px; display:flex; flex-direction:column; gap:4px;}
+  .center{overflow-y:auto; background:var(--bg, #fcfcfc); padding:4px; display:flex; flex-direction:column; gap:4px;}
+  .right{overflow-y:auto; background:var(--card, #f0fdf4); padding:4px; display:flex; flex-direction:column; gap:4px;}
+  .search-box{display:flex; gap:4px; align-items:center; border:1.5px solid var(--border, #e5e7eb); border-radius:6px; padding:0 6px; background:#ffffff; height:28px; font-size:10px;}
+  .search-box input{border:none; outline:none; font-size:10px; width:100%; background:#ffffff !important; color:#111827 !important; font-weight:700;}
+  .field-grid.single-col{display:flex; flex-direction:column; gap:4px;}
+  .field-row.vertical{height:36px !important; min-height:36px !important; width:100% !important; border:1px solid #f1f5f9; border-left-width:3px !important; background:white; border-radius:6px; display:flex; flex-direction:row; align-items:center; gap:8px; padding:0 8px !important; cursor:pointer; color:#111827; font-weight:700;}
+  .field-row.vertical .f-icon{font-size:14px !important; width:20px; height:20px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .field-row.vertical .f-label-down{font-size:9px !important; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#111827;}
+  .board-wrap{width:100%; background:white; border:1.5px solid #0ea5e9; border-radius:6px; height:52%; min-height:220px; overflow:hidden; display:flex; flex-direction:column;}
   .board-scroll{flex:1; overflow:auto; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;}
   .board{position:relative; touch-action:pan-x pan-y;}
   .dot{position:absolute; width:1.5px; height:1.5px; background:#cbd5e1; border-radius:50%; opacity:.4;}
-
-  .mod.reduced{
-    position:absolute; background:white; border:1.5px solid; border-radius:6px;
-    display:flex; align-items:center; padding:0 22px 0 6px;
-    font-weight:700; box-shadow:0 1px 3px rgba(0,0,0,.15);
-    touch-action:none; user-select:none; cursor:grab; box-sizing:border-box;
-    min-width:72px; overflow:hidden;
-  }
+  .mod.reduced{position:absolute; background:white; border:1.5px solid; border-radius:6px; display:flex; align-items:center; padding:0 24px 0 8px; font-weight:800; box-shadow:0 1px 3px rgba(0,0,0,.15); touch-action:none !important; user-select:none; cursor:grab; box-sizing:border-box; min-width:80px; overflow:hidden; color:#111827 !important;}
   .mod.reduced.active{border-width:2.2px; z-index:20; box-shadow:0 4px 12px rgba(0,0,0,.2);}
-  .mod-label{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:8px !important; line-height:1.1;}
-  .x{
-    position:absolute !important; right:3px !important; top:50% !important; transform:translateY(-50%);
-    width:18px !important; height:18px !important; background:#fee2e2; color:#dc2626; border:none; border-radius:4px;
-    font-size:11px !important; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:30;
+  .mod-label{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px !important; line-height:1.1; color:#111827 !important; font-weight:800 !important;}
+  .x{position:absolute !important; right:4px !important; top:50% !important; transform:translateY(-50%); width:18px !important; height:18px !important; background:#fee2e2; color:#dc2626; border:none; border-radius:4px; font-size:11px !important; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:30;}
+  .creating-info{padding:4px 6px; display:flex; justify-content:space-between; font-size:8px; flex-shrink:0; color:#111827; font-weight:700;}
+  .preview-wrap.linked.onebyone{flex:1; overflow:auto; background:white; border:1.5px solid #0ea5e9; border-radius:6px; padding:4px;}
+  .preview-head{font-size:9px; font-weight:800; margin-bottom:4px; color:#111827;}
+  .preview-white{display:flex; flex-direction:column; gap:5px;}
+  .p-preview-item{display:flex; flex-direction:column; gap:2px; background:#ffffff; border-radius:4px; padding:6px; border:1px solid #e2e8f0; border-left:3px solid #0ea5e9;}
+  .p-l{font-size:9px; font-weight:800; color:#111827 !important;}
+  .p-input{height:26px; font-size:10px; border:1.5px solid #94a3b8 !important; border-radius:4px; padding:0 8px; background:#ffffff !important; color:#111827 !important; font-weight:700 !important;}
+  .p-input::placeholder{color:#64748b !important;}
+  .p-formula{font-size:8px; padding:6px; border-radius:4px; font-weight:800; text-align:center; color:#111827 !important;}
+  .edit-box{background:white; border:1px solid #e5e7eb; border-radius:6px; padding:8px; display:flex; flex-direction:column; gap:5px;}
+  .edit-head{display:flex; justify-content:space-between; font-size:9px; color:#111827; font-weight:800;} .edit-box label{font-size:8px; font-weight:800; color:#111827;}
+  .edit-in{height:26px; border:1.5px solid #94a3b8; border-radius:5px; padding:0 8px; font-size:10px; background:#ffffff !important; color:#111827 !important; font-weight:700 !important;}
+  .options-list{display:flex; flex-direction:column; gap:4px; margin-top:4px; max-height:160px; overflow-y:auto; padding:2px;}
+  .opt-row{display:flex; align-items:center; gap:4px; background:#ffffff; border:1px solid #e2e8f0; border-radius:6px; padding:3px 4px;}
+  .opt-index{font-size:9px; font-weight:800; color:#64748b; width:16px; text-align:center;}
+  .opt-in{flex:1; height:22px; border:none; outline:none; font-size:9px; font-weight:700; background:#ffffff!important; color:#111827!important;}
+  .opt-del{width:20px; height:20px; background:#fee2e2; color:#dc2626; border:none; border-radius:4px; cursor:pointer; font-size:10px; font-weight:800; display:flex; align-items:center; justify-content:center;}
+  .opt-add-row{display:flex; gap:4px; margin-top:6px;}
+  .opt-add-in{flex:1; height:26px; border:1.5px solid #94a3b8; border-radius:6px; padding:0 6px; font-size:9px; background:#ffffff!important; color:#111827!important; font-weight:700;}
+  .opt-add-btn{height:26px; padding:0 10px; border:none; border-radius:6px; color:white; font-weight:800; font-size:9px; cursor:pointer; white-space:nowrap;}
+  .no-opt{font-size:8px; color:#64748b; text-align:center; padding:8px; border:1px dashed #cbd5e1; border-radius:5px; font-weight:700;}
+  .opt-hint{font-size:7px; color:#64748b; font-weight:600; margin-top:2px;}
+  .formula-builder{position:relative !important; left:auto !important; top:auto !important; transform:none !important; border:1px solid #bbf7d0; border-radius:6px; padding:6px; display:flex; flex-direction:column; gap:5px; background:#f0fdf4; width:100%; box-sizing:border-box;}
+  .fb-head{font-size:9px; font-weight:800; color:#111827;} 
+  .fb-ta{width:100%; border:1.5px solid #86efac; border-radius:4px; padding:6px; font-size:10px; resize:none; box-sizing:border-box; background:#ffffff !important; color:#111827 !important; font-weight:700 !important;}
+  .fb-ops.all-sym{position:static !important; display:grid !important; grid-template-columns:repeat(3,1fr); gap:6px; width:100% !important; background:transparent !important; border:none !important; box-shadow:none !important;}
+  .fb-ops.all-sym button{position:static !important; height:36px !important; background:white; border:1.5px solid #cbd5e1; border-radius:8px; font-weight:800; font-size:14px !important; cursor:pointer; touch-action:manipulation; color:#111827;}
+  .fb-sec{display:flex; flex-direction:column; gap:3px; font-size:8px; font-weight:800; color:#111827;} 
+  .fb-field{width:100%; min-height:26px; border:1px solid #e5e7eb; border-radius:10px; font-size:8px; background:white; padding:4px 6px; text-align:left; color:#111827; font-weight:700; cursor:pointer;}
+  .savef{height:30px; border:none; border-radius:6px; color:white; font-weight:800; font-size:9px; cursor:pointer;}
+  @media (max-width:768px){
+    .t-inputs-2{grid-template-columns: 1fr 1fr; gap:8px;}
+    .layout.two-top{grid-template-columns: 26% 42% 32%; margin-top:110px; height:calc(100vh - 110px);}
+    .line2{min-height:80px;}
   }
-
-  .creating-info{padding:3px 5px; display:flex; justify-content:space-between; font-size:7px; flex-shrink:0;}
-  .preview-wrap.linked.onebyone{flex:1; overflow:auto; background:white; border:1.5px solid #0ea5e9; border-radius:5px; padding:3px;}
-  .preview-head{font-size:7px; font-weight:700; margin-bottom:3px;}
-  .preview-white{display:flex; flex-direction:column; gap:4px;}
-  .p-preview-item{display:flex; flex-direction:column; gap:1px; background:#f8fafc; border-radius:3px; padding:3px; border:1px solid #e2e8f0; border-left:2px solid #0ea5e9;}
-  .p-l{font-size:8px; font-weight:700;} .p-input{height:20px; font-size:8px; border:1px dashed #cbd5e1; border-radius:3px; padding:0 4px;}
-  .p-formula{font-size:7px; padding:4px; border-radius:3px; font-weight:700; text-align:center;}
-  .edit-box{background:white; border:1px solid #e5e7eb; border-radius:5px; padding:3px; display:flex; flex-direction:column; gap:2px;}
-  .edit-head{display:flex; justify-content:space-between; font-size:8px;} .edit-box label{font-size:7px; font-weight:700;}
-  .edit-in{height:20px; border:1px solid #e2e8f0; border-radius:3px; padding:0 4px; font-size:8px;}
-  
-  .formula-builder{
-    position:relative !important; left:auto !important; top:auto !important; transform:none !important;
-    border:1px solid #bbf7d0; border-radius:5px; padding:4px; display:flex; flex-direction:column; gap:4px;
-    background:#f0fdf4; width:100%; box-sizing:border-box;
-  }
-  .fb-head{font-size:8px; font-weight:700;} 
-  .fb-ta{width:100%; border:1px solid #bbf7d0; border-radius:3px; padding:3px; font-size:8px; resize:none; box-sizing:border-box;}
-  .fb-ops.all-sym{
-    position:static !important; display:grid !important; grid-template-columns:repeat(3,1fr); gap:6px;
-    width:100% !important; background:transparent !important; border:none !important; box-shadow:none !important;
-  }
-  .fb-ops.all-sym button{
-    position:static !important; height:34px !important; background:white; border:1px solid #cbd5e1;
-    border-radius:8px; font-weight:700; font-size:13px !important; cursor:pointer; touch-action:manipulation;
-  }
-  .fb-sec{display:flex; flex-direction:column; gap:2px; font-size:7px;} 
-  .fb-field{width:100%; min-height:22px; border:1px solid #e5e7eb; border-radius:10px; font-size:7px; background:white; padding:3px 5px; text-align:left;}
-  .savef{height:26px; border:none; border-radius:5px; color:white; font-weight:700; font-size:8px;}
   @media (max-width:480px){
-    .layout.two-top{grid-template-columns: 22% 40% 38%; margin-top:68px; height:calc(100vh - 68px);}
-    .line2{height:auto; padding:3px 4px;}
-    .t-inputs-2{gap:3px; flex-wrap:wrap;}
-    .t-field.small{flex:1 0 60px;}
-    .mod.reduced{min-width:80px !important;}
+    .t-inputs-2{grid-template-columns: 1fr 1fr;}
+    .layout.two-top{grid-template-columns: 24% 40% 36%; margin-top:110px; height:calc(100vh - 110px);}
   }
 </style>

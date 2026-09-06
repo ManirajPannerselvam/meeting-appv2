@@ -51,7 +51,7 @@
 </script>
 
 <div class="messages-container">
-  {#each uniqueMessages as msg, idx (msg.id + '_' + idx)}
+  {#each uniqueMessages as msg (msg.id)}
     {@const tpl = parseTemplate(msg.content || '')}
     {@const loc = parseLocation(msg.content || '')}
     {@const isOwn = msg.is_own ?? msg.sender_id === currentUser?.id}
@@ -117,7 +117,8 @@
 .loc-map-preview img{ width:100%; height:120px; object-fit:cover; border-radius:8px; display:block; }
 .loc-fallback{ padding:30px 10px; text-align:center; color:#8696a0; font-size:13px; background:#1a242c; border-radius:8px; }
 .msg-meta{ display:flex; justify-content:flex-end; align-items:center; gap:4px; font-size:11px; color:#8696a0; margin-top:4px; }
-.msg-tick{ font-size:12px; }.msg-tick.sent,.msg-tick.delivered{ color:#8696a0; }.msg-tick.read{ color:#53bdeb; }.msg-tick.sending{ color:#8696a0; }
+.msg-tick{ font-size:12px; font-weight:600; }.msg-tick.sent{ color:#8696a0; }.msg-tick.delivered{ color:#8696a0; }.msg-tick.read{ color:#53bdeb; }.msg-tick.sending{ color:#8696a0; animation: pulse 1s infinite; }
+@keyframes pulse{0%{opacity:0.5}50%{opacity:1}100%{opacity:0.5}}
 .empty-msg{ display:flex; flex-direction:column; align-items:center; justify-content:center; color:#8696a0; gap:6px; margin-top:80px; }
 .empty-msg div{ font-size:42px; opacity:0.5; }.empty-msg p{ margin:0; }
 @media (max-width:768px){.message-bubble{ max-width:84%; } .location-card{ min-width:200px; max-width:260px; } }

@@ -7,9 +7,12 @@
 
 import type { LayoutServerLoad } from './$types';
 
-export const load: LayoutServerLoad = async ({ locals }) => {
+export const load: LayoutServerLoad = async ({ locals: { safeGetSession }, cookies }) => {
+	const { session, user } = await safeGetSession();
+	
 	return {
-		user: locals.user,
-		session: locals.session
+		user,
+		session,
+		cookies: cookies.getAll() // needed for +layout.ts SSR sync
 	};
 };

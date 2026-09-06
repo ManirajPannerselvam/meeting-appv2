@@ -35,6 +35,7 @@
 	let messagesChannel: any = $state(null);
 	let presenceChannel: any = $state(null);
 	let profileChannel: any = $state(null);
+	let globalChannel: any = $state(null);
 	let templates = $state<any[]>([]);
 	let templateLoading = $state(false);
 	let replyingTo = $state<any>(null);
@@ -61,6 +62,11 @@
 	let bottomTab = $state('chat');
 	let lastSent = $state(0);
 	let sendingLock = $state(false);
+	let contactInvites = $state<any[]>([]);
+	let showInviteModal = $state(false);
+	let selectedInvite = $state<any>(null);
+	let showIncomingModal = $state(false);
+	let selectedIncoming = $state<any>(null);
 
 	function isTemplateMsg(m:any){ return m.content?.includes('__TEMPLATE_DATA__') || m.content?.startsWith('📋'); }
 	function isMeetingMsg(m:any){ return m.content?.includes('__MEETING_DATA__'); }
@@ -100,7 +106,7 @@
 	  if(!msg) return;
 	  const short = msg.content?.split('__')[0]?.slice(0,45) || msg.content?.slice(0,45);
 	  if(msg.group_id){ groups = groups.map(g=> g.id===msg.group_id? {...g, last_message: short, last_message_at: msg.created_at} : g); }
-	  else if(msg.room_id){ contacts = contacts.map(c=> c.room_id===msg.room_id? {...c, last_message: short, last_message_at: msg.created_at} : c); }
+	  else if(msg.room_id){ contacts = contacts.map(c=> c.room_id===msg.room_id? {...c, last_message: short, last_message_at: msg.created_at } : c); }
 	}
 
 	async function handleHeaderAction(action: string){
@@ -125,7 +131,9 @@
 			try{ const { data: prof } = await chatDB.from('profiles').select('avatar_url').eq('id', user.id).maybeSingle(); if(prof?.avatar_url) currentUser = {...currentUser, avatar_url: prof.avatar_url}; }catch{}
 		} else if(data?.user?.id){ currentUser = data.user; }
 		const uid = getCurrentUserId(); if(!uid) return;
-		await Promise.all([loadGroups(), loadContacts(), setupPresence()]); setupProfileLive();
+		await Promise.all([loadGroups(), loadContacts(), setupPresence()]);
+		setupProfileLive();
+		setupGlobalListener();
 	});
 	onDestroy(async () => { if (browser) window.removeEventListener('resize', checkMobile); await cleanupRealtime(); });
 
@@ -137,6 +145,50 @@
 			if(currentUser?.id===p.id){ currentUser = {...currentUser, avatar_url:p.avatar_url}; }
 		}).subscribe();
 	}
+
+	// FIXED GLOBAL LISTENER - NO AUTO READ
+	async function setupGlobalListener(){
+	  if(globalChannel) await chatDB.removeChannel(globalChannel);
+	  const uid = getCurrentUserId(); if(!uid) return;
+	  globalChannel = chatDB.channel('global-'+uid+'-'+Date.now())
+	.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'}, async (payload)=>{
+	    const msg:any = payload.new;
+	    if(msg.sender_id===uid) return;
+	    // check belongs to me
+	    const myRoom = contacts.some(c=> c.room_id===msg.room_id);
+	    const isForMe = msg.receiver_id===uid || myRoom || msg.group_id;
+	    if(!isForMe) return;
+	    if(msg.room_id &&!myRoom && msg.receiver_id!==uid) return;
+
+	    // 1 tick -> 2 tick (delivered) ALWAYS
+	    try{ await chatDB.from('messages').update({status:'delivered', delivered_at: new Date().toISOString()}).eq('id', msg.id).eq('status','sent'); }catch{}
+
+	    const short = msg.content?.split('__')[0]?.slice(0,35) || msg.content?.slice(0,35);
+	    const isOpen = (msg.room_id && msg.room_id===selectedRoomId) || (msg.group_id && msg.group_id===selectedGroupId);
+
+	    contacts = contacts.map(c=>{
+	      if(c.room_id===msg.room_id || c.id===msg.group_id){
+	        return {...c, last_message: short, last_message_at: msg.created_at, unread: isOpen? 0 : (c.unread||0)+1};
+	      }
+	      return c;
+	    });
+
+	    if(isOpen){
+	      if(!messages.some(m=>m.id===msg.id)){
+	        messages = [...messages, {...msg, status:'delivered', is_own:false}];
+	        scrollToBottom();
+	        // mark read only if chat is actually open
+	        setTimeout(()=> markAsRead(), 700);
+	      }
+	    }
+	  })
+	.on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'}, (payload)=>{
+	    const upd:any = payload.new;
+	    // update ticks in current open chat
+	    messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status, delivered_at:upd.delivered_at, read_at:upd.read_at} : m);
+	  }).subscribe();
+	}
+
 	function resizeTo128(file: File): Promise<Blob> {
 		return new Promise((resolve, reject) => {
 			const img = new Image(); const url = URL.createObjectURL(file);
@@ -201,33 +253,71 @@
 	}
 
 	async function loadGroups() { const userId = getCurrentUserId(); if(!userId) return; const { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId).limit(100); groups = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); }
+	
 	async function loadContacts() {
-		const userId = getCurrentUserId(); if(!userId){ contacts = []; return; }
-		let mapped: any[] = [{ id: userId, actual_user_id: userId, name: "You (Saved Messages)", email: currentUser?.email || "You", avatar_url: currentUser?.avatar_url || null, room_id: null, status: 'accepted', isSelf: true, last_message: "Message yourself" }];
-		try{ const { data: rooms } = await chatDB.from("rooms").select("id, user1_id, user2_id").or(`user1_id.eq.${userId},user2_id.eq.${userId}`).limit(100); if(rooms?.length){ for(const r of rooms){ const otherId = r.user1_id === userId? r.user2_id : r.user1_id; if(!otherId || otherId===userId) continue; if(mapped.find(m=>m.id===otherId)) continue; const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", otherId).maybeSingle(); mapped.push({ id: otherId, actual_user_id: otherId, name: prof?.name || prof?.email?.split('@')[0] || "User", email: prof?.email || "", avatar_url: prof?.avatar_url || null, room_id: r.id, status: 'accepted', isSelf: false, last_message: "Tap to chat" }); } } }catch(e){}
-		contacts = mapped;
-		try{
-		  const promises = contacts.filter(c=>c.room_id).map(async c=>{
-		    const { data: last } = await chatDB.from("messages").select("content,created_at").eq("room_id", c.room_id).order("created_at",{ascending:false}).limit(1).maybeSingle();
-		    return { id: c.id, last };
-		  });
-		  const results = await Promise.all(promises);
-		  contacts = contacts.map(c=>{
-		    const r = results.find(x=>x.id===c.id);
-		    if(r?.last) return {...c, last_message: r.last.content?.split('__')[0]?.slice(0,40) || "Tap to chat", last_message_at: r.last.created_at};
-		    return c;
-		  });
-		}catch{}
+	const userId = getCurrentUserId();
+	if(!userId){ contacts = []; return; }
+	const myEmail = (currentUser?.email || data?.user?.email || "").toLowerCase();
+	let mapped: any[] = [{ id: userId, actual_user_id: userId, name: "You (Saved Messages)", email: currentUser?.email || "You", avatar_url: currentUser?.avatar_url || null, room_id: null, status: 'accepted', isSelf: true, last_message: "Message yourself", unread:0 }];
+	try{
+		const { data: rooms } = await chatDB.from("rooms").select("id, user1_id, user2_id").or(`user1_id.eq.${userId},user2_id.eq.${userId}`).limit(100);
+		if(rooms?.length){
+			for(const r of rooms){
+				const otherId = r.user1_id === userId? r.user2_id : r.user1_id;
+				if(!otherId || otherId===userId) continue;
+				if(mapped.find(m=>m.actual_user_id===otherId)) continue;
+				let profName = "User"; let profEmail = ""; let profAvatar = null;
+				try{
+					const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", otherId).maybeSingle();
+					if(prof){ profName = prof.name || prof.email?.split('@')[0] || "User"; profEmail = prof.email || ""; profAvatar = prof.avatar_url || null; } else { profName = otherId.slice(0,8); }
+				}catch{}
+				mapped.push({ id: otherId, actual_user_id: otherId, name: profName, email: profEmail, avatar_url: profAvatar, room_id: r.id, status: 'accepted', isSelf: false, last_message: "Tap to chat", last_message_at: null, unread:0 });
+			}
+		}
+	}catch(e){ console.error("loadRooms error", e) }
+	try{
+		const { data: invites } = await chatDB.from("contact_invites").select("*").eq("invited_by", userId).eq("status","pending").limit(50);
+		contactInvites = invites || [];
+		for(const inv of contactInvites){
+			if(!mapped.find(m=>m.email?.toLowerCase() === inv.email.toLowerCase())){
+				mapped.push({ id: inv.id, actual_user_id: null, name: inv.email.split('@')[0] + " (invite)", email: inv.email, avatar_url: null, room_id: null, status: inv.status, isInvite: true, isOutgoing: true, inviteData: inv, last_message: `⏳ Invite pending`, unread:0 });
+			}
+		}
+	}catch{}
+	try{
+		if(myEmail){
+			const { data: incoming } = await chatDB.from("contact_invites").select("*").ilike("email", myEmail).eq("status","pending").limit(20);
+			for(const inv of incoming||[]){
+				if(mapped.find(m=>m.actual_user_id===inv.invited_by)) continue;
+				const { data: inviterProf } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", inv.invited_by).maybeSingle();
+				mapped.push({ id: `incoming_${inv.id}`, actual_user_id: inv.invited_by, name: inviterProf?.name || inviterProf?.email?.split('@')[0] || "New Invite", email: inviterProf?.email || "", avatar_url: inviterProf?.avatar_url || null, room_id: null, status: 'incoming', isIncomingInvite: true, inviteData: inv, inviterProfile: inviterProf, last_message: `📩 Tap to Accept`, unread:0 });
+			}
+		}
+	}catch(e){}
+
+	for(let c of mapped){
+	  if(c.room_id){
+	    try{
+	      const { data: last } = await chatDB.from("messages").select("content,created_at").eq("room_id", c.room_id).order("created_at",{ascending:false}).limit(1).maybeSingle();
+	      if(last){ c.last_message = last.content?.split('__')[0]?.slice(0,35) || last.content?.slice(0,35); c.last_message_at = last.created_at; }
+	      const { count } = await chatDB.from("messages").select("id",{count:'exact', head:true}).eq("room_id", c.room_id).neq("sender_id", userId).neq("status","read");
+	      c.unread = count||0;
+	    }catch{ c.unread=0; }
+	  }
 	}
+	contacts = mapped;
+}
+
 	async function setupPresence() { const userId = getCurrentUserId(); if(!userId) return; if(presenceChannel) await chatDB.removeChannel(presenceChannel); presenceChannel = chatDB.channel("online-users", { config: { presence: { key: userId } } }); presenceChannel.on("presence", { event: "sync" }, () => { onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); }).subscribe(async (s) => { if(s==="SUBSCRIBED") await presenceChannel!.track({ user_id: userId }); }); }
 	function isUserOnline(id: string){ return onlineUsers.has(id); }
-	async function cleanupRealtime(){ const ch = [messagesChannel, presenceChannel, profileChannel].filter(Boolean); messagesChannel = null; presenceChannel = null; profileChannel = null; if(ch.length) await Promise.allSettled(ch.map((c:any) => chatDB.removeChannel(c))); }
+	async function cleanupRealtime(){ const ch = [messagesChannel, presenceChannel, profileChannel, globalChannel].filter(Boolean); messagesChannel = null; presenceChannel = null; profileChannel = null; globalChannel = null; if(ch.length) await Promise.allSettled(ch.map((c:any) => chatDB.removeChannel(c))); }
 
+	// FIXED - loadMessages only delivered, not read
 	async function loadMessages({ roomId, groupId }: any){
 	  if(isLoadingMessages) return; isLoadingMessages=true;
 	  try{
 	    const uid = getCurrentUserId();
-	    let query = chatDB.from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status,deleted_by").order("created_at", {ascending:false}).limit(100);
+	    let query = chatDB.from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status,delivered_at,read_at,deleted_by").order("created_at", {ascending:false}).limit(100);
 	    if(groupId) query = query.eq("group_id", groupId);
 	    else if(roomId) query = query.eq("room_id", roomId);
 	    else query = query.eq("sender_id", uid).eq("receiver_id", uid);
@@ -236,10 +326,30 @@
 	    else {
 	      const seen = new Set();
 	      messages = (data?? []).reverse().filter((m:any)=>!(m.deleted_by||[]).includes(uid)).filter((m:any)=>{ if(!m.id) return true; if(seen.has(m.id)) return false; seen.add(m.id); return true; }).map((m:any)=>({...m, is_own:m.sender_id===uid}));
+	      await markDelivered();
+	      // read after user actually sees messages
+	      setTimeout(()=> markAsRead(), 900);
 	    }
 	    await subscribeToMessages({ roomId, groupId });
 	    scrollToBottom();
 	  } finally { isLoadingMessages=false; }
+	}
+
+	async function markDelivered(){
+	  const uid = getCurrentUserId();
+	  const toMark = messages.filter((m:any)=> m.sender_id!== uid && m.status === 'sent');
+	  for(const m of toMark){
+	    try{ await chatDB.from("messages").update({ status: 'delivered', delivered_at: new Date().toISOString() }).eq('id', m.id).eq('status','sent'); messages = messages.map((x:any)=> x.id===m.id? {...x, status:'delivered'} : x); }catch{}
+	  }
+	}
+	async function markAsRead(){
+	  const uid = getCurrentUserId(); if(!uid) return;
+	  if(!selectedRoomId &&!selectedGroupId) return;
+	  const toMark = messages.filter((m:any)=> m.sender_id!== uid && m.status!== 'read');
+	  if(!toMark.length) return;
+	  for(const m of toMark){ try{ await chatDB.from("messages").update({ status: 'read', read_at: new Date().toISOString() }).eq('id', m.id).neq('status','read'); }catch{} }
+	  messages = messages.map((m:any)=> m.sender_id!== uid? {...m, status:'read', read_at: new Date().toISOString()} : m);
+	  if(selectedRoomId) contacts = contacts.map(c=> c.room_id===selectedRoomId? {...c, unread:0} : c);
 	}
 
 	async function subscribeToMessages({ roomId, groupId }: any){
@@ -251,9 +361,17 @@
 	    if((newMsg.deleted_by||[]).includes(uid)) return;
 	    if(messages.some(m=>m.id===newMsg.id)) return;
 	    if(newMsg.sender_id===uid){ messages = messages.filter((m:any) =>!(m.id.startsWith('temp_') && m.content===newMsg.content)); }
+	    else {
+	      // delivered when receiving in open chat
+	      setTimeout(async ()=>{ try{ await chatDB.from("messages").update({ status: 'delivered' }).eq('id', newMsg.id).eq('status','sent'); }catch{} markAsRead(); }, 300);
+	    }
 	    messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}];
 	    updateLastMessageInList(newMsg);
 	    scrollToBottom();
+	  })
+	.on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : roomId? `room_id=eq.${roomId}` : undefined }, (payload)=>{
+	    const updated = payload.new as any;
+	    messages = messages.map((m:any)=> m.id===updated.id? {...m, status: updated.status, delivered_at: updated.delivered_at, read_at: updated.read_at, is_own: m.sender_id===getCurrentUserId()} : m);
 	  }).subscribe();
 	}
 
@@ -266,8 +384,7 @@
 	async function sendMessage(eventOrContent: any = null) {
 	  if(sendingLock) return;
 	  if(Date.now() - lastSent < 800) return;
-	  let content = "";
-	  let files: File[] = [];
+	  let content = ""; let files: File[] = [];
 	  if (typeof eventOrContent === 'string') content = eventOrContent;
 	  else if (eventOrContent?.detail?.content!== undefined) { content = eventOrContent.detail.content; files = eventOrContent.detail.files || []; }
 	  else if (eventOrContent?.content!== undefined) { content = eventOrContent.content; files = eventOrContent.files || []; }
@@ -279,7 +396,7 @@
 	  const myId = getCurrentUserId(); if (!myId) return;
 	  sendingLock = true; lastSent = Date.now();
 	  const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`;
-	  const optimistic = { id: tempId, content: text, sender_id: myId, room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId, created_at: new Date().toISOString(), status: 'sending', is_own: true };
+	  const optimistic = { id: tempId, content: text, sender_id: myId, room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId, created_at: new Date().toISOString(), status: 'sent', is_own: true };
 	  messages = [...messages, optimistic];
 	  updateLastMessageInList(optimistic);
 	  scrollToBottom();
@@ -288,7 +405,7 @@
 	    if(selectedGroupId) payload.room_id = null;
 	    if(selectedRoomId) payload.group_id = null;
 	    if(!selectedRoomId &&!selectedGroupId){ payload.room_id = null; payload.group_id = null; }
-	    const { data: inserted, error } = await chatDB.from('messages').insert(payload).select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status").single();
+	    const { data: inserted, error } = await chatDB.from('messages').insert(payload).select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status,delivered_at,read_at").single();
 	    if (error) throw error;
 	    messages = messages.map((m:any) => m.id === tempId? {...inserted, is_own: true } : m);
 	    updateLastMessageInList(inserted);
@@ -311,11 +428,16 @@
 
 	async function handleContactLoad(contact:any){
 	  if(!contact) return;
+	  if(contact.isOutgoing){ selectedInvite = contact.inviteData; showInviteModal = true; return; }
+	  if(contact.isIncomingInvite){ selectedIncoming = contact; showIncomingModal = true; return; }
 	  const currentUserId = getCurrentUserId(); const contactUserId = contact.actual_user_id || contact.id; if(!contactUserId) return;
 	  if(contactUserId === currentUserId){ selectedRoomId = null; selectedGroupId = null; selectedGroup = null; selectedContact = contact; await loadMessages({roomId:null, groupId:null}); return; }
 	  let roomId = contact.room_id || null;
 	  if(!roomId){ roomId = await getOrCreateRoom(contact.actual_user_id||contact.id); if(roomId){ contacts = contacts.map(c=> c.id===contact.id? {...c, room_id: roomId} : c); } }
-	  if(roomId){ selectedRoomId = roomId; selectedGroupId = null; selectedGroup = null; selectedContact = contact; await loadMessages({roomId, groupId:null}); }
+	  if(roomId){
+	    contacts = contacts.map(c=> c.room_id===roomId? {...c, unread:0} : c);
+	    selectedRoomId = roomId; selectedGroupId = null; selectedGroup = null; selectedContact = contact; await loadMessages({roomId, groupId:null});
+	  }
 	}
 
 	function onSelectGroup(group:any){ selectedContact=null; selectedRoomId=null; selectedGroup={...group}; selectedGroupId=group.id; loadGroupDetails(group.id); }
@@ -331,8 +453,39 @@
 		showForwardModal = false; forwardMessage = null;
 	}
 	function handleBackToList(){ loadContacts(); loadGroups(); selectedContact = null; selectedGroup = null; selectedRoomId = null; selectedGroupId = null; messages = []; chatMode='chat'; if(messagesChannel) chatDB.removeChannel(messagesChannel); }
-	async function handleInvite(event: any){ const { inviteId, action }=event.detail; if(!['accepted','rejected'].includes(action)) return; await chatDB.from('contact_invites').update({status:action}).eq('id',inviteId); await loadContacts(); }
-	async function createContact(){ if(!contactEmail.trim()) return; const emailRegex=/^[^\s@]+@[^\s@]+\.[^\s@]+$/; if(!emailRegex.test(contactEmail.trim())){ alert("Invalid email"); return; } invitingUser=true; try{ const email=contactEmail.trim().toLowerCase(); await chatDB.from('contact_invites').insert({email, invited_by:getCurrentUserId(), status:'pending', token:crypto.randomUUID()}); showContactForm=false; contactEmail=""; await loadContacts(); } finally{ invitingUser=false; } }
+
+	async function handleInvite(event: any){
+		const { inviteId, action }=event.detail;
+		if(!['accepted','rejected'].includes(action)) return;
+		await chatDB.from('contact_invites').update({status:action}).eq('id',inviteId);
+		if(action==='accepted'){
+			const inv = contactInvites.find(i=>i.id===inviteId) || contacts.find(c=>c.inviteData?.id===inviteId)?.inviteData;
+			if(inv) await getOrCreateRoom(inv.invited_by);
+		}
+		await loadContacts();
+	}
+
+	async function acceptIncoming(){
+		if(!selectedIncoming) return;
+		const inv = selectedIncoming.inviteData;
+		await chatDB.from('contact_invites').update({status:'accepted'}).eq('id', inv.id);
+		const roomId = await getOrCreateRoom(inv.invited_by);
+		showIncomingModal = false;
+		await loadContacts();
+		alert("Accepted! Chat created");
+		if(roomId){
+			const c = contacts.find(x=>x.actual_user_id===inv.invited_by);
+			if(c) await handleContactLoad({...c, room_id: roomId});
+		}
+	}
+	async function rejectIncoming(){
+		if(!selectedIncoming) return;
+		await chatDB.from('contact_invites').update({status:'rejected'}).eq('id', selectedIncoming.inviteData.id);
+		showIncomingModal = false;
+		await loadContacts();
+	}
+
+	async function createContact(){ if(!contactEmail.trim()) return; const emailRegex=/^[^\s@]+@[^\s@]+\.[^\s@]+$/; if(!emailRegex.test(contactEmail.trim())){ alert("Invalid email"); return; } invitingUser=true; try{ const email=contactEmail.trim().toLowerCase(); await chatDB.from('contact_invites').insert({email, invited_by:getCurrentUserId(), status:'pending', token:crypto.randomUUID()}); showContactForm=false; contactEmail=""; await loadContacts(); alert("Invite sent - Pending"); } finally{ invitingUser=false; } }
 	async function createGroup(){ const clean = sanitize(groupName); if(!clean) return; if(clean.length<3){ alert("Min 3 chars"); return; } const { data: g }=await chatDB.from("chat_groups").insert({name:clean, created_by:getCurrentUserId()}).select().single(); if(g){ await chatDB.from("chat_group_members").insert({group_id:g.id, user_id:getCurrentUserId()}); groupName=""; showGroupForm=false; await loadGroups(); } }
 	function goBottom(tab:string){ bottomTab=tab; if(tab==='dashboard' && browser) window.location.href='/dashboard'; if(tab==='report' && browser) window.location.href='/reports'; if(tab==='user' && browser) window.location.href='/settings'; }
 </script>
@@ -394,6 +547,12 @@
 {#if showTemplateModal}<TemplatePopup templates={templates} loading={templateLoading} on:close={()=>showTemplateModal=false} on:use={handleUseTemplate} on:new={handleCreateTemplate} on:create={handleCreateTemplate} on:deleted={(e)=>{ templates=templates.filter(t=>t.id!==e.detail.template.id); }} />{/if}
 {#if showTemplateForm && selectedTemplate}<div style="position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);"><TemplateForm template={selectedTemplate} on:close={()=>{ showTemplateForm=false; selectedTemplate=null; }} on:submit={sendTemplateReport} /></div>{/if}
 {#if showDetailModal && detailData}<div class="detail-bg"><button class="modal-bg-btn" onclick={()=>showDetailModal=false}></button><div class="detail-modal"><div class="detail-header"><h3>📋 {detailData.template_name}</h3><button class="detail-close" onclick={()=>showDetailModal=false}>✕</button></div><div class="detail-body">{#each Object.entries(detailData.values) as [k, v]}<div class="detail-row"><span class="d-label">{k.replace(/_/g,' ')}</span><b class="d-value">{String(v||'-')}</b></div>{/each}</div><div class="detail-actions"><button class="btn-secondary" onclick={()=>showDetailModal=false}>Close</button></div></div></div>{/if}
+{#if showInviteModal && selectedInvite}
+<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showInviteModal=false}></button><div class="modal" style="width:440px;"><h3>📩 Invite Details - {selectedInvite.email}</h3><div style="background:#2a3942; padding:14px; border-radius:10px; display:flex; flex-direction:column; gap:10px;"><div style="display:flex; justify-content:space-between;"><span style="color:#8696a0;">Email:</span><b style="color:#e9edef;">{selectedInvite.email}</b></div><div style="display:flex; justify-content:space-between;"><span style="color:#8696a0;">Status:</span><b style="color:#fbbf24;">{selectedInvite.status}</b></div></div><div class="modal-btns"><button class="btn-secondary" onclick={()=>showInviteModal=false}>Close</button><button class="btn-primary" onclick={async ()=>{ await chatDB.from('contact_invites').delete().eq('id', selectedInvite.id); showInviteModal=false; await loadContacts(); }}>Delete</button></div></div></div>
+{/if}
+{#if showIncomingModal && selectedIncoming}
+<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showIncomingModal=false}></button><div class="modal" style="width:440px;"><h3>📩 New Invite</h3><div style="background:#2a3942; padding:14px; border-radius:10px; display:flex; flex-direction:column; gap:10px; align-items:center;"><img src={selectedIncoming.avatar_url || `https://ui-avatars.com/api/?name=${selectedIncoming.name}`} style="width:64px;height:64px;border-radius:50%;" alt="avatar" /><b style="color:#e9edef; font-size:18px;">{selectedIncoming.name}</b><span style="color:#8696a0; font-size:13px;">{selectedIncoming.email}</span></div><div class="modal-btns"><button class="btn-secondary" onclick={rejectIncoming}>Reject</button><button class="btn-primary" onclick={acceptIncoming}>Accept</button></div></div></div>
+{/if}
 
 <style>
 	.main-container{display:flex;height:100dvh;max-height:100dvh;width:100vw;background:#111b21;overflow:hidden;font-family:Inter,Segoe UI,sans-serif;}

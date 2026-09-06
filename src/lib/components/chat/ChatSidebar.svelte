@@ -24,7 +24,7 @@
   let filteredContacts = $derived.by(()=>{
     if(!search.trim()) return contacts;
     const s = search.toLowerCase();
-    return contacts.filter((c:any)=> c.name?.toLowerCase().includes(s) || c.email?.toLowerCase().includes(s))
+    return contacts.filter((c:any)=> c.name?.toLowerCase().includes(s) || c.email?.toLowerCase().includes(s) || c.last_message?.toLowerCase().includes(s))
   });
   let filteredGroups = $derived.by(()=>{
     if(!search.trim()) return groups;
@@ -36,11 +36,14 @@
     let list = [...filteredContacts];
     let selfIdx = list.findIndex((c:any)=>c.isSelf);
     if(selfIdx>0){ const self=list.splice(selfIdx,1)[0]; list.unshift(self); }
-    if(activeFilter==='Unread') list=list.filter((c:any)=> c.unread_count>0);
+    if(activeFilter==='Unread') list=list.filter((c:any)=> (c.unread||c.unread_count||0)>0);
     if(activeFilter==='Favorites') list=list.filter((c:any)=> c.isFavorite || c.isPinned);
     if(selfIdx===-1 && activeFilter==='All'){
       list.sort((a:any,b:any)=>{
         if(a.isSelf) return -1; if(b.isSelf) return 1;
+        const at = a.last_message_at? new Date(a.last_message_at).getTime():0;
+        const bt = b.last_message_at? new Date(b.last_message_at).getTime():0;
+        if(bt!==at) return bt-at;
         if(a.status==='accepted' && b.status!=='accepted') return -1;
         if(b.status==='accepted' && a.status!=='accepted') return 1;
         return 0;
@@ -51,7 +54,7 @@
   let displayGroups = $derived.by(()=>{
     if(activeFilter==='All') return filteredGroups;
     if(activeFilter==='Groups') return filteredGroups;
-    if(activeFilter==='Unread') return filteredGroups.filter((g:any)=> g.unread_count>0);
+    if(activeFilter==='Unread') return filteredGroups.filter((g:any)=> (g.unread||g.unread_count||0)>0);
     return [];
   });
 
@@ -62,7 +65,6 @@
     return { destroy() { document.removeEventListener('mousedown', handle, true); } };
   }
 
-  // FIXED - NOW SENDS {detail: c} TO MATCH PAGE
   function handleContactClick(c:any, e: MouseEvent){
     e.stopPropagation();
     if(showDeleteMenu){ showDeleteMenu=null; return; }
@@ -88,11 +90,14 @@
     input.click();
   }
   function getLastMessage(c:any){
-    if(c.isSelf) return 'Message yourself';
-    if(c.last_message) return c.last_message.slice(0,32);
+    if(c.isSelf) return c.last_message || 'Message yourself';
+    if(c.isInvite || c.isOutgoing) return c.last_message || '⏳ Invite pending';
+    if(c.isIncomingInvite) return '📩 Tap to Accept';
+    if(c.last_message) return c.last_message.slice(0,38);
     if(c.email) return c.email.slice(0,26);
     return 'Tap to chat';
   }
+  function getUnread(c:any){ return c.unread?? c.unread_count?? 0; }
 </script>
 
 <div class="sidebar">
@@ -133,7 +138,7 @@
         <div class="avatar group"><span>👥</span></div>
         <div class="info">
           <div class="top"><span class="name">{g.name}</span><span class="time">{g.last_time||''}</span></div>
-          <div class="bottom"><span class="sub">{g.last_message || 'Tap to open group'}</span>{#if g.unread_count>0}<span class="badge">{g.unread_count}</span>{/if}</div>
+          <div class="bottom"><span class="sub">{g.last_message || 'Tap to open group'}</span>{#if getUnread(g)>0}<span class="badge">{getUnread(g)}</span>{/if}</div>
         </div>
       </div>
     {/each}
@@ -158,7 +163,7 @@
                 <button class="mini-reject" onclick={(e)=>{ e.stopPropagation(); onHandleInvite({detail:{inviteId:c.id, action:'rejected'}}) }}>Reject</button>
               </span>
             {:else}<span class="sub">{getLastMessage(c)}</span>{/if}
-            {#if c.unread_count>0 && c.status!=='pending' && c.status!=='invite_received'}<span class="badge">{c.unread_count>99?'99+':c.unread_count}</span>{/if}
+            {#if getUnread(c)>0 && c.status!=='pending' && c.status!=='invite_received' &&!c.isSelf}<span class="badge">{getUnread(c)>99?'99+':getUnread(c)}</span>{/if}
           </div>
         </div>
         {#if showDeleteMenu===c.id}
