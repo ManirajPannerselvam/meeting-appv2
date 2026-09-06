@@ -59,12 +59,78 @@
   let editFormula = "{enter_output} ÷ {enter_input} × 100";
   let savedCount = 0; let isDirty = true; let toast = ""; let showSavedPopup = false; let savedTemplates: any[] = [];
   let newOptionText = "";
+  let editId:string|null = null;
+  let isEditMode = false;
 
   onMount(async ()=>{
     creatingTime = new Date(); setInterval(()=> creatingTime = new Date(), 1000);
     try{ const s=localStorage.getItem("template_theme_id"); if(s && /^[a-z]+$/.test(s)){ const f=themes.find(t=>t.id===s); if(f) selectedTheme=f; } }catch{}
     loadSaved();
+
+    // EDIT MODE - LOAD EXISTING DESIGN
+    try{
+      const params = new URLSearchParams(window.location.search);
+      let idFromUrl = params.get('id');
+      let editRaw = localStorage.getItem("edit_template");
+      let editObj:any = null;
+      if(editRaw){ try{ editObj = JSON.parse(editRaw); }catch{} }
+
+      if(idFromUrl) editId = idFromUrl;
+      else if(editObj?.id) editId = editObj.id;
+
+      if(editId){
+        let all = JSON.parse(localStorage.getItem("templates")||"[]");
+        let found = all.find((t:any)=> String(t.id)===String(editId)) || editObj;
+        // try Supabase if not in local
+        if(!found && isValidUUID(editId)){
+          try{
+            const { data } = await supabaseTemplates.from('templates').select('*').eq('id', editId).single();
+            if(data) found = data;
+          }catch{}
+        }
+        if(found){
+          isEditMode = true;
+          templateName = found.name || found.template_name || "";
+          templateCode = found.code || found.template_code || found.template_code || "";
+          category = found.category || found.department || found.data?.department || "Production";
+          if(found.theme){
+            const th = themes.find(t=>t.id===found.theme);
+            if(th) selectedTheme = th;
+          } else if(found.theme_color){
+            const th = themes.find(t=>t.color===found.theme_color);
+            if(th) selectedTheme = th;
+          }
+          let srcFields = found.fields || found.placements || found.data?.fields || [];
+          if(srcFields.length){
+            placed = srcFields.map((f:any,i:number)=>({
+              id: f.id || uuid(),
+              defId: f.defId || "",
+              label: sanitizeText(f.label || f.name || "Field"),
+              field_name: sanitizeFieldName(f.field_name || f.name || f.label),
+              type: (f.type as FieldType) || "text",
+              metric: f.metric,
+              options: Array.isArray(f.options)? f.options.map((o:any)=>sanitizeText(String(o))) : [],
+              formula: (f.formula||"").slice(0,200),
+              x: typeof f.x==='number'? f.x : (i*5)%(cols-5),
+              y: typeof f.y==='number'? f.y : Math.floor(i/2)*3,
+              w: f.w || 4.5,
+              h: f.h || 2.2,
+              color: f.color || "#111827",
+              border: f.border || f.color || "#111827",
+              required: f.required
+            }));
+            selectedId = placed[0]?.id || "";
+            if(selectedId){
+              let sel = placed.find(p=>p.id===selectedId);
+              if(sel?.formula) editFormula = sel.formula;
+            }
+            isDirty = false;
+          }
+        }
+      }
+    }catch(e){ console.error("Edit load error", e); }
   });
+
   function loadSaved(){ try{ let t=JSON.parse(localStorage.getItem("templates")||"[]"); savedTemplates = Array.isArray(t)? t.slice(0,100):[]; savedCount=t.length; }catch{ savedCount=0; } }
 
   function quickAdd(def:FieldDef){
@@ -148,20 +214,75 @@
     if(!cleanName || cleanName.length < 2){ toast="❌ Enter Template Name *"; setTimeout(()=>toast="",2500); return; }
     if(!cleanCode || cleanCode.length < 2){ toast="❌ Enter Template Code *"; setTimeout(()=>toast="",2500); return; }
     templateName=cleanName; templateCode=cleanCode;
+
     let all:any[]=[]; try{ all=JSON.parse(localStorage.getItem("templates")||"[]"); }catch{ all=[]; }
-    let owner=getTemplateOwner(); let realIdStr=owner.owner_id; let realEmail=sanitizeText(owner.owner_name||owner.owner_email||"user"); let realUUID:string|null=null;
-    try{ const { data:{user} }=await supabaseTemplates.auth.getUser(); if(user){ realEmail=sanitizeText(user.email||user.id); realIdStr=user.email||user.id; if(isValidUUID(user.id)) realUUID=user.id; } }catch{}
-    const newId=crypto.randomUUID();
-    const normalized=placed.map(p=>({ ...p, label:sanitizeText(p.label), field_name:sanitizeFieldName(p.field_name||p.label), name:sanitizeFieldName(p.field_name||p.label), formula:(p.formula||"").slice(0,200) }));
-    let obj={ id:newId, name:cleanName, code:cleanCode, template_code:cleanCode, t_code:cleanCode, category:sanitizeText(category), theme:selectedTheme.id, theme_color:selectedTheme.color, fields:normalized, data:{fields:normalized}, owner_id:realIdStr, owner_name:realEmail, createdAt:new Date().toISOString() };
-    all=[obj,...all].slice(0,100); localStorage.setItem("templates",JSON.stringify(all)); localStorage.setItem("template_theme_id",selectedTheme.id);
+    let owner=getTemplateOwner(); let realEmail=sanitizeText(owner.owner_name||owner.owner_email||"user"); let realUUID:string|null=null;
+    try{ 
+      const { data:{user} }=await supabaseTemplates.auth.getUser(); 
+      if(user){ 
+        realEmail=sanitizeText(user.email||user.id); 
+        if(isValidUUID(user.id)) realUUID=user.id; 
+      } 
+    }catch{}
+
+    const normalized=placed.map(p=>({ 
+      ...p, 
+      label:sanitizeText(p.label), 
+      field_name:sanitizeFieldName(p.field_name||p.label), 
+      name:sanitizeFieldName(p.field_name||p.label), 
+      formula:(p.formula||"").slice(0,200) 
+    }));
+
+    let finalId = editId || crypto.randomUUID();
+    let obj={ id:finalId, name:cleanName, code:cleanCode, template_code:cleanCode, category:sanitizeText(category), theme:selectedTheme.id, theme_color:selectedTheme.color, fields:normalized, data:{fields:normalized}, owner_name:realEmail, createdAt:new Date().toISOString() };
+
+    if(isEditMode && editId){
+      all = all.map((t:any)=> String(t.id)===String(editId)? {...t, ...obj, id:editId, createdAt:t.createdAt||obj.createdAt} : t);
+      if(!all.find((t:any)=>String(t.id)===String(editId))) all=[obj,...all];
+    } else {
+      all=[obj,...all];
+    }
+    all = all.slice(0,100); 
+    localStorage.setItem("templates",JSON.stringify(all)); 
+    localStorage.setItem("template_theme_id",selectedTheme.id);
+    localStorage.removeItem("edit_template");
     savedTemplates=all; savedCount=all.length; isDirty=false;
-    try{ const baseData={ fields:normalized, department:sanitizeText(category), owner_id:realIdStr, owner_name:realEmail, theme:selectedTheme.id, theme_color:selectedTheme.color, code:cleanCode, t_code:cleanCode };
-      let payload:any={ id:newId, name:cleanName, template_code:cleanCode, data:baseData }; if(realUUID) payload.owner_id=realUUID;
-      let {error}=await supabaseTemplates.from('templates').insert(payload); if(error){ delete payload.owner_id; await supabaseTemplates.from('templates').insert(payload); }
-      toast=`✅ Saved ${cleanCode} 🔒`;
-    }catch(e:any){ toast=`Saved locally`; }
-    setTimeout(()=>toast="",2500); showSavedPopup=true;
+
+    const baseData={ fields:normalized, department:sanitizeText(category), owner_name:realEmail, theme:selectedTheme.id, theme_color:selectedTheme.color, code:cleanCode };
+
+    try{
+      if(isEditMode && editId && isValidUUID(editId)){
+        let payload:any={ name:cleanName, template_code:cleanCode, data:baseData };
+        if(realUUID) payload.owner_id=realUUID;
+        const { error } = await supabaseTemplates.from('templates').update(payload).eq('id', editId);
+        if(error) throw error;
+        toast=`✅ Updated ${cleanCode}`;
+        setTimeout(()=>toast="",2500); showSavedPopup=true; return;
+      }
+      let payload:any={ name:cleanName, template_code:cleanCode, data:baseData };
+      if(realUUID) payload.owner_id=realUUID;
+      const { data, error } = await supabaseTemplates.from('templates').insert(payload).select();
+      if(error) throw error;
+      toast=`✅ Saved ${cleanCode} to DB`;
+      setTimeout(()=>toast="",2500); showSavedPopup=true; return;
+    }catch(e:any){ 
+      try{
+        let payload2:any={ name:cleanName, code:cleanCode, data:baseData };
+        if(realUUID) payload2.owner_id=realUUID;
+        if(isEditMode && editId && isValidUUID(editId)){
+          const { error } = await supabaseTemplates.from('templates').update(payload2).eq('id', editId);
+          if(error) throw error;
+        } else {
+          const { error } = await supabaseTemplates.from('templates').insert(payload2).select();
+          if(error) throw error;
+        }
+        toast=`✅ ${isEditMode? 'Updated' : 'Saved'} ${cleanCode} to DB`;
+        setTimeout(()=>toast="",2500); showSavedPopup=true; return;
+      }catch(e2:any){
+        toast=`⚠️ Saved locally ${isEditMode? '(Updated)' : ''}: ${e2.message?.slice(0,50)||''}`; 
+        setTimeout(()=>toast="",4000);
+      }
+    }
   }
   function handleBack(){ if(isDirty && !confirm("Not Saved! Leave?")) return; history.back(); }
   function pickTheme(t:any){ if(!t||!/^[a-z]+$/.test(t.id)) return; selectedTheme=t; localStorage.setItem("template_theme_id",t.id); isDirty=true; }
@@ -171,12 +292,13 @@
   <div class="top-line line1">
     <div class="tl1">
       <button class="back" on:click={handleBack}>←</button>
+      {#if isEditMode}<span class="saved" style="background:#0ea5e9; color:white; padding:2px 6px; border-radius:4px;">EDIT: {editId?.slice(0,6)}</span>{/if}
       {#if isDirty}<span class="dirty">● Not Saved</span>{:else}<span class="saved">✓ Saved</span>{/if}
     </div>
     <div class="tr1">
       <span class="count-badge">Saved: {savedCount} ▼</span>
       <button class="preview-btn">💬 Chat</button>
-      <button class="save" style="background:{selectedTheme.color}; opacity:{isValid?1:0.5}" disabled={!isValid} on:click={saveTemplate}>{isValid? 'Save to DB' : 'Enter Name/Code *'}</button>
+      <button class="save" style="background:{selectedTheme.color}; opacity:{isValid?1:0.5}" disabled={!isValid} on:click={saveTemplate}>{isValid? (isEditMode? 'Update to DB' : 'Save to DB') : 'Enter Name/Code *'}</button>
     </div>
   </div>
   <div class="top-line line2">
@@ -227,13 +349,16 @@
               <button class="x" on:click|stopPropagation={()=>deleteField(p.id)}>✕</button>
             </div>
           {/each}
+          {#if placed.length===0}
+            <div class="empty-board">Board empty - add fields from left</div>
+          {/if}
         </div>
       </div>
-      <div class="creating-info" style="background:{selectedTheme.light}; border-top:1px solid {selectedTheme.color}"><b>📅 {creatingTime.toLocaleString()}</b><span style="color:{selectedTheme.color}; font-weight:800;">{selectedTheme.color}</span></div>
+      <div class="creating-info" style="background:{selectedTheme.light}; border-top:1px solid {selectedTheme.color}"><b>📅 {creatingTime.toLocaleString()}</b><span style="color:{selectedTheme.color}; font-weight:800;">{isEditMode? 'EDIT MODE' : selectedTheme.color}</span></div>
     </div>
 
     <div class="preview-wrap linked onebyone" style="border-color:{selectedTheme.color}">
-      <div class="preview-head">◉ Preview - {selectedTheme.name}</div>
+      <div class="preview-head">◉ Preview - {selectedTheme.name} {isEditMode? '(Editing)':''}</div>
       <div class="preview-white">
         {#each placed as p (p.id)}
           <div class="p-preview-item" style="border-left:3px solid {p.border}">
@@ -304,41 +429,42 @@
 <style>
   :global(body){margin:0; font-family:system-ui; background:var(--bg, #f8fafc) !important; color:var(--text, #111827) !important;}
   :global(html){background:var(--bg, #f8fafc) !important;}
-  .top-fixed.two-line{position:fixed; top:0; left:0; right:0; z-index:1000; background:var(--card, white); border-bottom:1px solid var(--border, #e5e7eb); display:flex; flex-direction:column; gap:0;}
-  .top-line{display:flex; justify-content:space-between; align-items:center; padding:5px 8px;}
-  .line1{background:var(--bg, #f8fafc); border-bottom:1px solid var(--border, #f1f5f9); height:36px;}
-  .line2{background:var(--card, white); min-height:52px; height:auto; padding:8px 10px; overflow:visible; display:flex; align-items:center;}
+  .top-fixed.two-line{position:fixed; top:0; left:0; right:0; z-index:1000; background:white; border-bottom:1px solid #e5e7eb; display:flex; flex-direction:column; gap:0;}
+  .top-line{display:flex; justify-content:space-between; align-items:center; padding:4px 8px;}
+  .line1{background:#f8fafc; border-bottom:1px solid #f1f5f9; height:32px; min-height:32px;}
+  .line2{background:white; min-height:46px; height:auto; padding:6px 10px 8px 10px; overflow:visible; display:flex; align-items:center;}
   .tl1{display:flex; gap:6px; align-items:center;} .tr1{display:flex; gap:4px; align-items:center;}
-  .back{width:26px; height:26px; border:none; background:var(--bg, #f1f5f9); border-radius:6px; color:var(--text); cursor:pointer; font-weight:800;}
+  .back{width:26px; height:26px; border:none; background:#f1f5f9; border-radius:6px; cursor:pointer; font-weight:800;}
   .dirty{font-size:9px; color:#ef4444; font-weight:700;} .saved{font-size:9px; color:#16a34a;}
   .count-badge{background:#111827; color:white; padding:0 8px; height:24px; border-radius:10px; font-size:9px; font-weight:700; display:flex; align-items:center;}
-  .preview-btn{height:24px; border:1px solid var(--border, #e5e7eb); background:var(--card, white); color:var(--text); border-radius:6px; font-size:9px; padding:0 8px; cursor:pointer; font-weight:700;}
-  .save{height:26px; border:none; border-radius:6px; color:white; font-weight:800; font-size:9px; padding:0 10px; cursor:pointer; transition:opacity 0.2s;}
-  .save:disabled{cursor:not-allowed;}
-  .t-inputs-2{display:grid; grid-template-columns: 1.4fr 0.9fr 1fr 1fr; gap:10px; align-items:end; width:100%;}
-  .t-field{display:flex; flex-direction:column; gap:4px; min-width:0;}
-  .t-field label{font-size:10px; font-weight:800; color:#111827; text-transform:uppercase; white-space:nowrap; line-height:1; letter-spacing:0.3px;}
+  .preview-btn{height:24px; border:1px solid #e5e7eb; background:white; border-radius:6px; font-size:9px; padding:0 8px; cursor:pointer; font-weight:700;}
+  .save{height:26px; border:none; border-radius:6px; color:white; font-weight:800; font-size:9px; padding:0 10px; cursor:pointer;}
+  .save:disabled{opacity:0.5; cursor:not-allowed;}
+  .t-inputs-2{display:grid; grid-template-columns: 1.4fr 0.9fr 1fr 1fr; gap:8px; align-items:end; width:100%;}
+  .t-field{display:flex; flex-direction:column; gap:2px; min-width:0;}
+  .t-field label{font-size:9px; font-weight:800; color:#111827; text-transform:uppercase; white-space:nowrap; line-height:1; letter-spacing:0.2px; margin-bottom:1px;}
   .t-field label.required::after{content:' *'; color:#ef4444; font-weight:900;}
-  .t-field input, .t-field select{height:30px; border:1.5px solid #cbd5e1; border-radius:6px; padding:0 10px; font-size:12px; width:100%; min-width:0; box-sizing:border-box; background:#ffffff !important; color:#111827 !important; font-weight:700 !important;}
+  .t-field input, .t-field select{height:26px; border:1.5px solid #cbd5e1; border-radius:6px; padding:0 8px; font-size:11px; width:100%; box-sizing:border-box; background:#ffffff !important; color:#111827 !important; font-weight:700 !important;}
   .t-field input.invalid{border-color:#ef4444 !important; background:#fef2f2 !important;}
   .toast{position:fixed; top:80px; right:8px; background:#111827; color:white; padding:8px 12px; border-radius:8px; font-size:11px; z-index:2000;}
-  .layout.two-top{display:grid; grid-template-columns: 14% 50% 36%; gap:2px; margin-top:90px; height:calc(100vh - 90px); overflow:hidden; background:var(--bg);}
-  .left{overflow-y:auto; background:var(--card, white); border-right:1px solid var(--border, #e5e7eb); padding:4px; display:flex; flex-direction:column; gap:4px;}
-  .center{overflow-y:auto; background:var(--bg, #fcfcfc); padding:4px; display:flex; flex-direction:column; gap:4px;}
-  .right{overflow-y:auto; background:var(--card, #f0fdf4); padding:4px; display:flex; flex-direction:column; gap:4px;}
-  .search-box{display:flex; gap:4px; align-items:center; border:1.5px solid var(--border, #e5e7eb); border-radius:6px; padding:0 6px; background:#ffffff; height:28px; font-size:10px;}
+  .layout.two-top{display:grid; grid-template-columns: 14% 50% 36%; gap:8px; margin-top:88px; height:calc(100vh - 88px); overflow:hidden; background:#f8fafc; padding-top:14px;}
+  .left{overflow-y:auto; background:white; border-right:1px solid #e5e7eb; padding:8px 4px 4px 4px; display:flex; flex-direction:column; gap:6px; margin-top:2px;}
+  .center{overflow-y:auto; background:#fcfcfc; padding:4px; display:flex; flex-direction:column; gap:8px;}
+  .right{overflow-y:auto; background:#f0fdf4; padding:4px; display:flex; flex-direction:column; gap:4px;}
+  .search-box{display:flex; gap:4px; align-items:center; border:1.5px solid #e5e7eb; border-radius:6px; padding:0 8px; background:#ffffff; height:30px; min-height:30px; font-size:10px; margin-bottom:2px; position:relative; z-index:1;}
   .search-box input{border:none; outline:none; font-size:10px; width:100%; background:#ffffff !important; color:#111827 !important; font-weight:700;}
   .field-grid.single-col{display:flex; flex-direction:column; gap:4px;}
-  .field-row.vertical{height:36px !important; min-height:36px !important; width:100% !important; border:1px solid #f1f5f9; border-left-width:3px !important; background:white; border-radius:6px; display:flex; flex-direction:row; align-items:center; gap:8px; padding:0 8px !important; cursor:pointer; color:#111827; font-weight:700;}
-  .field-row.vertical .f-icon{font-size:14px !important; width:20px; height:20px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
+  .field-row.vertical{height:34px !important; min-height:34px !important; width:100% !important; border:1px solid #f1f5f9; border-left-width:3px !important; background:white; border-radius:6px; display:flex; flex-direction:row; align-items:center; gap:8px; padding:0 8px !important; cursor:pointer; color:#111827; font-weight:700;}
+  .field-row.vertical .f-icon{font-size:13px !important; width:20px; height:20px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
   .field-row.vertical .f-label-down{font-size:9px !important; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#111827;}
-  .board-wrap{width:100%; background:white; border:1.5px solid #0ea5e9; border-radius:6px; height:52%; min-height:220px; overflow:hidden; display:flex; flex-direction:column;}
-  .board-scroll{flex:1; overflow:auto; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;}
-  .board{position:relative; touch-action:pan-x pan-y;}
-  .dot{position:absolute; width:1.5px; height:1.5px; background:#cbd5e1; border-radius:50%; opacity:.4;}
+  .board-wrap{width:100%; background:white; border:1.5px solid #0ea5e9; border-radius:8px; height:52%; min-height:220px; overflow:hidden; display:flex; flex-direction:column; margin-top:2px;}
+  .board-scroll{flex:1; overflow:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;}
+  .board{position:relative; background:white;}
+  .dot{position:absolute; width:1.5px; height:1.5px; background:#cbd5e1; border-radius:50%; opacity:.35;}
+  .empty-board{position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:11px; font-weight:700; color:#94a3b8; border:1px dashed #cbd5e1; padding:10px 14px; border-radius:8px; background:#f8fafc; white-space:nowrap;}
   .mod.reduced{position:absolute; background:white; border:1.5px solid; border-radius:6px; display:flex; align-items:center; padding:0 24px 0 8px; font-weight:800; box-shadow:0 1px 3px rgba(0,0,0,.15); touch-action:none !important; user-select:none; cursor:grab; box-sizing:border-box; min-width:80px; overflow:hidden; color:#111827 !important;}
   .mod.reduced.active{border-width:2.2px; z-index:20; box-shadow:0 4px 12px rgba(0,0,0,.2);}
-  .mod-label{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px !important; line-height:1.1; color:#111827 !important; font-weight:800 !important;}
+  .mod-label{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px !important; color:#111827 !important; font-weight:800 !important;}
   .x{position:absolute !important; right:4px !important; top:50% !important; transform:translateY(-50%); width:18px !important; height:18px !important; background:#fee2e2; color:#dc2626; border:none; border-radius:4px; font-size:11px !important; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:30;}
   .creating-info{padding:4px 6px; display:flex; justify-content:space-between; font-size:8px; flex-shrink:0; color:#111827; font-weight:700;}
   .preview-wrap.linked.onebyone{flex:1; overflow:auto; background:white; border:1.5px solid #0ea5e9; border-radius:6px; padding:4px;}
@@ -347,7 +473,6 @@
   .p-preview-item{display:flex; flex-direction:column; gap:2px; background:#ffffff; border-radius:4px; padding:6px; border:1px solid #e2e8f0; border-left:3px solid #0ea5e9;}
   .p-l{font-size:9px; font-weight:800; color:#111827 !important;}
   .p-input{height:26px; font-size:10px; border:1.5px solid #94a3b8 !important; border-radius:4px; padding:0 8px; background:#ffffff !important; color:#111827 !important; font-weight:700 !important;}
-  .p-input::placeholder{color:#64748b !important;}
   .p-formula{font-size:8px; padding:6px; border-radius:4px; font-weight:800; text-align:center; color:#111827 !important;}
   .edit-box{background:white; border:1px solid #e5e7eb; border-radius:6px; padding:8px; display:flex; flex-direction:column; gap:5px;}
   .edit-head{display:flex; justify-content:space-between; font-size:9px; color:#111827; font-weight:800;} .edit-box label{font-size:8px; font-weight:800; color:#111827;}
@@ -366,17 +491,25 @@
   .fb-head{font-size:9px; font-weight:800; color:#111827;} 
   .fb-ta{width:100%; border:1.5px solid #86efac; border-radius:4px; padding:6px; font-size:10px; resize:none; box-sizing:border-box; background:#ffffff !important; color:#111827 !important; font-weight:700 !important;}
   .fb-ops.all-sym{position:static !important; display:grid !important; grid-template-columns:repeat(3,1fr); gap:6px; width:100% !important; background:transparent !important; border:none !important; box-shadow:none !important;}
-  .fb-ops.all-sym button{position:static !important; height:36px !important; background:white; border:1.5px solid #cbd5e1; border-radius:8px; font-weight:800; font-size:14px !important; cursor:pointer; touch-action:manipulation; color:#111827;}
+  .fb-ops.all-sym button{position:static !important; height:34px !important; background:white; border:1.5px solid #cbd5e1; border-radius:8px; font-weight:800; font-size:13px !important; cursor:pointer; touch-action:manipulation; color:#111827;}
   .fb-sec{display:flex; flex-direction:column; gap:3px; font-size:8px; font-weight:800; color:#111827;} 
   .fb-field{width:100%; min-height:26px; border:1px solid #e5e7eb; border-radius:10px; font-size:8px; background:white; padding:4px 6px; text-align:left; color:#111827; font-weight:700; cursor:pointer;}
   .savef{height:30px; border:none; border-radius:6px; color:white; font-weight:800; font-size:9px; cursor:pointer;}
   @media (max-width:768px){
+    .line1{height:30px; min-height:30px; padding:3px 6px;}
+    .line2{min-height:78px; padding:6px 8px 8px 8px; margin-bottom:0;}
     .t-inputs-2{grid-template-columns: 1fr 1fr; gap:8px;}
-    .layout.two-top{grid-template-columns: 26% 42% 32%; margin-top:110px; height:calc(100vh - 110px);}
-    .line2{min-height:80px;}
+    .t-field input, .t-field select{height:26px; font-size:11px;}
+    .layout.two-top{grid-template-columns: 26% 42% 32%; margin-top:112px; height:calc(100vh - 112px); padding-top:12px; gap:8px;}
+    .left{padding-top:10px; margin-top:0;}
+    .search-box{height:28px; min-height:28px; display:flex !important; opacity:1 !important; margin-bottom:4px;}
+    .dot{display:none !important;}
+    .board{background:white !important; border:none !important;}
+    .board-wrap{margin-top:4px;}
   }
   @media (max-width:480px){
-    .t-inputs-2{grid-template-columns: 1fr 1fr;}
-    .layout.two-top{grid-template-columns: 24% 40% 36%; margin-top:110px; height:calc(100vh - 110px);}
+    .t-inputs-2{grid-template-columns: 1fr 1fr; gap:8px;}
+    .layout.two-top{grid-template-columns: 24% 40% 36%; margin-top:116px; height:calc(100vh - 116px); padding-top:14px;}
+    .dot{display:none !important;}
   }
 </style>

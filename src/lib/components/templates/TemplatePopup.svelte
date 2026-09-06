@@ -24,6 +24,16 @@
     let selectedTheme = "emerald";
     let showTheme = false;
 
+    // --- NEW FOR USE + REPORTS ---
+    let showUseModal = false;
+    let useTemplate:any = null;
+    let useFormData:any = {};
+    let useSaving = false;
+    let showReport = false;
+    let reportData:any[] = [];
+    let toast = "";
+    function isValidUUID(u:string){ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u); }
+
     const themes = [
       { id:"emerald", name:"Emerald Pro", primary:"#10b981", secondary:"#065f46", card:"#ecfdf5", times:[ { label:"Morning 06-12", color:"#10b981" }, { label:"Afternoon 12-18", color:"#f59e0b" }, { label:"Night 18-06", color:"#1e293b" }, ]},
       { id:"ocean", name:"Ocean Blue", primary:"#0ea5e9", secondary:"#0c4a6e", card:"#e0f2fe", times:[ { label:"Morning 06-12", color:"#0ea5e9" }, { label:"Afternoon 12-18", color:"#6366f1" }, { label:"Night 18-06", color:"#0f172a" }, ]},
@@ -46,7 +56,7 @@
             getCurrentUser();
             const storedTheme = localStorage.getItem("template_theme") || localStorage.getItem("template_theme_id");
             if(storedTheme) selectedTheme = storedTheme;
-            localTemplates = saved.map((t:any)=>({ id: t.id, owner_id: t.owner_id || t.owner_name || currentUserId, owner_name: t.owner_name || t.owner_id || currentUserName, name: t.name || t.template_name || "Untitled", template_code: t.code || t.template_code || t.t_code || "", code: t.code || t.template_code || "", description: t.description || "", department: t.category || t.department || "General", category: t.category || t.department || "General", placements: t.fields || t.placements || t.data?.fields || [], theme: t.theme || selectedTheme, data: { fields: t.fields || t.placements || t.data?.fields || [], department: t.category || t.department || "General", description: t.description || "" }, allow_all_contacts: t.allow_all_contacts?? true, requires_approval: t.requires_approval?? true, allow_reshare: t.allow_reshare?? true, shared_with: t.shared_with || [], createdAt: t.createdAt || t.created_at }));
+            localTemplates = saved.map((t:any)=>({ id: t.id, owner_id: t.owner_id || t.owner_name || currentUserId, owner_name: t.owner_name || t.owner_id || currentUserName, name: t.name || t.template_name || "Untitled", template_code: t.code || t.template_code || t.t_code || "", code: t.code || t.template_code || "", description: t.description || "", department: t.category || t.department || "General", category: t.category || t.department || "General", placements: t.fields || t.placements || t.data?.fields || [], fields: t.fields || t.placements || t.data?.fields || [], theme: t.theme || selectedTheme, data: { fields: t.fields || t.placements || t.data?.fields || [], department: t.category || t.department || "General", description: t.description || "" }, allow_all_contacts: t.allow_all_contacts?? true, requires_approval: t.requires_approval?? true, allow_reshare: t.allow_reshare?? true, shared_with: t.shared_with || [], createdAt: t.createdAt || t.created_at }));
         }catch(e){ console.error("loadLocal error", e); localTemplates=[]; }
     }
     onMount(()=>{ loadLocal(); const unsub = authStore.subscribe(()=> loadLocal()); return unsub; });
@@ -58,11 +68,106 @@
     function close() { dispatch("close"); }
     function handleEdit(template: any) { if (!template) return; const isOwner = String(template.owner_id)===String(currentUserId) || String(template.owner_name)===String(currentUserName); const canEditPerm = template.shared_with?.find((s:any)=> (String(s.user_id)===String(currentUserId) || String(s.user_id)===String(currentUserName)) && s.permission==='edit' && s.approved); if(!isOwner &&!canEditPerm){ alert(`No edit permission - Need approval from ${template.owner_name}`); return; } localStorage.setItem("edit_template", JSON.stringify(template)); dispatch("edit", { template }); close(); const qs = window.location.search; goto(`/templates/create?id=${template.id}${qs? `&${qs.substring(1)}` : ''}`); }
     function handleNew() { dispatch("new"); dispatch("create"); close(); const qs = window.location.search; goto(`/templates/create${qs}`); }
-    function handleUse(template: any) { if (!template) return; if(isPending(template)){ alert(`Waiting approval from ${template.owner_name} for installation`); return; } localStorage.setItem("use_template", JSON.stringify(template)); dispatch("use", { template }); close(); }
+
+    // UPDATED USE - OPEN FORM
+    function handleUse(template: any) {
+      if (!template) return;
+      if(isPending(template)){ alert(`Waiting approval from ${template.owner_name} for installation`); return; }
+      openUse(template);
+    }
+
+    function openUse(t:any){
+      useTemplate = t;
+      useFormData = {};
+      let fields = t.fields || t.data?.fields || t.placements || [];
+      fields.forEach((f:any)=>{
+        let key = f.field_name || f.name;
+        if(!key) return;
+        if(f.type==='number') useFormData[key] = '';
+        else if(f.type==='dropdown') useFormData[key] = f.options?.[0] || '';
+        else if(f.type==='formula') useFormData[key] = '';
+        else useFormData[key] = '';
+      });
+      localStorage.setItem("use_template", JSON.stringify(t));
+      dispatch("use", { template:t });
+      showUseModal = true;
+      setTimeout(()=>calcAllFormulas(),50);
+    }
+
+    function calcAllFormulas(){
+      if(!useTemplate) return;
+      let fields = useTemplate.fields || useTemplate.data?.fields || useTemplate.placements || [];
+      fields.forEach((f:any)=>{
+        if(f.type==='formula' && f.formula){
+          let expr = f.formula;
+          fields.forEach((rf:any)=>{
+            let key = rf.field_name || rf.name;
+            if(!key) return;
+            let raw = useFormData[key];
+            let val = parseFloat(raw);
+            if(isNaN(val)) val = 0;
+            expr = expr.split(`{${key}}`).join(val.toString());
+          });
+          expr = expr.replaceAll('×','*').replaceAll('÷','/').replace(/%/g,'/100');
+          try{
+            if(/^[0-9\.\+\-\*\/\(\)\s]+$/.test(expr) && expr.trim()){
+              let res = Function(`"use strict"; return (${expr})`)();
+              let k = f.field_name || f.name;
+              if(isFinite(res)) useFormData[k] = Math.round(res*100)/100;
+            }
+          }catch{}
+        }
+      });
+    }
+
+    function onUseInput(){ calcAllFormulas(); }
+
+    async function submitUseData(){
+      if(!useTemplate) return;
+      // validate required
+      let fields = useTemplate.fields || useTemplate.data?.fields || [];
+      for(let f of fields){
+        if(f.required){
+          let k = f.field_name || f.name;
+          if(!useFormData[k] && useFormData[k]!==0){ toast = `❌ Enter ${f.label}`; setTimeout(()=>toast="",2500); return; }
+        }
+      }
+      useSaving = true;
+      try{
+        let owner = getTemplateOwner();
+        let realUUID = null;
+        try{ const {data:{user}} = await supabaseTemplates.auth.getUser(); if(user && isValidUUID(user.id)) realUUID=user.id; }catch{}
+        const entry = {
+          id: crypto.randomUUID(),
+          template_id: useTemplate.id,
+          template_code: useTemplate.template_code || useTemplate.code,
+          template_name: useTemplate.name,
+          data: {...useFormData},
+          owner_email: owner.owner_email || currentUserName,
+          created_at: new Date().toISOString()
+        };
+        let subs = [];
+        try{ subs = JSON.parse(localStorage.getItem("submissions")||"[]"); }catch{ subs=[]; }
+        subs = [entry,...subs].slice(0,500);
+        localStorage.setItem("submissions", JSON.stringify(subs));
+        try{
+          let payload:any = { template_id: String(useTemplate.id), template_code: entry.template_code, data: useFormData };
+          if(realUUID) payload.owner_id = realUUID;
+          let {error} = await supabaseTemplates.from('submissions').insert(payload);
+          if(error){
+            await supabaseTemplates.from('template_entries').insert(payload);
+          }
+        }catch(e){ console.warn("submission supabase error", e); }
+        showUseModal = false;
+        reportData = subs.filter((s:any)=> String(s.template_id)===String(useTemplate.id));
+        showReport = true;
+        toast = `✅ Saved - ${reportData.length} records`;
+        setTimeout(()=>toast="",3000);
+      }finally{ useSaving=false; }
+    }
+
     async function handleDelete(template: any) { if (!template?.id || deletingId!== null) return; const isOwner = String(template.owner_id)===String(currentUserId) || String(template.owner_name)===String(currentUserName); if(!isOwner){ alert("Only owner can delete"); return; } const confirmed = window.confirm(`Delete "${template.name || "this template"}"?`); if (!confirmed) return; deletingId = template.id; try { const saved = JSON.parse(localStorage.getItem("templates")||"[]"); const updated = saved.filter((x:any)=> String(x.id)!== String(template.id)); localStorage.setItem("templates", JSON.stringify(updated)); loadLocal(); try{ await supabaseTemplates.from('templates').delete().eq('id', template.id); await fetch(`/api/templates?id=${encodeURIComponent(String(template.id))}`, { method: "DELETE", headers: { Accept: "application/json" } }); }catch{} dispatch("deleted", { template }); } catch (error) { console.error("[TemplatePopup] Delete failed:", error); window.alert(error instanceof Error? error.message : "Failed to delete template."); } finally { deletingId = null; } }
     function openShare(template:any){ const isOwner = String(template.owner_id)===String(currentUserId) || String(template.owner_name)===String(currentUserName); if(!isOwner &&!template.allow_reshare){ alert(`You don't have reshare permission. Need approval from ${template.owner_name}.`); return; } shareTemplate = template; shareAll = template.allow_all_contacts?? true; requiresApproval = template.requires_approval?? true; allowReshare = template.allow_reshare?? true; canEdit = true; shareUserId = ""; showShareModal = true; }
-
-    // SECURE SHARE - SYNC TO SUPABASE FOR REPORTS APPROVAL
     async function confirmShare(){
       const saved = JSON.parse(localStorage.getItem("templates")||"[]");
       const idx = saved.findIndex((x:any)=> String(x.id)===String(shareTemplate.id));
@@ -75,7 +180,6 @@
       const updated = {...saved[idx], allow_all_contacts: shareAll, requires_approval: requiresApproval, allow_reshare: allowReshare, shared_with: updatedShared, owner_id: shareTemplate.owner_id, owner_name: shareTemplate.owner_name };
       saved[idx]=updated;
       localStorage.setItem("templates", JSON.stringify(saved));
-      // SYNC TO SUPABASE - FOR SECURE REPORTS
       try{
         await supabaseTemplates.from('templates').update({
           allow_all_contacts: shareAll,
@@ -90,7 +194,6 @@
       showShareModal=false;
       alert(shareAll? `🔒 Shared to all by ${currentUserName} - Reports secure` : `🔒 Request sent to ${shareUserId} - Needs your approval`);
     }
-
     async function approveUser(template:any, userId:string, approve:boolean){
       const saved = JSON.parse(localStorage.getItem("templates")||"[]");
       const idx = saved.findIndex((x:any)=> String(x.id)===String(template.id));
@@ -106,7 +209,6 @@
       }catch{}
       loadLocal();
     }
-
     function getFields(template: any): any[] { if(Array.isArray(template?.data?.fields)) return template.data.fields; if(Array.isArray(template?.placements)) return template.placements; if(Array.isArray(template?.fields)) return template.fields; return []; }
     function getDepartment(template: any): string { return template?.data?.department || template?.department || template?.category || "General"; }
     function getDescription(template: any): string { return template?.description || template?.data?.description || `Code: ${template.template_code||template.code||'N/A'}`; }
@@ -214,6 +316,7 @@
                 {/each}
             {/if}
         </div>
+        {#if toast}<div class="toast-pop">{toast}</div>{/if}
     </section>
 </div>
 
@@ -240,6 +343,92 @@
             <button class="new-btn" style="background:{activeTheme.primary}" on:click={confirmShare}>Share Securely</button>
         </div>
     </div>
+</div>
+{/if}
+
+<!-- USE FORM MODAL - ENTER DATA -->
+{#if showUseModal && useTemplate}
+<div class="overlay" style="z-index:1200" on:click|self={()=>showUseModal=false}>
+  <div class="use-popup" style="border-top:5px solid {themes.find(t=>t.id===(useTemplate.theme||selectedTheme))?.primary || activeTheme.primary}">
+    <div class="use-popup-head">
+      <div>
+        <h3>📥 {useTemplate.name}</h3>
+        <small>Code: {useTemplate.template_code || useTemplate.code} • Fill data & save</small>
+      </div>
+      <button class="close-btn" on:click={()=>showUseModal=false}>×</button>
+    </div>
+    <div class="use-form-list">
+      {#each (useTemplate.fields || useTemplate.data?.fields || useTemplate.placements || []) as f}
+        {@const key = f.field_name || f.name}
+        <div class="use-field-row" style="border-left:4px solid {f.border || f.color || activeTheme.primary}">
+          <label class="use-label">{f.label} {#if f.required}<span class="req">*</span>{/if} <small>({f.type})</small></label>
+          {#if f.type==='dropdown'}
+            <select class="use-input" bind:value={useFormData[key]} on:change={onUseInput}>
+              <option value="">Select {f.label}</option>
+              {#each (f.options||[]) as opt}<option value={opt}>{opt}</option>{/each}
+            </select>
+          {:else if f.type==='number'}
+            <input class="use-input" type="number" bind:value={useFormData[key]} on:input={onUseInput} placeholder="Enter {f.label}" />
+          {:else if f.type==='time'}
+            <input class="use-input" type="time" bind:value={useFormData[key]} on:input={onUseInput} />
+          {:else if f.type==='formula'}
+            <div class="formula-box" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}">
+              <b>{useFormData[key]?? '0'}</b> <span>⚡ Auto</span>
+            </div>
+            <small class="formula-hint">{f.formula}</small>
+          {:else}
+            <input class="use-input" type="text" bind:value={useFormData[key]} on:input={onUseInput} placeholder="Enter {f.label}" maxlength="100" />
+          {/if}
+        </div>
+      {/each}
+    </div>
+    <div class="use-actions">
+      <button class="secondary-btn" on:click={()=>showUseModal=false}>Cancel</button>
+      <button class="new-btn" style="background:{activeTheme.primary}" disabled={useSaving} on:click={submitUseData}>{useSaving?'Saving...':'💾 Save & Show Reports'}</button>
+    </div>
+  </div>
+</div>
+{/if}
+
+<!-- REPORTS MODAL -->
+{#if showReport}
+<div class="overlay" style="z-index:1300" on:click|self={()=>showReport=false}>
+  <div class="report-popup">
+    <div class="report-head">
+      <div><h3>📊 Reports - {useTemplate?.name}</h3><small>{reportData.length} entries • Code: {useTemplate?.template_code || useTemplate?.code}</small></div>
+      <button class="close-btn" on:click={()=>showReport=false}>×</button>
+    </div>
+    <div class="report-list">
+      {#if reportData.length===0}
+        <div class="empty-state"><p>No data yet - Use template to add</p></div>
+      {:else}
+        <div class="report-table-wrap">
+          <table class="r-table">
+            <thead><tr><th>#</th><th>Date</th><th>Data</th></tr></thead>
+            <tbody>
+              {#each reportData as r,i}
+                <tr>
+                  <td>{i+1}</td>
+                  <td>{new Date(r.created_at).toLocaleString()}</td>
+                  <td>
+                    <div class="r-data">
+                      {#each Object.entries(r.data) as [k,v]}
+                        <span class="r-chip"><b>{k}:</b> {v}</span>
+                      {/each}
+                    </div>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+    </div>
+    <div class="report-foot">
+      <button class="secondary-btn" on:click={()=>showReport=false}>Close</button>
+      <button class="new-btn" style="background:{activeTheme.primary}" on:click={()=>{showReport=false; if(useTemplate) openUse(useTemplate);}}>+ Add More</button>
+    </div>
+  </div>
 </div>
 {/if}
 
@@ -313,6 +502,31 @@ h2 { margin: 0; color: #1f2937; font-size: 22px; line-height: 1.2; }
 .share-input{ padding:12px; border:1px solid #cbd5e1; border-radius:10px; width:100%; box-sizing:border-box; font-size:16px; }
 .small-label{ font-size:12px; color:#64748b; font-weight:600; margin-bottom:4px; display:block; }
 .share-actions{ display:flex; gap:8px; justify-content:flex-end; }
+.toast-pop{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111827; color:white; padding:10px 16px; border-radius:8px; font-size:13px; z-index:2000; }
+
+.use-popup{ background:white; width:min(560px,96%); max-height:90vh; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+.use-popup-head{ display:flex; justify-content:space-between; align-items:center; padding:16px; border-bottom:1px solid #e5e7eb; }
+.use-popup-head h3{ margin:0; font-size:18px; }.use-popup-head small{ color:#64748b; font-size:11px; }
+.use-form-list{ padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; background:#f8fafc; max-height:60vh; }
+.use-field-row{ background:white; padding:12px; border-radius:10px; border:1px solid #e5e7eb; display:flex; flex-direction:column; gap:6px; }
+.use-label{ font-size:12px; font-weight:800; color:#111827; }.use-label small{ color:#94a3b8; font-weight:600; }.req{ color:#ef4444; }
+.use-input{ height:38px; border:1.5px solid #cbd5e1; border-radius:8px; padding:0 10px; font-size:14px; font-weight:600; background:white; }
+.formula-box{ padding:12px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; font-weight:900; }
+.formula-hint{ font-size:10px; color:#64748b; word-break:break-all; }
+.use-actions{ display:flex; justify-content:space-between; padding:14px; background:white; border-top:1px solid #e5e7eb; }
+
+.report-popup{ background:white; width:min(760px,97%); max-height:90vh; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+.report-head{ display:flex; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e5e7eb; background:#f8fafc; }
+.report-head h3{ margin:0; }.report-head small{ color:#64748b; }
+.report-list{ padding:12px; overflow-y:auto; flex:1; }
+.report-table-wrap{ overflow-x:auto; }
+.r-table{ width:100%; border-collapse:collapse; font-size:12px; }
+.r-table th,.r-table td{ border:1px solid #e5e7eb; padding:8px; text-align:left; }
+.r-table th{ background:#f1f5f9; font-weight:800; }
+.r-data{ display:flex; flex-wrap:wrap; gap:6px; }
+.r-chip{ background:#f1f5f9; border:1px solid #e2e8f0; padding:3px 7px; border-radius:12px; font-size:11px; white-space:nowrap; }
+.report-foot{ display:flex; justify-content:space-between; padding:12px; border-top:1px solid #e5e7eb; background:white; }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (max-width: 768px){
 .overlay{ padding:0; align-items:flex-end; }
@@ -340,9 +554,7 @@ h2 { margin: 0; color: #1f2937; font-size: 22px; line-height: 1.2; }
 .share-input{ font-size:16px; height:48px; }
 .check-box{ font-size:14px; padding:4px 0; }
 .check-box input{ width:20px; height:20px; }
-}
-@media (min-width: 769px){
-.template-card:hover{ transform:translateY(-1px); box-shadow:0 6px 18px rgba(0,0,0,.08); transition:all.15s; }
-.action:hover{ filter:brightness(1.1); }
+.use-popup,.report-popup{ width:100%; max-width:100%; height:100dvh; max-height:100dvh; border-radius:0; }
+.use-form-list{ max-height:none; flex:1; }
 }
 </style>

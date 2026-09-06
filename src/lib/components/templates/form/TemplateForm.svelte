@@ -47,7 +47,6 @@
     }
 
     function liveCalc(){
-        // called on every keystroke
         fields.forEach((f:any)=>{
             if((f.type==='formula' || f.field_type==='formula') && f.formula){
                 let calc = calcFormula(f.formula);
@@ -62,7 +61,7 @@
     function onInput(e: Event, f: any){
         let target = e.currentTarget as HTMLInputElement;
         values[f.field_name] = target.value;
-        liveCalc(); // parallel calc
+        liveCalc();
     }
 
     function send() {
@@ -80,9 +79,22 @@
         dispatch('submit', { template, fields, values: {...values} });
     }
 
-    function parseOptions(optStr: string){
-        try{ let arr = JSON.parse(optStr || "[]"); return Array.isArray(arr)?arr:[]; }
-        catch{ return (optStr||"").split(',').map((s:string)=>s.trim()).filter(Boolean); }
+    // FIXED - handles array, string, JSON string, empty
+    function parseOptions(opt:any){
+        if(!opt) return [];
+        if(Array.isArray(opt)){
+            return opt.map((o:any)=> String(o).trim()).filter(Boolean);
+        }
+        if(typeof opt === 'string'){
+            const s = opt.trim();
+            if(!s) return [];
+            try{
+                let parsed = JSON.parse(s);
+                if(Array.isArray(parsed)) return parsed.map((o:any)=> String(o).trim()).filter(Boolean);
+            }catch{}
+            return s.split(/[,;\n]+/).map((x:string)=>x.trim()).filter(Boolean);
+        }
+        return [];
     }
 </script>
 
@@ -95,7 +107,7 @@
         {#if f.field_type === 'dropdown' || f.type === 'dropdown'}
           <select id={f.field_name} value={values[f.field_name]} on:change={(e)=>onInput(e,f)}>
             <option value="">Select</option>
-            {#each parseOptions(f.options) as opt}<option>{opt}</option>{/each}
+            {#each parseOptions(f.options) as opt}<option value={opt}>{opt}</option>{/each}
           </select>
         {:else if f.field_type === 'formula' || f.type === 'formula'}
           <input id={f.field_name} type="text" readonly class="formula-input" value={calcFormula(f.formula) + " %"} />

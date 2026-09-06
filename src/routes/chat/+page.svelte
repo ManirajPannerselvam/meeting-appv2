@@ -146,7 +146,6 @@
 		}).subscribe();
 	}
 
-	// FIXED GLOBAL LISTENER - NO AUTO READ
 	async function setupGlobalListener(){
 	  if(globalChannel) await chatDB.removeChannel(globalChannel);
 	  const uid = getCurrentUserId(); if(!uid) return;
@@ -154,37 +153,29 @@
 	.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'}, async (payload)=>{
 	    const msg:any = payload.new;
 	    if(msg.sender_id===uid) return;
-	    // check belongs to me
 	    const myRoom = contacts.some(c=> c.room_id===msg.room_id);
 	    const isForMe = msg.receiver_id===uid || myRoom || msg.group_id;
 	    if(!isForMe) return;
 	    if(msg.room_id &&!myRoom && msg.receiver_id!==uid) return;
-
-	    // 1 tick -> 2 tick (delivered) ALWAYS
 	    try{ await chatDB.from('messages').update({status:'delivered', delivered_at: new Date().toISOString()}).eq('id', msg.id).eq('status','sent'); }catch{}
-
 	    const short = msg.content?.split('__')[0]?.slice(0,35) || msg.content?.slice(0,35);
 	    const isOpen = (msg.room_id && msg.room_id===selectedRoomId) || (msg.group_id && msg.group_id===selectedGroupId);
-
 	    contacts = contacts.map(c=>{
 	      if(c.room_id===msg.room_id || c.id===msg.group_id){
 	        return {...c, last_message: short, last_message_at: msg.created_at, unread: isOpen? 0 : (c.unread||0)+1};
 	      }
 	      return c;
 	    });
-
 	    if(isOpen){
 	      if(!messages.some(m=>m.id===msg.id)){
 	        messages = [...messages, {...msg, status:'delivered', is_own:false}];
 	        scrollToBottom();
-	        // mark read only if chat is actually open
 	        setTimeout(()=> markAsRead(), 700);
 	      }
 	    }
 	  })
 	.on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'}, (payload)=>{
 	    const upd:any = payload.new;
-	    // update ticks in current open chat
 	    messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status, delivered_at:upd.delivered_at, read_at:upd.read_at} : m);
 	  }).subscribe();
 	}
@@ -235,21 +226,81 @@
 	function onOpenTemplate(){ if(!selectedContact &&!selectedGroup){ alert("Select a contact first"); return; } loadTemplates(); showTemplateForm=false; showTemplateModal = true; }
 	function handleUseTemplate(e:any){ const t = e.detail?.template || e.detail; if(!t) return; selectedTemplate = {...t, data: typeof t.data==='string'? JSON.parse(t.data||'{}') : (t.data||{}) }; showTemplateModal=false; setTimeout(()=>{ showTemplateForm=true; }, 120); }
 	function handleCreateTemplate(){ showTemplateModal=false; showTemplateForm=false; const contactId = selectedContact?.actual_user_id || selectedContact?.id || ''; const groupId = selectedGroupId || ''; if(browser) window.location.href=`/templates/create?contact_id=${contactId}&group_id=${groupId}`; }
-	function handleOpenDetail(tpl: any, msg: any){ detailData = { template_name: tpl.template_name || tpl.template_code || 'Production Report', template_code: tpl.template_code, values: tpl.values || tpl.data || {}, t_code: tpl.template_code, user_name: msg.sender_name || 'User', created_at: msg.created_at, }; showDetailModal = true; }
+	
+	// FIXED: Keep fields for label mapping
+	function handleOpenDetail(tpl: any, msg: any){
+		let fields = tpl?.fields || tpl?.data?.fields || tpl?.values?.fields || msg?.fields || [];
+		// try to get from message meta if fields not in tpl
+		if(fields.length===0){
+			let meta = getMeta(msg);
+			if(meta?.fields) fields = meta.fields;
+		}
+		detailData = {
+			template_name: tpl.template_name || tpl.template_code || tpl.name || 'Production Report',
+			template_code: tpl.template_code || tpl.t_code,
+			values: tpl.values || tpl.data || {},
+			fields: fields,
+			t_code: tpl.template_code || tpl.t_code,
+			user_name: msg.sender_name || msg.sender_id || 'User',
+			created_at: msg.created_at,
+		};
+		showDetailModal = true;
+	}
 
+	// FIXED: Label + Value only
 	async function sendTemplateReport(e:any){
-		const { template, values } = e.detail; if(!template) return; const calculatedValues = calcAllFormulas(template, values);
-		let displayLines = [`📋 *${sanitize(template.name)}*`, ``]; Object.entries(calculatedValues).forEach(([k,v])=>{ displayLines.push(`${sanitize(k)}: ${sanitize(String(v)) || '0.00'}`); });
-		const display = displayLines.join('\n'); const t_code = template.template_code || template.code || template.t_code;
-		const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: t_code, values: calculatedValues, created_at: new Date().toISOString() };
+		const { template, values } = e.detail;
+		if(!template) return;
+		const calculatedValues = calcAllFormulas(template, values);
+		let realFields = template?.fields || template?.data?.fields || template?.data?.data?.fields || [];
+
+		// Build display with LABEL only
+		let displayLines = [`📋 *${sanitize(template.name)}*`, ``];
+		realFields.forEach((f:any)=>{
+			let key = f.field_name || f.name;
+			let label = f.label || key;
+			let val = calculatedValues[key]?? calculatedValues[key?.toLowerCase()]?? "";
+			if(val==="" && f.type!=='formula') return;
+			displayLines.push(`${sanitize(label)}: ${sanitize(String(val))}`);
+		});
+		// fallback if no fields found (old templates)
+		if(displayLines.length<=2){
+			Object.entries(calculatedValues).forEach(([k,v])=>{
+				if(['t_code','template_code','template_name','template_id','owner_id','user_id','owner_email','created_at','fields'].includes(k)) return;
+				displayLines.push(`${sanitize(k)}: ${sanitize(String(v))}`);
+			});
+		}
+
+		const display = displayLines.join('\n');
+		const t_code = template.template_code || template.code || template.t_code;
+		const installData = {
+			type:'TEMPLATE_REPORT',
+			template_id: template.id,
+			template_name: template.name,
+			template_code: t_code,
+			values: calculatedValues,
+			fields: realFields,
+			created_at: new Date().toISOString()
+		};
 		const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`;
+
 		try{
 		  const { data: { user: chatUser } } = await chatDB.auth.getUser();
-		  const realUid = chatUser?.id || getCurrentUserId(); const email = chatUser?.email || currentUser?.email || ''; const nowIso = new Date().toISOString();
-		  const payload:any = { t_code: sanitize(t_code), reference_template_id: template.id, data: {...calculatedValues, t_code, template_code: t_code, template_name: template.name, template_id: template.id, owner_id: realUid, user_id: realUid, owner_email: email, created_at: nowIso }, ts: nowIso };
+		  const realUid = chatUser?.id || getCurrentUserId();
+		  const email = chatUser?.email || currentUser?.email || '';
+		  const nowIso = new Date().toISOString();
+		  const payload:any = {
+			t_code: sanitize(t_code),
+			reference_template_id: template.id,
+			data: {...calculatedValues, fields: realFields, t_code, template_code: t_code, template_name: template.name, template_id: template.id, owner_id: realUid, user_id: realUid, owner_email: email, created_at: nowIso },
+			ts: nowIso
+		  };
 		  await supabaseTemplates.from("records").insert(payload);
 		}catch(err:any){ alert("Save failed: "+err?.message); return; }
-		showTemplateForm=false; await sendMessage({ detail: { content: fullContent } } as any); selectedTemplate=null;
+
+		showTemplateForm=false;
+		await sendMessage({ detail: { content: fullContent } } as any);
+		selectedTemplate=null;
 	}
 
 	async function loadGroups() { const userId = getCurrentUserId(); if(!userId) return; const { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId).limit(100); groups = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); }
@@ -312,7 +363,6 @@
 	function isUserOnline(id: string){ return onlineUsers.has(id); }
 	async function cleanupRealtime(){ const ch = [messagesChannel, presenceChannel, profileChannel, globalChannel].filter(Boolean); messagesChannel = null; presenceChannel = null; profileChannel = null; globalChannel = null; if(ch.length) await Promise.allSettled(ch.map((c:any) => chatDB.removeChannel(c))); }
 
-	// FIXED - loadMessages only delivered, not read
 	async function loadMessages({ roomId, groupId }: any){
 	  if(isLoadingMessages) return; isLoadingMessages=true;
 	  try{
@@ -327,7 +377,6 @@
 	      const seen = new Set();
 	      messages = (data?? []).reverse().filter((m:any)=>!(m.deleted_by||[]).includes(uid)).filter((m:any)=>{ if(!m.id) return true; if(seen.has(m.id)) return false; seen.add(m.id); return true; }).map((m:any)=>({...m, is_own:m.sender_id===uid}));
 	      await markDelivered();
-	      // read after user actually sees messages
 	      setTimeout(()=> markAsRead(), 900);
 	    }
 	    await subscribeToMessages({ roomId, groupId });
@@ -362,7 +411,6 @@
 	    if(messages.some(m=>m.id===newMsg.id)) return;
 	    if(newMsg.sender_id===uid){ messages = messages.filter((m:any) =>!(m.id.startsWith('temp_') && m.content===newMsg.content)); }
 	    else {
-	      // delivered when receiving in open chat
 	      setTimeout(async ()=>{ try{ await chatDB.from("messages").update({ status: 'delivered' }).eq('id', newMsg.id).eq('status','sent'); }catch{} markAsRead(); }, 300);
 	    }
 	    messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}];
@@ -546,7 +594,34 @@
 {#if showGroupForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showGroupForm=false}></button><div class="modal"><h3>Create Group</h3><input class="modal-input" bind:value={groupName} placeholder="Group Name" /><div class="modal-btns"><button class="btn-primary" onclick={createGroup}>Create</button><button class="btn-secondary" onclick={() => showGroupForm=false}>Cancel</button></div></div></div>{/if}
 {#if showTemplateModal}<TemplatePopup templates={templates} loading={templateLoading} on:close={()=>showTemplateModal=false} on:use={handleUseTemplate} on:new={handleCreateTemplate} on:create={handleCreateTemplate} on:deleted={(e)=>{ templates=templates.filter(t=>t.id!==e.detail.template.id); }} />{/if}
 {#if showTemplateForm && selectedTemplate}<div style="position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);"><TemplateForm template={selectedTemplate} on:close={()=>{ showTemplateForm=false; selectedTemplate=null; }} on:submit={sendTemplateReport} /></div>{/if}
-{#if showDetailModal && detailData}<div class="detail-bg"><button class="modal-bg-btn" onclick={()=>showDetailModal=false}></button><div class="detail-modal"><div class="detail-header"><h3>📋 {detailData.template_name}</h3><button class="detail-close" onclick={()=>showDetailModal=false}>✕</button></div><div class="detail-body">{#each Object.entries(detailData.values) as [k, v]}<div class="detail-row"><span class="d-label">{k.replace(/_/g,' ')}</span><b class="d-value">{String(v||'-')}</b></div>{/each}</div><div class="detail-actions"><button class="btn-secondary" onclick={()=>showDetailModal=false}>Close</button></div></div></div>{/if}
+
+{#if showDetailModal && detailData}
+<div class="detail-bg"><button class="modal-bg-btn" onclick={()=>showDetailModal=false}></button>
+<div class="detail-modal">
+  <div class="detail-header"><h3>📋 {detailData.template_name}</h3><button class="detail-close" onclick={()=>showDetailModal=false}>✕</button></div>
+  <div class="detail-body">
+    {#if detailData.fields && detailData.fields.length}
+      {#each detailData.fields as f}
+        {@const key = f.field_name || f.name}
+        {@const val = detailData.values[key]?? detailData.values[key?.toLowerCase()]?? detailData.values[f.label]?? '-'}
+        <div class="detail-row">
+          <span class="d-label">{f.label}</span>
+          <b class="d-value">{String(val)}</b>
+        </div>
+      {/each}
+    {:else}
+      {#each Object.entries(detailData.values) as [k, v]}
+        {#if !['t_code','template_code','template_name','template_id','owner_id','user_id','owner_email','created_at','fields','data'].includes(k)}
+          <div class="detail-row"><span class="d-label">{k.replace(/_/g,' ')}</span><b class="d-value">{String(v||'-')}</b></div>
+        {/if}
+      {/each}
+    {/if}
+  </div>
+  <div class="detail-actions"><button class="btn-secondary" onclick={()=>showDetailModal=false}>Close</button></div>
+</div>
+</div>
+{/if}
+
 {#if showInviteModal && selectedInvite}
 <div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showInviteModal=false}></button><div class="modal" style="width:440px;"><h3>📩 Invite Details - {selectedInvite.email}</h3><div style="background:#2a3942; padding:14px; border-radius:10px; display:flex; flex-direction:column; gap:10px;"><div style="display:flex; justify-content:space-between;"><span style="color:#8696a0;">Email:</span><b style="color:#e9edef;">{selectedInvite.email}</b></div><div style="display:flex; justify-content:space-between;"><span style="color:#8696a0;">Status:</span><b style="color:#fbbf24;">{selectedInvite.status}</b></div></div><div class="modal-btns"><button class="btn-secondary" onclick={()=>showInviteModal=false}>Close</button><button class="btn-primary" onclick={async ()=>{ await chatDB.from('contact_invites').delete().eq('id', selectedInvite.id); showInviteModal=false; await loadContacts(); }}>Delete</button></div></div></div>
 {/if}
