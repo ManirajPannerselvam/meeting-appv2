@@ -7,7 +7,6 @@
     <title>ORG - Tauri + SvelteKit</title>
     %sveltekit.head%
     <style>
-      /* FIX WHITE GAP - SAFE AREA + TOUCH FIX */
       html, body {
         margin: 0!important;
         padding: 0!important;
@@ -23,11 +22,10 @@
       }
       body {
         padding-bottom: env(safe-area-inset-bottom);
-        position: fixed; /* FIX: prevents swipe bounce */
+        position: fixed;
         overflow: hidden;
         width: 100%;
       }
-      /* Allow inner scroll areas to scroll */
       #svelte {
         width: 100%;
         height: 100%;
@@ -35,7 +33,6 @@
         -webkit-overflow-scrolling: touch;
         touch-action: pan-y;
       }
-
       #app-initial-loader {
         position: fixed;
         inset: 0;
@@ -44,19 +41,20 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: opacity 0.4s ease, visibility 0.4s;
+        transition: opacity 0.25s ease, visibility 0.25s;
       }
       #app-initial-loader.hide {
         opacity: 0;
         visibility: hidden;
+        pointer-events: none;
       }
-     .loader-content {
+    .loader-content {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 16px;
       }
-     .handshake-anim {
+    .handshake-anim {
         display: flex;
         align-items: center;
         gap: 2px;
@@ -69,31 +67,31 @@
         50% { transform: translateY(0) scale(1.1) rotate(0deg); }
         75% { transform: translateY(-2px) scale(1.05) rotate(2deg); }
       }
-     .loader-brand {
+    .loader-brand {
         color: #22c55e;
         font-weight: 900;
         font-size: 28px;
         letter-spacing: 8px;
         font-family: "Segoe UI", sans-serif;
       }
-     .loader-dots {
+    .loader-dots {
         display: flex;
         gap: 6px;
       }
-     .loader-dots span {
+    .loader-dots span {
         width: 8px;
         height: 8px;
         background: #22c55e;
         border-radius: 50%;
         animation: loaderDot 1s infinite;
       }
-     .loader-dots span:nth-child(2) { animation-delay: 0.2s; }
-     .loader-dots span:nth-child(3) { animation-delay: 0.4s; }
+    .loader-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .loader-dots span:nth-child(3) { animation-delay: 0.4s; }
       @keyframes loaderDot {
         0%, 100% { transform: translateY(0); opacity: 0.4; }
         50% { transform: translateY(-8px); opacity: 1; }
       }
-     .loader-bar {
+    .loader-bar {
         width: 140px;
         height: 3px;
         background: #1f2937;
@@ -101,7 +99,7 @@
         overflow: hidden;
         margin-top: 6px;
       }
-     .loader-bar-fill {
+    .loader-bar-fill {
         width: 45%;
         height: 100%;
         background: linear-gradient(90deg, #22c55e, #16a34a);
@@ -115,7 +113,6 @@
     </style>
   </head>
   <body data-sveltekit-preload-data="hover">
-    <!-- HANDSHAKE LOADING ANIMATION -->
     <div id="app-initial-loader">
       <div class="loader-content">
         <div class="handshake-anim">🤝</div>
@@ -128,7 +125,7 @@
     <div style="display: contents">%sveltekit.body%</div>
 
     <script>
-      // FIX: Block browser swipe-back that causes next page on little swap
+      // FIX: Block browser swipe-back - KEEP AS IS
       let touchStartX = 0;
       document.addEventListener('touchstart', function(e) {
         touchStartX = e.touches[0].clientX;
@@ -136,30 +133,29 @@
 
       document.addEventListener('touchmove', function(e) {
         const diff = e.touches[0].clientX - touchStartX;
-        // If swipe starts from edge <30px and moves >10px horizontal -> block it
         if (touchStartX < 30 && diff > 10) {
           e.preventDefault();
         }
       }, { passive: false });
 
-      // Hide loader after SvelteKit hydrates
-      window.addEventListener('load', function() {
-        setTimeout(function() {
+      // OPTIMIZED: Hide loader FAST - 300ms instead of 1200ms
+      (function(){
+        function hideLoader(){
           var loader = document.getElementById('app-initial-loader');
-          if (loader) {
-            loader.classList.add('hide');
-            setTimeout(function(){ loader.remove(); }, 500);
-          }
-        }, 1200);
-      });
-      // Fallback - hide after 3s max
-      setTimeout(function(){
-        var loader = document.getElementById('app-initial-loader');
-        if (loader &&!loader.classList.contains('hide')) {
+          if (!loader || loader.classList.contains('hide')) return;
           loader.classList.add('hide');
-          setTimeout(function(){ loader.remove(); }, 500);
+          setTimeout(function(){ if(loader && loader.parentNode) loader.remove(); }, 280);
         }
-      }, 3000);
+        // Hydrate aanathum immediate hide
+        if(document.readyState === 'complete' || document.readyState === 'interactive'){
+          setTimeout(hideLoader, 300);
+        } else {
+          window.addEventListener('DOMContentLoaded', function(){ setTimeout(hideLoader, 300); }, {once:true});
+          window.addEventListener('load', function(){ setTimeout(hideLoader, 300); }, {once:true});
+        }
+        // Fallback 2s max (was 3s)
+        setTimeout(hideLoader, 2000);
+      })();
     </script>
   </body>
 </html>

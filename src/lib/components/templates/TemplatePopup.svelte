@@ -2,559 +2,170 @@
     import { createEventDispatcher, onMount } from "svelte";
     import { goto } from "$app/navigation";
     import { get } from "svelte/store";
-    import { authStore, authUserId, authUserName, displayName, getTemplateOwner } from "$lib/stores/auth";
+    import { authUserId, authUserName, displayName, getTemplateOwner } from "$lib/stores/auth";
     import { supabaseTemplates } from "$lib/supabase";
 
     export let templates: any[] = [];
     export let loading = false;
     const dispatch = createEventDispatcher();
-    let search = "";
-    let deletingId: string | number | null = null;
-    let localTemplates: any[] = [];
 
-    let showShareModal = false;
-    let shareTemplate: any = null;
-    let shareAll = true;
-    let requiresApproval = true;
-    let allowReshare = true;
-    let canEdit = true;
-    let shareUserId = "";
-    let currentUserId = "";
-    let currentUserName = "";
-    let selectedTheme = "emerald";
-    let showTheme = false;
+    let searchInput = ""; let search = ""; let searchTimer:any=null;
+    let deletingId:any=null; let localTemplates:any[]=[];
+    let showShareModal=false; let shareTemplate:any=null;
+    let shareAll=true; let requiresApproval=true; let allowReshare=true; let canEdit=true; let shareUserId="";
+    let currentUserId=""; let currentUserName=""; let selectedTheme="emerald";
+    let showTheme=false; let showUseModal=false; let useTemplate:any=null; let useFormData:any={}; let useSaving=false;
+    let showReport=false; let reportData:any[]=[]; let toast=""; let visibleCount=30;
+    let listEl: HTMLElement | null = null;
+    let loaded = false;
 
-    // --- NEW FOR USE + REPORTS ---
-    let showUseModal = false;
-    let useTemplate:any = null;
-    let useFormData:any = {};
-    let useSaving = false;
-    let showReport = false;
-    let reportData:any[] = [];
-    let toast = "";
     function isValidUUID(u:string){ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u); }
 
     const themes = [
-      { id:"emerald", name:"Emerald Pro", primary:"#10b981", secondary:"#065f46", card:"#ecfdf5", times:[ { label:"Morning 06-12", color:"#10b981" }, { label:"Afternoon 12-18", color:"#f59e0b" }, { label:"Night 18-06", color:"#1e293b" }, ]},
-      { id:"ocean", name:"Ocean Blue", primary:"#0ea5e9", secondary:"#0c4a6e", card:"#e0f2fe", times:[ { label:"Morning 06-12", color:"#0ea5e9" }, { label:"Afternoon 12-18", color:"#6366f1" }, { label:"Night 18-06", color:"#0f172a" }, ]},
-      { id:"sunset", name:"Sunset Amber", primary:"#f59e0b", secondary:"#78350f", card:"#fffbeb", times:[ { label:"Morning 06-12", color:"#fbbf24" }, { label:"Afternoon 12-18", color:"#f59e0b" }, { label:"Night 18-06", color:"#92400e" }, ]},
-      { id:"slate", name:"Slate Corporate", primary:"#334155", secondary:"#0f172a", card:"#f1f5f9", times:[ { label:"Morning 06-12", color:"#475569" }, { label:"Afternoon 12-18", color:"#334155" }, { label:"Night 18-06", color:"#0f172a" }, ]},
-      { id:"royal", name:"Royal Purple", primary:"#8b5cf6", secondary:"#4c1d95", card:"#ede9fe", times:[ { label:"Morning 06-12", color:"#a78bfa" }, { label:"Afternoon 12-18", color:"#8b5cf6" }, { label:"Night 18-06", color:"#4c1d95" }, ]},
-      { id:"ruby", name:"Ruby Red", primary:"#ef4444", secondary:"#7f1d1d", card:"#fef2f2", times:[ { label:"Morning 06-12", color:"#f87171" }, { label:"Afternoon 12-18", color:"#ef4444" }, { label:"Night 18-06", color:"#991b1b" }, ]},
-      { id:"teal", name:"Teal Medical", primary:"#14b8a6", secondary:"#134e4a", card:"#ccfbf1", times:[ { label:"Morning 06-12", color:"#2dd4bf" }, { label:"Afternoon 12-18", color:"#14b8a6" }, { label:"Night 18-06", color:"#0f766e" }, ]},
-      { id:"indigo", name:"Indigo Night", primary:"#6366f1", secondary:"#312e81", card:"#e0e7ff", times:[ { label:"Morning 06-12", color:"#818cf8" }, { label:"Afternoon 12-18", color:"#6366f1" }, { label:"Night 18-06", color:"#1e1b4b" }, ]},
-      { id:"forest", name:"Forest Dark", primary:"#16a34a", secondary:"#052e16", card:"#dcfce7", times:[ { label:"Morning 06-12", color:"#4ade80" }, { label:"Afternoon 12-18", color:"#16a34a" }, { label:"Night 18-06", color:"#14532d" }, ]},
-      { id:"charcoal", name:"Charcoal Elite", primary:"#111827", secondary:"#000000", card:"#ffffff", times:[ { label:"Morning 06-12", color:"#6b7280" }, { label:"Afternoon 12-18", color:"#111827" }, { label:"Night 18-06", color:"#000000" }, ]},
+      { id:"emerald", name:"Emerald", primary:"#10b981", secondary:"#065f46", card:"#ecfdf5", times:[{label:"M",color:"#10b981"},{label:"A",color:"#f59e0b"},{label:"N",color:"#1e293b"}]},
+      { id:"ocean", name:"Ocean", primary:"#0ea5e9", secondary:"#0c4a6e", card:"#e0f2fe", times:[{label:"M",color:"#0ea5e9"},{label:"A",color:"#6366f1"},{label:"N",color:"#0f172a"}]},
+      { id:"sunset", name:"Sunset", primary:"#f59e0b", secondary:"#78350f", card:"#fffbeb", times:[{label:"M",color:"#fbbf24"},{label:"A",color:"#f59e0b"},{label:"N",color:"#92400e"}]},
+      { id:"slate", name:"Slate", primary:"#334155", secondary:"#0f172a", card:"#f1f5f9", times:[{label:"M",color:"#475569"},{label:"A",color:"#334155"},{label:"N",color:"#0f172a"}]},
+      { id:"royal", name:"Royal", primary:"#8b5cf6", secondary:"#4c1d95", card:"#ede9fe", times:[{label:"M",color:"#a78bfa"},{label:"A",color:"#8b5cf6"},{label:"N",color:"#4c1d95"}]},
+      { id:"ruby", name:"Ruby", primary:"#ef4444", secondary:"#7f1d1d", card:"#fef2f2", times:[{label:"M",color:"#f87171"},{label:"A",color:"#ef4444"},{label:"N",color:"#991b1b"}]},
+      { id:"teal", name:"Teal", primary:"#14b8a6", secondary:"#134e4a", card:"#ccfbf1", times:[{label:"M",color:"#2dd4bf"},{label:"A",color:"#14b8a6"},{label:"N",color:"#0f766e"}]},
+      { id:"indigo", name:"Indigo", primary:"#6366f1", secondary:"#312e81", card:"#e0e7ff", times:[{label:"M",color:"#818cf8"},{label:"A",color:"#6366f1"},{label:"N",color:"#1e1b4b"}]},
     ];
+    const themeMap = new Map(themes.map(t=>[t.id,t]));
+    let activeTheme:any = themes[0];
+    let cachedTimeColor = themes[0].times[0].color;
+    $: { try{ const th=themeMap.get(selectedTheme)||themes[0]; activeTheme=th; const h=new Date().getHours(); cachedTimeColor=h>=6&&h<12?th.times[0].color:h>=12&&h<18?th.times[1].color:th.times[2].color; }catch{ activeTheme=themes[0]; } }
 
-    $: activeTheme = themes.find(t=>t.id===selectedTheme) || themes[0];
-    function getTimeColor(dateStr?: string){ const d = dateStr? new Date(dateStr) : new Date(); const h = d.getHours(); if(h>=6 && h<12) return activeTheme.times[0].color; if(h>=12 && h<18) return activeTheme.times[1].color; return activeTheme.times[2].color; }
-    function getCurrentUser(){ try{ const owner = getTemplateOwner(); const storeName = get(authUserName); const storeId = get(authUserId); const dispName = get(displayName); currentUserName = owner.owner_name || storeName || dispName || "Account User"; currentUserId = owner.owner_id || storeId || currentUserName; return currentUserId; }catch{ currentUserName = "Account User"; currentUserId = "Account User"; return currentUserId; } }
-    function loadLocal(){
+    function getCurrentUserFast(){ try{ const o=getTemplateOwner(); currentUserName=o.owner_name||get(authUserName)||get(displayName)||"User"; currentUserId=o.owner_id||get(authUserId)||currentUserName; }catch{ currentUserName="User"; currentUserId="User"; } }
+    function loadLocalFast(){
         try{
-            const saved = JSON.parse(localStorage.getItem("templates")||"[]");
-            getCurrentUser();
-            const storedTheme = localStorage.getItem("template_theme") || localStorage.getItem("template_theme_id");
-            if(storedTheme) selectedTheme = storedTheme;
-            localTemplates = saved.map((t:any)=>({ id: t.id, owner_id: t.owner_id || t.owner_name || currentUserId, owner_name: t.owner_name || t.owner_id || currentUserName, name: t.name || t.template_name || "Untitled", template_code: t.code || t.template_code || t.t_code || "", code: t.code || t.template_code || "", description: t.description || "", department: t.category || t.department || "General", category: t.category || t.department || "General", placements: t.fields || t.placements || t.data?.fields || [], fields: t.fields || t.placements || t.data?.fields || [], theme: t.theme || selectedTheme, data: { fields: t.fields || t.placements || t.data?.fields || [], department: t.category || t.department || "General", description: t.description || "" }, allow_all_contacts: t.allow_all_contacts?? true, requires_approval: t.requires_approval?? true, allow_reshare: t.allow_reshare?? true, shared_with: t.shared_with || [], createdAt: t.createdAt || t.created_at }));
-        }catch(e){ console.error("loadLocal error", e); localTemplates=[]; }
+            const raw=localStorage.getItem("templates"); if(!raw){ localTemplates=[]; return; }
+            const saved=JSON.parse(raw); const nowColor=cachedTimeColor;
+            localTemplates=saved.map((t:any)=>{ const tid=t.theme||selectedTheme; const th=themeMap.get(tid)||themes[0]; return { id:t.id, owner_id:t.owner_id||currentUserId, owner_name:t.owner_name||currentUserName, name:t.name||"Untitled", template_code:t.code||t.template_code||"", code:t.code||t.template_code||"", description:t.description||"", department:t.category||t.department||"General", placements:t.fields||t.placements||t.data?.fields||[], fields:t.fields||t.placements||t.data?.fields||[], theme:tid, data:{fields:t.fields||t.placements||t.data?.fields||[]}, allow_all_contacts:t.allow_all_contacts??true, requires_approval:t.requires_approval??true, allow_reshare:t.allow_reshare??true, shared_with:t.shared_with||[], createdAt:t.createdAt||t.created_at, _th:th, _msgColor:nowColor, _search:`${t.name||''} ${t.code||''} ${t.template_code||''}`.toLowerCase() }; });
+        }catch{ localTemplates=[]; }
     }
-    onMount(()=>{ loadLocal(); const unsub = authStore.subscribe(()=> loadLocal()); return unsub; });
-    function onFocus(){ loadLocal(); }
-    function canAccess(template:any){ if(!template) return false; if(String(template.owner_id)===String(currentUserId) || String(template.owner_name)===String(currentUserName) || String(template.owner_name)===String(currentUserId)) return true; if(template.allow_all_contacts) return true; const found = template.shared_with?.find((s:any)=> String(s.user_id)===String(currentUserId) || String(s.user_id)===String(currentUserName)); if(!found) return false; if(template.requires_approval &&!found.approved) return false; return true; }
-    function isPending(template:any){ const found = template.shared_with?.find((s:any)=> String(s.user_id)===String(currentUserId) || String(s.user_id)===String(currentUserName)); return found && template.requires_approval &&!found.approved; }
-    $: allTemplates = (() => { const map = new Map(); [...localTemplates,...(templates??[])].forEach(t=>{ if(!t) return; if(!canAccess(t)) return; const key = String(t.id || t.template_code || t.name); if(!map.has(key)) map.set(key, t); }); return Array.from(map.values()); })();
-    $: filteredTemplates = allTemplates.filter((template) => { const query = search.trim().toLowerCase(); if (!query) return true; return [ template?.name, template?.template_code, template?.code, template?.category, template?.department, template?.description, template?.owner_name ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query)); });
-    function close() { dispatch("close"); }
-    function handleEdit(template: any) { if (!template) return; const isOwner = String(template.owner_id)===String(currentUserId) || String(template.owner_name)===String(currentUserName); const canEditPerm = template.shared_with?.find((s:any)=> (String(s.user_id)===String(currentUserId) || String(s.user_id)===String(currentUserName)) && s.permission==='edit' && s.approved); if(!isOwner &&!canEditPerm){ alert(`No edit permission - Need approval from ${template.owner_name}`); return; } localStorage.setItem("edit_template", JSON.stringify(template)); dispatch("edit", { template }); close(); const qs = window.location.search; goto(`/templates/create?id=${template.id}${qs? `&${qs.substring(1)}` : ''}`); }
-    function handleNew() { dispatch("new"); dispatch("create"); close(); const qs = window.location.search; goto(`/templates/create${qs}`); }
-
-    // UPDATED USE - OPEN FORM
-    function handleUse(template: any) {
-      if (!template) return;
-      if(isPending(template)){ alert(`Waiting approval from ${template.owner_name} for installation`); return; }
-      openUse(template);
-    }
-
-    function openUse(t:any){
-      useTemplate = t;
-      useFormData = {};
-      let fields = t.fields || t.data?.fields || t.placements || [];
-      fields.forEach((f:any)=>{
-        let key = f.field_name || f.name;
-        if(!key) return;
-        if(f.type==='number') useFormData[key] = '';
-        else if(f.type==='dropdown') useFormData[key] = f.options?.[0] || '';
-        else if(f.type==='formula') useFormData[key] = '';
-        else useFormData[key] = '';
-      });
-      localStorage.setItem("use_template", JSON.stringify(t));
-      dispatch("use", { template:t });
-      showUseModal = true;
-      setTimeout(()=>calcAllFormulas(),50);
-    }
-
-    function calcAllFormulas(){
-      if(!useTemplate) return;
-      let fields = useTemplate.fields || useTemplate.data?.fields || useTemplate.placements || [];
-      fields.forEach((f:any)=>{
-        if(f.type==='formula' && f.formula){
-          let expr = f.formula;
-          fields.forEach((rf:any)=>{
-            let key = rf.field_name || rf.name;
-            if(!key) return;
-            let raw = useFormData[key];
-            let val = parseFloat(raw);
-            if(isNaN(val)) val = 0;
-            expr = expr.split(`{${key}}`).join(val.toString());
-          });
-          expr = expr.replaceAll('×','*').replaceAll('÷','/').replace(/%/g,'/100');
-          try{
-            if(/^[0-9\.\+\-\*\/\(\)\s]+$/.test(expr) && expr.trim()){
-              let res = Function(`"use strict"; return (${expr})`)();
-              let k = f.field_name || f.name;
-              if(isFinite(res)) useFormData[k] = Math.round(res*100)/100;
-            }
-          }catch{}
-        }
-      });
-    }
-
+    getCurrentUserFast(); try{ const st=localStorage.getItem("template_theme"); if(st&&themeMap.has(st)) selectedTheme=st; }catch{} loadLocalFast(); loaded=true;
+    onMount(()=>{ if(listEl) listEl.addEventListener('scroll', ()=>{ if(listEl && listEl.scrollTop+listEl.clientHeight>=listEl.scrollHeight-200){ if(visibleCount<filteredTemplates.length) visibleCount+=20; } }, {passive:true}); });
+    function onSearchInput(e:any){ const v=e.target.value; searchInput=v; if(searchTimer) clearTimeout(searchTimer); if(v.length===0){ search=""; visibleCount=30; return; } searchTimer=setTimeout(()=>{ search=v.trim().toLowerCase(); visibleCount=30; },80); }
+    function clearSearch(){ searchInput=""; search=""; visibleCount=30; }
+    $: allTemplates=(()=>{ if(!loaded) return localTemplates; const seen=new Set(); const out:any[]=[]; for(let t of localTemplates){ const k=String(t.id||t.name); if(!seen.has(k)){ seen.add(k); out.push(t); } } for(let t of (templates||[])){ if(!t) continue; const k=String(t.id||t.template_code||t.name); if(seen.has(k)) continue; seen.add(k); const th=themeMap.get(t.theme||selectedTheme)||themes[0]; out.push({...t, _th:th, _msgColor:cachedTimeColor, _search:`${t.name||''} ${t.template_code||t.code||''}`.toLowerCase(), data: typeof t.data==='string'? (()=>{ try{ return JSON.parse(t.data); }catch{ return {fields:[]}; } })() : t.data }); } return out; })();
+    $: filteredTemplates=!search? allTemplates : allTemplates.filter((t:any)=> t._search?.includes(search));
+    $: visibleTemplates=filteredTemplates.slice(0,visibleCount);
+    function close(){ dispatch("close"); }
+    function handleEdit(t:any){ localStorage.setItem("edit_template", JSON.stringify(t)); dispatch("edit",{template:t}); close(); goto(`/templates/create?id=${t.id}`); }
+    function handleNew(){ dispatch("new"); dispatch("create"); close(); goto(`/templates/create`); }
+    function handleUse(t:any){ useTemplate=t; useFormData={}; let fields=t.fields||t.data?.fields||[]; for(let f of fields){ let key=f.field_name||f.name; if(!key) continue; useFormData[key]=f.type==='dropdown'?(f.options?.[0]||'') : ''; } dispatch("use",{template:t}); showUseModal=true; setTimeout(()=>calcAllFormulas(),30); }
+    function calcAllFormulas(){ if(!useTemplate) return; let fields=useTemplate.fields||useTemplate.data?.fields||[]; for(let f of fields){ if(f.type==='formula'&&f.formula){ let expr=f.formula; for(let rf of fields){ let key=rf.field_name||rf.name; if(!key) continue; let raw=useFormData[key]; let val=parseFloat(raw); if(isNaN(val)) val=0; expr=expr.split(`{${key}}`).join(val.toString()); } expr=expr.replaceAll('×','*').replaceAll('÷','/').replace(/%/g,'/100'); try{ if(/^[0-9\.\+\-\*\/\(\)\s]+$/.test(expr)&&expr.trim()){ let res=Function(`"use strict"; return (${expr})`)() as number; let k=f.field_name||f.name; if(isFinite(res)) useFormData[k]=Math.round(res*100)/100; } }catch{} } } }
     function onUseInput(){ calcAllFormulas(); }
-
     async function submitUseData(){
-      if(!useTemplate) return;
-      // validate required
-      let fields = useTemplate.fields || useTemplate.data?.fields || [];
-      for(let f of fields){
-        if(f.required){
-          let k = f.field_name || f.name;
-          if(!useFormData[k] && useFormData[k]!==0){ toast = `❌ Enter ${f.label}`; setTimeout(()=>toast="",2500); return; }
-        }
-      }
-      useSaving = true;
-      try{
-        let owner = getTemplateOwner();
-        let realUUID = null;
-        try{ const {data:{user}} = await supabaseTemplates.auth.getUser(); if(user && isValidUUID(user.id)) realUUID=user.id; }catch{}
-        const entry = {
-          id: crypto.randomUUID(),
-          template_id: useTemplate.id,
-          template_code: useTemplate.template_code || useTemplate.code,
-          template_name: useTemplate.name,
-          data: {...useFormData},
-          owner_email: owner.owner_email || currentUserName,
-          created_at: new Date().toISOString()
-        };
-        let subs = [];
-        try{ subs = JSON.parse(localStorage.getItem("submissions")||"[]"); }catch{ subs=[]; }
-        subs = [entry,...subs].slice(0,500);
-        localStorage.setItem("submissions", JSON.stringify(subs));
-        try{
-          let payload:any = { template_id: String(useTemplate.id), template_code: entry.template_code, data: useFormData };
-          if(realUUID) payload.owner_id = realUUID;
-          let {error} = await supabaseTemplates.from('submissions').insert(payload);
-          if(error){
-            await supabaseTemplates.from('template_entries').insert(payload);
-          }
-        }catch(e){ console.warn("submission supabase error", e); }
-        showUseModal = false;
-        reportData = subs.filter((s:any)=> String(s.template_id)===String(useTemplate.id));
-        showReport = true;
-        toast = `✅ Saved - ${reportData.length} records`;
-        setTimeout(()=>toast="",3000);
-      }finally{ useSaving=false; }
+      if(!useTemplate) return; let fields=useTemplate.fields||useTemplate.data?.fields||[]; for(let f of fields){ if(f.required){ let k=f.field_name||f.name; if(!useFormData[k]&&useFormData[k]!==0){ toast=`❌ Enter ${f.label}`; setTimeout(()=>toast="",2000); return; } } } useSaving=true;
+      try{ let owner=getTemplateOwner(); let realUUID=null; try{ const {data:{user}}=await supabaseTemplates.auth.getUser(); if(user&&isValidUUID(user.id)) realUUID=user.id; }catch{} const entry={ id:crypto.randomUUID(), template_id:useTemplate.id, template_code:useTemplate.template_code||useTemplate.code, template_name:useTemplate.name, data:{...useFormData}, owner_email:owner.owner_email||currentUserName, created_at:new Date().toISOString() }; let subs=[]; try{ subs=JSON.parse(localStorage.getItem("submissions")||"[]"); }catch{ subs=[]; } subs=[entry,...subs].slice(0,500); localStorage.setItem("submissions", JSON.stringify(subs)); try{ let payload:any={ template_id:String(useTemplate.id), template_code:entry.template_code, data:useFormData }; if(realUUID) payload.owner_id=realUUID; let {error}=await supabaseTemplates.from('submissions').insert(payload); if(error) await supabaseTemplates.from('template_entries').insert(payload); }catch{} showUseModal=false; reportData=subs.filter((s:any)=>String(s.template_id)===String(useTemplate.id)); showReport=true; toast=`✅ Saved`; setTimeout(()=>toast="",2000); }finally{ useSaving=false; }
     }
-
-    async function handleDelete(template: any) { if (!template?.id || deletingId!== null) return; const isOwner = String(template.owner_id)===String(currentUserId) || String(template.owner_name)===String(currentUserName); if(!isOwner){ alert("Only owner can delete"); return; } const confirmed = window.confirm(`Delete "${template.name || "this template"}"?`); if (!confirmed) return; deletingId = template.id; try { const saved = JSON.parse(localStorage.getItem("templates")||"[]"); const updated = saved.filter((x:any)=> String(x.id)!== String(template.id)); localStorage.setItem("templates", JSON.stringify(updated)); loadLocal(); try{ await supabaseTemplates.from('templates').delete().eq('id', template.id); await fetch(`/api/templates?id=${encodeURIComponent(String(template.id))}`, { method: "DELETE", headers: { Accept: "application/json" } }); }catch{} dispatch("deleted", { template }); } catch (error) { console.error("[TemplatePopup] Delete failed:", error); window.alert(error instanceof Error? error.message : "Failed to delete template."); } finally { deletingId = null; } }
-    function openShare(template:any){ const isOwner = String(template.owner_id)===String(currentUserId) || String(template.owner_name)===String(currentUserName); if(!isOwner &&!template.allow_reshare){ alert(`You don't have reshare permission. Need approval from ${template.owner_name}.`); return; } shareTemplate = template; shareAll = template.allow_all_contacts?? true; requiresApproval = template.requires_approval?? true; allowReshare = template.allow_reshare?? true; canEdit = true; shareUserId = ""; showShareModal = true; }
-    async function confirmShare(){
-      const saved = JSON.parse(localStorage.getItem("templates")||"[]");
-      const idx = saved.findIndex((x:any)=> String(x.id)===String(shareTemplate.id));
-      if(idx<0) return;
-      let updatedShared = shareTemplate.shared_with || [];
-      if(!shareAll){
-        if(!shareUserId.trim()){ alert("Enter B user ID / Email"); return; }
-        updatedShared = [...updatedShared.filter((s:any)=> String(s.user_id)!==String(shareUserId)), { user_id: shareUserId.trim(), permission: canEdit? 'edit':'use', approved:!requiresApproval, requestedAt: new Date().toISOString(), shared_by: currentUserName }];
-      }
-      const updated = {...saved[idx], allow_all_contacts: shareAll, requires_approval: requiresApproval, allow_reshare: allowReshare, shared_with: updatedShared, owner_id: shareTemplate.owner_id, owner_name: shareTemplate.owner_name };
-      saved[idx]=updated;
-      localStorage.setItem("templates", JSON.stringify(saved));
-      try{
-        await supabaseTemplates.from('templates').update({
-          allow_all_contacts: shareAll,
-          requires_approval: requiresApproval,
-          allow_reshare: allowReshare,
-          shared_with: updatedShared,
-          owner_id: String(shareTemplate.owner_id),
-          owner_name: String(shareTemplate.owner_name)
-        }).eq('id', shareTemplate.id);
-      }catch(e){ console.warn("supabase share sync failed", e); }
-      loadLocal();
-      showShareModal=false;
-      alert(shareAll? `🔒 Shared to all by ${currentUserName} - Reports secure` : `🔒 Request sent to ${shareUserId} - Needs your approval`);
-    }
-    async function approveUser(template:any, userId:string, approve:boolean){
-      const saved = JSON.parse(localStorage.getItem("templates")||"[]");
-      const idx = saved.findIndex((x:any)=> String(x.id)===String(template.id));
-      if(idx<0) return;
-      if(!approve){
-        saved[idx].shared_with = saved[idx].shared_with.filter((s:any)=> String(s.user_id)!==String(userId));
-      } else {
-        saved[idx].shared_with = saved[idx].shared_with.map((s:any)=> String(s.user_id)===String(userId)? {...s, approved: true} : s);
-      }
-      localStorage.setItem("templates", JSON.stringify(saved));
-      try{
-        await supabaseTemplates.from('templates').update({ shared_with: saved[idx].shared_with }).eq('id', template.id);
-      }catch{}
-      loadLocal();
-    }
-    function getFields(template: any): any[] { if(Array.isArray(template?.data?.fields)) return template.data.fields; if(Array.isArray(template?.placements)) return template.placements; if(Array.isArray(template?.fields)) return template.fields; return []; }
-    function getDepartment(template: any): string { return template?.data?.department || template?.department || template?.category || "General"; }
-    function getDescription(template: any): string { return template?.description || template?.data?.description || `Code: ${template.template_code||template.code||'N/A'}`; }
-    function handleKeydown(event: KeyboardEvent, action: () => void) { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); action(); } }
-    function selectTheme(id:string){ selectedTheme = id; localStorage.setItem("template_theme", id); localStorage.setItem("template_theme_id", id); showTheme = false; }
+    async function handleDelete(t:any){ if(!t?.id||deletingId!==null) return; if(!confirm(`Delete "${t.name}"?`)) return; deletingId=t.id; try{ const saved=JSON.parse(localStorage.getItem("templates")||"[]"); localStorage.setItem("templates", JSON.stringify(saved.filter((x:any)=>String(x.id)!==String(t.id)))); loadLocalFast(); try{ await supabaseTemplates.from('templates').delete().eq('id',t.id); }catch{} dispatch("deleted",{template:t}); }finally{ deletingId=null; } }
+    function openShare(t:any){ shareTemplate=t; shareAll=t.allow_all_contacts??true; requiresApproval=t.requires_approval??true; allowReshare=t.allow_reshare??true; canEdit=true; shareUserId=""; showShareModal=true; }
+    async function confirmShare(){ const saved=JSON.parse(localStorage.getItem("templates")||"[]"); const idx=saved.findIndex((x:any)=>String(x.id)===String(shareTemplate.id)); if(idx<0) return; let updatedShared=shareTemplate.shared_with||[]; if(!shareAll){ if(!shareUserId.trim()){ alert("Enter ID"); return; } updatedShared=[...updatedShared.filter((s:any)=>String(s.user_id)!==String(shareUserId)), { user_id:shareUserId.trim(), permission:canEdit?'edit':'use', approved:!requiresApproval, requestedAt:new Date().toISOString(), shared_by:currentUserName }]; } saved[idx]={...saved[idx], allow_all_contacts:shareAll, requires_approval:requiresApproval, allow_reshare:allowReshare, shared_with:updatedShared }; localStorage.setItem("templates", JSON.stringify(saved)); try{ await supabaseTemplates.from('templates').update({ allow_all_contacts:shareAll, requires_approval:requiresApproval, allow_reshare:allowReshare, shared_with:updatedShared }).eq('id',shareTemplate.id); }catch{} loadLocalFast(); showShareModal=false; toast="🔒 Shared"; setTimeout(()=>toast="",2000); }
+    function getFields(t:any){ return t.data?.fields||t.fields||t.placements||[]; }
+    function getDept(t:any){ return t.data?.department||t.department||t.category||"General"; }
+    function getDesc(t:any){ return t.description||t.data?.description||`Code: ${t.template_code||t.code||'N/A'}`; }
+    function handleKeydown(e:KeyboardEvent, a:()=>void){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); a(); } }
+    function selectTheme(id:string){ if(!themeMap.has(id)) return; selectedTheme=id; localStorage.setItem("template_theme",id); showTheme=false; }
 </script>
 
-<svelte:window on:focus={onFocus} />
-
-<div class="overlay" role="presentation" on:click={(event) => { if (event.target === event.currentTarget) close(); }}>
-    <section class="popup" role="dialog" aria-modal="true" aria-labelledby="template-title">
+<div class="overlay" role="presentation" on:click={(e)=>{ if(e.target===e.currentTarget) close(); }}>
+    <section class="popup" role="dialog" aria-modal="true">
         <header class="popup-header" style="border-bottom:4px solid {activeTheme.primary}">
-            <div class="title-wrap">
-                <span class="title-icon" aria-hidden="true">📋</span>
-                <div>
-                    <h2 id="template-title">Templates</h2>
-                    <p>{filteredTemplates.length} templates • You: {currentUserName} • Theme: {activeTheme.name}</p>
-                </div>
-            </div>
-            <div class="head-actions">
-              <button class="theme-btn" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}; color:{activeTheme.primary}" on:click={()=>showTheme=!showTheme}>🎨 {activeTheme.name}</button>
-              <button type="button" class="close-btn" on:click={close}>×</button>
-            </div>
+            <div class="title-wrap"><span class="title-icon">📋</span><div><h2>Templates</h2><p>{filteredTemplates.length} • {visibleTemplates.length} shown</p></div></div>
+            <div class="head-actions"><button class="theme-btn" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}; color:{activeTheme.primary}" on:click={()=>showTheme=!showTheme}>🎨 {activeTheme.name}</button><button type="button" class="close-btn" on:click={close}>×</button></div>
         </header>
-
-        {#if showTheme}
-        <div class="theme-picker">
-          {#each themes as th}
-            <button class="theme-opt" class:active={th.id===selectedTheme} style="border-color:{th.primary}; background:{th.card}" on:click={()=>selectTheme(th.id)}>
-              <div class="theme-opt-top">
-                <span class="t-dot" style="background:{th.primary}"></span>
-                <b>{th.name}</b>
-              </div>
-              <div class="t-boxes">
-                <span style="background:{th.primary}"></span>
-                <span style="background:{th.secondary}"></span>
-                <span style="background:{th.card}; border:1px solid #e5e7eb"></span>
-              </div>
-              <div class="t-times">
-                {#each th.times as tc}
-                  <div class="t-time"><span style="background:{tc.color}"></span><small>{tc.label}</small></div>
-                {/each}
-              </div>
-            </button>
-          {/each}
-        </div>
-        {/if}
-
-        <div class="toolbar">
-            <div class="search-box">
-                <span>🔍</span>
-                <input bind:value={search} type="search" placeholder="Search by name, code, owner..." />
-                {#if search}<button class="clear-search" on:click={() => (search = "")}>×</button>{/if}
-            </div>
-            <button class="new-btn" style="background:{activeTheme.primary}" on:click={handleNew}><span>+</span> New</button>
-        </div>
-
-        <div class="template-list">
-            {#if loading}
-                <div class="state"><div class="spinner"></div><p>Loading...</p></div>
-            {:else if filteredTemplates.length === 0}
-                <div class="empty-state">
-                    <div class="empty-icon">📋</div>
-                    <h3>No templates</h3><button class="new-empty-btn" style="background:{activeTheme.primary}" on:click={handleNew}>+ Create Template</button>
-                </div>
-            {:else}
-                {#each filteredTemplates as template}
-                    {@const th = themes.find(x=>x.id===(template.theme||selectedTheme)) || activeTheme}
-                    {@const msgColor = getTimeColor(template.createdAt)}
-                    <article class="template-card" class:pending={isPending(template)} style="border-left:5px solid {msgColor}; background:{th.card};">
-                        <div class="template-icon" role="button" tabindex="0" style="background:{th.card}; border:1px solid {th.primary}; color:{th.primary}" on:click={() => handleUse(template)} on:keydown={(e)=>handleKeydown(e,()=>handleUse(template))}>📄</div>
-                        <div class="template-info">
-                            <div class="name-row">
-                                <h3>{template.name}</h3>
-                                <span class="color-box" style="background:{msgColor}" title="Message time color {msgColor}"></span>
-                                <span class="theme-tag" style="background:{th.primary}; color:white">{th.name}</span>
-                                {#if String(template.owner_id)===String(currentUserId) || String(template.owner_name)===String(currentUserName)}<span class="owner-badge">You • {template.owner_name}</span>{:else}<span class="shared-badge">Shared by {template.owner_name}</span>{/if}
-                                {#if isPending(template)}<span class="pending-badge">Pending {template.owner_name} Approval</span>{/if}
-                            </div>
-                            <div class="meta">Fields: {getFields(template).length} • {getDepartment(template)} • {template.allow_all_contacts? 'All contacts' : `${template.shared_with?.length||0} users`} • Sent: {template.createdAt? new Date(template.createdAt).toLocaleTimeString() : 'now'} <span style="color:{msgColor}; font-weight:800">● {msgColor}</span></div>
-                            <p class="description">{getDescription(template)}</p>
-                            <div class="time-legend-row">
-                              {#each th.times as tc}
-                                <div class="legend-item" class:active={tc.color===msgColor}>
-                                  <span class="legend-box" style="background:{tc.color}"></span>
-                                  <small>{tc.label}</small>
-                                </div>
-                              {/each}
-                            </div>
-                            {#if (String(template.owner_id)===String(currentUserId) || String(template.owner_name)===String(currentUserName)) && template.shared_with?.some((s:any)=>!s.approved)}
-                                <div class="approval-row">
-                                    {#each template.shared_with.filter((s:any)=>!s.approved) as req}
-                                        <span>{req.user_id} waiting your approval <button class="mini-approve" on:click={()=>approveUser(template, req.user_id, true)}>Approve</button><button class="mini-reject" on:click={()=>approveUser(template, req.user_id, false)}>Reject</button></span>
-                                    {/each}
-                                </div>
-                            {/if}
-                        </div>
-                        <div class="actions">
-                            <button class="action edit" on:click={() => handleEdit(template)}>Edit</button>
-                            <button class="action share" style="background:{th.primary}" on:click={() => openShare(template)}>Share</button>
-                            <button class="action delete" on:click={() => handleDelete(template)}>Delete</button>
-                            <button class="action use" style="background:{th.primary}" on:click={() => handleUse(template)}>Use</button>
-                        </div>
-                    </article>
-                {/each}
-            {/if}
+        {#if showTheme}<div class="theme-picker">{#each themes as th}<button class="theme-opt" class:active={th.id===selectedTheme} style="border-color:{th.primary}; background:{th.card}" on:click={()=>selectTheme(th.id)}><b style="color:{th.primary}">{th.name}</b></button>{/each}</div>{/if}
+        <div class="toolbar"><div class="search-box"><span>🔍</span><input value={searchInput} on:input={onSearchInput} type="search" placeholder="Search..." /><button class="clear-search" style="display:{searchInput?'flex':'none'}" on:click={clearSearch}>×</button></div><button class="new-btn" style="background:{activeTheme.primary}" on:click={handleNew}>+ New</button></div>
+        <div class="template-list" bind:this={listEl}>
+            {#if filteredTemplates.length===0}<div class="empty-state"><div class="empty-icon">📋</div><h3>No templates</h3><p>Local: {localTemplates.length}</p><button class="new-empty-btn" style="background:{activeTheme.primary}" on:click={handleNew}>+ Create</button></div>
+            {:else}{#each visibleTemplates as template (template.id)}<article class="template-card" style="border-left:5px solid {template._msgColor}; background:{template._th.card};"><div class="card-top"><div class="template-icon" role="button" tabindex="0" style="background:{template._th.card}; border:1px solid {template._th.primary}; color:{template._th.primary}" on:click={()=>handleUse(template)} on:keydown={(e)=>handleKeydown(e,()=>handleUse(template))}>📄</div><div class="template-info"><div class="name-row"><h3>{template.name}</h3><span class="theme-tag" style="background:{template._th.primary}">{template._th.name}</span></div><p class="description">{getDesc(template)}</p><div class="meta">F:{getFields(template).length} • {getDept(template)}</div></div></div><div class="actions"><button class="action edit" on:click={()=>handleEdit(template)}>Edit</button><button class="action share" style="background:{template._th.primary}" on:click={()=>openShare(template)}>Share</button><button class="action delete" on:click={()=>handleDelete(template)}>Del</button><button class="action use" style="background:{template._th.primary}" on:click={()=>handleUse(template)}>Use</button></div></article>{/each}{#if visibleCount<filteredTemplates.length}<div class="load-more">Scroll for {filteredTemplates.length-visibleCount} more</div>{/if}{/if}
         </div>
         {#if toast}<div class="toast-pop">{toast}</div>{/if}
     </section>
 </div>
 
 {#if showShareModal}
-<div class="overlay" style="z-index:1100" on:click|self={()=>showShareModal=false}>
+<div class="overlay share-overlay" on:click|self={()=>showShareModal=false}>
     <div class="share-popup">
-        <div class="share-head"><h3>🔒 Secure Share - {shareTemplate?.name}</h3><button class="close-btn" on:click={()=>showShareModal=false}>×</button></div>
-        <p class="owner-line">Owner: <b>{shareTemplate?.owner_name}</b> • You: <b>{currentUserName}</b> • Theme: <span style="background:{activeTheme.primary}; color:white; padding:2px 6px; border-radius:4px; font-size:10px;">{activeTheme.name}</span></p>
-        <label class="check-box"><input type="checkbox" bind:checked={shareAll} /> <b>{currentUserName}:</b> Share to all contacts & groups allowed</label>
-        <div class="perm-box">
-            <p class="perm-title">B user → C user conditions:</p>
-            <label class="check-box"><input type="checkbox" bind:checked={requiresApproval} /> Need permission from {shareTemplate?.owner_name} - approval for installation</label>
-            <label class="check-box"><input type="checkbox" bind:checked={allowReshare} /> B can modify & share to C user</label>
-            <label class="check-box"><input type="checkbox" bind:checked={canEdit} /> B can edit fields</label>
-        </div>
-        {#if !shareAll}
-        <div>
-            <label class="small-label">Enter B user ID</label>
-            <input bind:value={shareUserId} placeholder="e.g. contact_123" class="share-input" />
-        </div>
-        {/if}
-        <div class="share-actions">
-            <button class="secondary-btn" on:click={()=>showShareModal=false}>Cancel</button>
-            <button class="new-btn" style="background:{activeTheme.primary}" on:click={confirmShare}>Share Securely</button>
-        </div>
-    </div>
-</div>
-{/if}
-
-<!-- USE FORM MODAL - ENTER DATA -->
-{#if showUseModal && useTemplate}
-<div class="overlay" style="z-index:1200" on:click|self={()=>showUseModal=false}>
-  <div class="use-popup" style="border-top:5px solid {themes.find(t=>t.id===(useTemplate.theme||selectedTheme))?.primary || activeTheme.primary}">
-    <div class="use-popup-head">
-      <div>
-        <h3>📥 {useTemplate.name}</h3>
-        <small>Code: {useTemplate.template_code || useTemplate.code} • Fill data & save</small>
-      </div>
-      <button class="close-btn" on:click={()=>showUseModal=false}>×</button>
-    </div>
-    <div class="use-form-list">
-      {#each (useTemplate.fields || useTemplate.data?.fields || useTemplate.placements || []) as f}
-        {@const key = f.field_name || f.name}
-        <div class="use-field-row" style="border-left:4px solid {f.border || f.color || activeTheme.primary}">
-          <label class="use-label">{f.label} {#if f.required}<span class="req">*</span>{/if} <small>({f.type})</small></label>
-          {#if f.type==='dropdown'}
-            <select class="use-input" bind:value={useFormData[key]} on:change={onUseInput}>
-              <option value="">Select {f.label}</option>
-              {#each (f.options||[]) as opt}<option value={opt}>{opt}</option>{/each}
-            </select>
-          {:else if f.type==='number'}
-            <input class="use-input" type="number" bind:value={useFormData[key]} on:input={onUseInput} placeholder="Enter {f.label}" />
-          {:else if f.type==='time'}
-            <input class="use-input" type="time" bind:value={useFormData[key]} on:input={onUseInput} />
-          {:else if f.type==='formula'}
-            <div class="formula-box" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}">
-              <b>{useFormData[key]?? '0'}</b> <span>⚡ Auto</span>
+        <div class="share-head"><div class="share-head-left"><span class="share-icon">🔒</span><div><h3 class="share-title">Share</h3><small class="share-sub">{shareTemplate?.name}</small></div></div><button class="close-btn" on:click={()=>showShareModal=false}>×</button></div>
+        <div class="share-body">
+            <label class="check-box check-main"><input type="checkbox" bind:checked={shareAll} /><span class="check-label">All contacts</span></label>
+            <div class="perm-box">
+                <label class="check-box"><input type="checkbox" bind:checked={requiresApproval} /><span class="check-label">Need approval</span></label>
+                <label class="check-box"><input type="checkbox" bind:checked={allowReshare} /><span class="check-label">Can reshare</span></label>
+                <label class="check-box"><input type="checkbox" bind:checked={canEdit} /><span class="check-label">Can edit</span></label>
             </div>
-            <small class="formula-hint">{f.formula}</small>
-          {:else}
-            <input class="use-input" type="text" bind:value={useFormData[key]} on:input={onUseInput} placeholder="Enter {f.label}" maxlength="100" />
-          {/if}
+            {#if !shareAll}<input bind:value={shareUserId} placeholder="User ID / Email" class="share-input" />{/if}
         </div>
-      {/each}
+        <div class="share-actions"><button class="secondary-btn" on:click={()=>showShareModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" on:click={confirmShare}>🔒 Share</button></div>
     </div>
-    <div class="use-actions">
-      <button class="secondary-btn" on:click={()=>showUseModal=false}>Cancel</button>
-      <button class="new-btn" style="background:{activeTheme.primary}" disabled={useSaving} on:click={submitUseData}>{useSaving?'Saving...':'💾 Save & Show Reports'}</button>
-    </div>
-  </div>
 </div>
 {/if}
 
-<!-- REPORTS MODAL -->
-{#if showReport}
-<div class="overlay" style="z-index:1300" on:click|self={()=>showReport=false}>
-  <div class="report-popup">
-    <div class="report-head">
-      <div><h3>📊 Reports - {useTemplate?.name}</h3><small>{reportData.length} entries • Code: {useTemplate?.template_code || useTemplate?.code}</small></div>
-      <button class="close-btn" on:click={()=>showReport=false}>×</button>
-    </div>
-    <div class="report-list">
-      {#if reportData.length===0}
-        <div class="empty-state"><p>No data yet - Use template to add</p></div>
-      {:else}
-        <div class="report-table-wrap">
-          <table class="r-table">
-            <thead><tr><th>#</th><th>Date</th><th>Data</th></tr></thead>
-            <tbody>
-              {#each reportData as r,i}
-                <tr>
-                  <td>{i+1}</td>
-                  <td>{new Date(r.created_at).toLocaleString()}</td>
-                  <td>
-                    <div class="r-data">
-                      {#each Object.entries(r.data) as [k,v]}
-                        <span class="r-chip"><b>{k}:</b> {v}</span>
-                      {/each}
-                    </div>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </div>
-      {/if}
-    </div>
-    <div class="report-foot">
-      <button class="secondary-btn" on:click={()=>showReport=false}>Close</button>
-      <button class="new-btn" style="background:{activeTheme.primary}" on:click={()=>{showReport=false; if(useTemplate) openUse(useTemplate);}}>+ Add More</button>
-    </div>
-  </div>
+{#if showUseModal && useTemplate}
+<div class="overlay use-overlay" on:click|self={()=>showUseModal=false}>
+  <div class="use-popup" style="border-top:5px solid {activeTheme.primary}"><div class="use-popup-head"><div><h3>📥 {useTemplate.name}</h3><small>{useTemplate.template_code||useTemplate.code}</small></div><button class="close-btn" on:click={()=>showUseModal=false}>×</button></div><div class="use-form-list">{#each (useTemplate.fields||useTemplate.data?.fields||[]) as f}{@const key=f.field_name||f.name}<div class="use-field-row" style="border-left:4px solid {activeTheme.primary}"><label class="use-label">{f.label} {#if f.required}<span class="req">*</span>{/if}</label>{#if f.type==='dropdown'}<select class="use-input" bind:value={useFormData[key]} on:change={onUseInput}><option value="">Select</option>{#each (f.options||[]) as opt}<option value={opt}>{opt}</option>{/each}</select>{:else if f.type==='number'}<input class="use-input" type="number" bind:value={useFormData[key]} on:input={onUseInput} />{:else if f.type==='formula'}<div class="formula-box" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}"><b>{useFormData[key]??'0'}</b></div>{:else}<input class="use-input" type="text" bind:value={useFormData[key]} on:input={onUseInput} />{/if}</div>{/each}</div><div class="use-actions"><button class="secondary-btn" on:click={()=>showUseModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" disabled={useSaving} on:click={submitUseData}>{useSaving?'Saving...':'💾 Save'}</button></div></div>
 </div>
 {/if}
 
 <style>
-.overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(2px); }
-.popup { width: min(920px, 100%); max-height: min(780px, calc(100dvh - 40px)); display: flex; flex-direction: column; overflow: hidden; background: #fff; border-radius: 20px; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28); }
-.popup-header { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px; border-bottom: 1px solid #e5e7eb; gap:12px; }
-.title-wrap { display: flex; align-items: center; gap: 12px; min-width:0; }
-.title-icon { font-size: 24px; }
-h2 { margin: 0; color: #1f2937; font-size: 22px; line-height: 1.2; }
-.title-wrap p { margin: 3px 0 0; color: #94a3b8; font-size: 12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.head-actions{ display:flex; gap:8px; align-items:center; flex-shrink:0; }
-.close-btn { width: 40px; height: 40px; border: 0; border-radius: 50%; background: transparent; color: #64748b; font-size: 30px; line-height: 1; cursor: pointer; }
-.close-btn:hover { background: #f1f5f9; }
-.theme-btn{ padding:6px 12px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; white-space:nowrap; }
-.theme-picker{ display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:8px; padding:12px 20px; background:#f8fafc; border-bottom:1px solid #e5e7eb; max-height:220px; overflow:auto; }
-.theme-opt{ border:1px solid; border-radius:10px; padding:8px; text-align:left; cursor:pointer; display:flex; flex-direction:column; gap:6px; }
-.theme-opt.active{ outline:2px solid #111827; }
-.theme-opt-top{ display:flex; align-items:center; gap:6px; font-size:11px; }
-.t-dot{ width:8px; height:8px; border-radius:50%; display:inline-block; }
-.t-boxes{ display:flex; gap:4px; }.t-boxes span{ width:16px; height:10px; border-radius:3px; display:inline-block; }
-.t-times{ display:flex; flex-direction:column; gap:2px; }.t-time{ display:flex; gap:4px; align-items:center; }.t-time span{ width:12px; height:8px; border-radius:2px; display:inline-block; }.t-time small{ font-size:9px; color:#475569; }
-.toolbar { display: flex; align-items: center; gap: 12px; padding: 16px 22px; border-bottom: 1px solid #eef2f7; }
-.search-box { flex: 1; min-width: 0; height: 48px; display: flex; align-items: center; gap: 10px; padding: 0 14px; border: 1px solid #d9dee7; border-radius: 12px; background: #fff; }
-.search-box > span { font-size: 18px; }
-.search-box input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; color: #1f2937; background: transparent; font-size: 15px; }
-.search-box input::placeholder { color: #94a3b8; }
-.clear-search { width: 28px; height: 28px; border: 0; border-radius: 50%; background: #f1f5f9; color: #64748b; cursor: pointer; font-size: 18px; }
-.new-btn { height: 48px; min-width: 108px; padding: 0 18px; border: 0; border-radius: 11px; background: #16a34a; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
-.new-btn span { margin-right: 5px; font-size: 20px; }
-.template-list { flex: 1; min-height: 180px; overflow-y: auto; padding: 8px 20px 14px; -webkit-overflow-scrolling:touch; }
-.template-card { display: flex; align-items: center; gap: 14px; min-height: 110px; margin: 8px 0; padding: 14px; border: 1px solid #e5e7eb; border-radius: 14px; background: #fff; }
-.template-card.pending{ opacity:.6; border-color:#f59e0b; }
-.template-icon { width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border-radius: 11px; font-size: 30px; cursor: pointer; }
-.template-info { flex: 1; min-width: 0; }
-.name-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-.name-row h3 { margin: 0; color: #334155; font-size: 17px; word-break:break-word; }
-.color-box{ width:18px; height:18px; border-radius:4px; border:1px solid rgba(0,0,0,.1); display:inline-block; }
-.theme-tag{ padding:2px 6px; border-radius:4px; font-size:9px; font-weight:700; white-space:nowrap; }
-.owner-badge{ background:#dcfce7; color:#166534; padding:3px 7px; border-radius:5px; font-size:10px; font-weight:700; }
-.shared-badge{ background:#e0e7ff; color:#3730a3; padding:3px 7px; border-radius:5px; font-size:10px; font-weight:700; }
-.pending-badge{ background:#fef3c7; color:#92400e; padding:3px 7px; border-radius:5px; font-size:10px; font-weight:700; }
-.meta { margin-top: 6px; color: #64748b; font-size: 12px; line-height:1.4; word-break:break-word; }
-.description { margin: 5px 0 0; overflow: hidden; color: #94a3b8; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
-.time-legend-row{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
-.legend-item{ display:flex; align-items:center; gap:4px; padding:4px 8px; border-radius:6px; background:#f8fafc; border:1px solid #e5e7eb; }
-.legend-item.active{ border-color:#111827; background:#fff; box-shadow:0 1px 4px rgba(0,0,0,.1); }
-.legend-box{ width:14px; height:10px; border-radius:3px; display:inline-block; }
-.legend-item small{ font-size:10px; color:#475569; font-weight:600; }
-.approval-row{ margin-top:6px; background:#fffbeb; border:1px solid #fcd34d; padding:6px 8px; border-radius:8px; font-size:12px; display:flex; flex-direction:column; gap:4px; }
-.mini-approve{ background:#16a34a; color:white; border:none; padding:5px 10px; border-radius:5px; margin-left:6px; cursor:pointer; font-weight:700; }
-.mini-reject{ background:#ef4444; color:white; border:none; padding:5px 10px; border-radius:5px; margin-left:4px; cursor:pointer; font-weight:700; }
-.actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap:wrap; }
-.action { height: 42px; padding: 0 15px; border: 0; border-radius: 9px; font-size: 14px; font-weight: 700; cursor: pointer; min-height:42px; }
-.edit { background: #f1f5f9; color: #475569; }
-.delete { background: #ef4444; color: #fff; }
-.use { color: #fff; }
-.share{ color:#fff; }
-.state,.empty-state { min-height: 250px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #64748b; }
-.spinner { width: 30px; height: 30px; border: 3px solid #dbeafe; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; }
-.secondary-btn,.new-empty-btn { margin-top: 16px; height: 44px; padding: 0 18px; border: 0; border-radius: 9px; cursor: pointer; font-weight: 700; font-size:15px; }
-.secondary-btn { background: #f1f5f9; color: #475569; }
-.new-empty-btn { color: #fff; }
-.share-popup{ background:white; width:min(500px,95%); padding:20px; border-radius:20px; display:flex; flex-direction:column; gap:14px; max-height:90vh; overflow:auto; }
-.share-head{ display:flex; justify-content:space-between; align-items:center; }
-.share-head h3{ margin:0; font-size:16px; }
-.owner-line{ margin:0; font-size:12px; color:#64748b; }
-.perm-box{ background:#f8fafc; border:1px solid #e2e8f0; padding:12px; border-radius:12px; display:flex; flex-direction:column; gap:10px; }
-.perm-title{ margin:0; font-weight:700; font-size:13px; }
-.check-box{ display:flex; gap:8px; font-size:13px; align-items:flex-start; line-height:1.4; }
-.share-input{ padding:12px; border:1px solid #cbd5e1; border-radius:10px; width:100%; box-sizing:border-box; font-size:16px; }
-.small-label{ font-size:12px; color:#64748b; font-weight:600; margin-bottom:4px; display:block; }
-.share-actions{ display:flex; gap:8px; justify-content:flex-end; }
-.toast-pop{ position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#111827; color:white; padding:10px 16px; border-radius:8px; font-size:13px; z-index:2000; }
+*{box-sizing:border-box;}
+.overlay{ position:fixed; inset:0; z-index:99990!important; display:flex; align-items:center; justify-content:center; padding:12px; background:rgba(15,23,42,0.6); backdrop-filter:blur(3px); }
+.share-overlay{ position:fixed!important; inset:0!important; background:rgba(0,0,0,0.8)!important; backdrop-filter:blur(6px)!important; z-index:100000!important; display:flex!important; align-items:center!important; justify-content:center!important; }
+.use-overlay{ position:fixed!important; inset:0!important; z-index:100010!important; display:flex!important; align-items:center!important; justify-content:center!important; background:rgba(15,23,42,0.7)!important; }
+.popup{ width:min(920px,100%); max-height:min(760px,calc(100dvh - 24px)); display:flex; flex-direction:column; overflow:hidden; background:#fff; border-radius:16px; box-shadow:0 24px 70px rgba(0,0,0,0.35); animation:popIn 0.15s ease-out; }
+@keyframes popIn{ from{ transform:scale(0.96); opacity:0; } to{ transform:scale(1); opacity:1; } }
+.popup-header{ display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid #e5e7eb; gap:8px; flex-shrink:0; background:#fff; }
+.title-wrap{ display:flex; align-items:center; gap:8px; }
+h2{ margin:0; font-size:16px; color:#111827; }
+.head-actions{ display:flex; gap:6px; align-items:center; }
+.close-btn{ width:30px; height:30px; border:0; border-radius:50%; background:#f1f5f9; color:#334155; font-size:18px; cursor:pointer; }
+.theme-btn{ padding:4px 8px; border-radius:20px; font-size:10px; font-weight:700; cursor:pointer; }
+.theme-picker{ display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:6px; padding:8px; background:#f8fafc; }
+.theme-opt{ border:1px solid; border-radius:8px; padding:6px; cursor:pointer; background:#fff; }
+.toolbar{ display:flex; gap:8px; padding:8px 10px; border-bottom:1px solid #eef2f7; background:#fff; }
+.search-box{ flex:1; height:36px; display:flex; align-items:center; gap:6px; padding:0 10px; border:1px solid #cbd5e1; border-radius:8px; background:#fff!important; }
+.search-box input{ flex:1; border:0; outline:0; font-size:13px; background:#fff!important; color:#111827!important; }
+.search-box span{ color:#111827!important; }
+.clear-search{ width:22px; height:22px; border:0; border-radius:50%; background:#f1f5f9; cursor:pointer; color:#111827; }
+.new-btn{ height:36px; min-width:68px; padding:0 12px; border:0; border-radius:8px; color:#fff; font-weight:700; cursor:pointer; }
+.template-list{ flex:1; overflow-y:auto; padding:4px 8px 12px; background:#f8fafc; }
+.template-card{ display:flex; flex-direction:column; gap:6px; margin:5px 0; padding:8px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; }
+.card-top{ display:flex; gap:8px; }.template-icon{ width:36px; height:36px; display:flex; align-items:center; justify-content:center; flex-shrink:0; border-radius:6px; cursor:pointer; }
+.name-row{ display:flex; gap:4px; align-items:center; }.name-row h3{ margin:0; font-size:13px; color:#111827; }.theme-tag{ padding:1px 5px; border-radius:4px; font-size:8px; font-weight:700; color:#fff; }
+.description{ margin:2px 0 0; color:#475569; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }.meta{ color:#64748b; font-size:9px; }
+.actions{ display:grid; grid-template-columns:repeat(4,1fr); gap:4px; }.action{ height:28px; border:0; border-radius:6px; font-size:10px; font-weight:700; cursor:pointer; }.edit{ background:#f1f5f9; color:#111827; border:1px solid #cbd5e1; }.delete{ background:#fee2e2; color:#991b1b; }.use,.share{ color:#fff; }
+.load-more{ text-align:center; padding:10px; color:#475569; font-size:11px; }
+.empty-state{ min-height:180px; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#475569; }.new-empty-btn{ color:#fff; height:34px; padding:0 14px; border:0; border-radius:6px; font-weight:700; cursor:pointer; margin-top:8px; }
 
-.use-popup{ background:white; width:min(560px,96%); max-height:90vh; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.3); }
-.use-popup-head{ display:flex; justify-content:space-between; align-items:center; padding:16px; border-bottom:1px solid #e5e7eb; }
-.use-popup-head h3{ margin:0; font-size:18px; }.use-popup-head small{ color:#64748b; font-size:11px; }
-.use-form-list{ padding:14px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; background:#f8fafc; max-height:60vh; }
-.use-field-row{ background:white; padding:12px; border-radius:10px; border:1px solid #e5e7eb; display:flex; flex-direction:column; gap:6px; }
-.use-label{ font-size:12px; font-weight:800; color:#111827; }.use-label small{ color:#94a3b8; font-weight:600; }.req{ color:#ef4444; }
-.use-input{ height:38px; border:1.5px solid #cbd5e1; border-radius:8px; padding:0 10px; font-size:14px; font-weight:600; background:white; }
-.formula-box{ padding:12px; border-radius:8px; display:flex; justify-content:space-between; align-items:center; font-weight:900; }
-.formula-hint{ font-size:10px; color:#64748b; word-break:break-all; }
-.use-actions{ display:flex; justify-content:space-between; padding:14px; background:white; border-top:1px solid #e5e7eb; }
+/* SHARE POPUP - FIXED COLORS V45 - HIGH CONTRAST */
+.share-popup{ background:#ffffff!important; width:min(440px,96%); border-radius:14px; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.35); animation:popIn 0.15s ease-out; border:1px solid #cbd5e1; }
+.share-head{ display:flex; justify-content:space-between; align-items:center; padding:14px 16px; background:#ffffff!important; border-bottom:3px solid #0ea5e9; }
+.share-head-left{ display:flex; gap:10px; align-items:center; }
+.share-icon{ width:36px; height:36px; background:#e0f2fe!important; border:2px solid #0ea5e9!important; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; }
+.share-title{ margin:0; font-size:16px; color:#0f172a!important; font-weight:800!important; }
+.share-sub{ color:#334155!important; font-weight:600!important; font-size:12px!important; }
+.share-body{ padding:16px; display:flex; flex-direction:column; gap:12px; background:#ffffff!important; }
+.check-main{ background:#e0f2fe!important; border:2px solid #0ea5e9!important; padding:14px 16px!important; border-radius:10px!important; }
+.perm-box{ background:#f8fafc!important; border:2px solid #e2e8f0!important; padding:14px 16px!important; border-radius:10px!important; display:flex; flex-direction:column; gap:12px!important; }
+.check-box{ display:flex!important; align-items:center!important; gap:12px!important; cursor:pointer; }
+.check-box input{ width:22px!important; height:22px!important; accent-color:#0ea5e9!important; flex-shrink:0; cursor:pointer; }
+.check-label{ color:#0f172a!important; font-weight:700!important; font-size:14px!important; line-height:1.3!important; opacity:1!important; }
+.share-input{ padding:12px 14px!important; border:2px solid #0ea5e9!important; border-radius:10px!important; width:100%!important; font-size:14px!important; background:#ffffff!important; color:#0f172a!important; }
+.share-actions{ display:flex; justify-content:flex-end; gap:10px; padding:14px 16px; background:#f1f5f9!important; border-top:1px solid #e2e8f0; }
+.secondary-btn{ background:#ffffff!important; color:#0f172a!important; border:2px solid #cbd5e1!important; height:40px; padding:0 16px; border-radius:8px; font-weight:700!important; cursor:pointer; font-size:14px!important; }
 
-.report-popup{ background:white; width:min(760px,97%); max-height:90vh; border-radius:16px; display:flex; flex-direction:column; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,.3); }
-.report-head{ display:flex; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #e5e7eb; background:#f8fafc; }
-.report-head h3{ margin:0; }.report-head small{ color:#64748b; }
-.report-list{ padding:12px; overflow-y:auto; flex:1; }
-.report-table-wrap{ overflow-x:auto; }
-.r-table{ width:100%; border-collapse:collapse; font-size:12px; }
-.r-table th,.r-table td{ border:1px solid #e5e7eb; padding:8px; text-align:left; }
-.r-table th{ background:#f1f5f9; font-weight:800; }
-.r-data{ display:flex; flex-wrap:wrap; gap:6px; }
-.r-chip{ background:#f1f5f9; border:1px solid #e2e8f0; padding:3px 7px; border-radius:12px; font-size:11px; white-space:nowrap; }
-.report-foot{ display:flex; justify-content:space-between; padding:12px; border-top:1px solid #e5e7eb; background:white; }
-
-@keyframes spin { to { transform: rotate(360deg); } }
-@media (max-width: 768px){
-.overlay{ padding:0; align-items:flex-end; }
-.popup{ width:100%; max-width:100%; height:100dvh; max-height:100dvh; border-radius:0; }
-.popup-header{ padding:12px 14px; flex-wrap:wrap; }
-  h2{ font-size:18px; }
-.title-wrap p{ font-size:11px; white-space:normal; }
-.theme-btn{ font-size:12px; padding:8px 12px; }
-.theme-picker{ grid-template-columns:repeat(2,1fr); max-height:50vh; padding:10px; gap:6px; }
-.toolbar{ padding:10px 12px; gap:8px; flex-direction:column; align-items:stretch; }
-.search-box{ height:50px; font-size:16px; }
-.search-box input{ font-size:16px; }
-.new-btn{ width:100%; height:50px; font-size:16px; min-width:100%; }
-.template-list{ padding:6px 10px 80px; }
-.template-card{ flex-direction:column; align-items:flex-start; gap:10px; padding:14px; min-height:auto; border-radius:16px; }
-.template-icon{ width:48px; height:48px; font-size:22px; }
-.name-row h3{ font-size:17px; line-height:1.3; }
-.meta{ font-size:12px; }
-.description{ white-space:normal; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-clamp:2; }
-.time-legend-row{ gap:6px; }
-.legend-item{ padding:5px 8px; }
-.actions{ width:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-.action{ width:100%; height:48px; font-size:14px; }
-.share-popup{ width:100%; max-width:100%; height:100dvh; max-height:100dvh; border-radius:0; padding:16px; padding-bottom:env(safe-area-inset-bottom); }
-.share-input{ font-size:16px; height:48px; }
-.check-box{ font-size:14px; padding:4px 0; }
-.check-box input{ width:20px; height:20px; }
-.use-popup,.report-popup{ width:100%; max-width:100%; height:100dvh; max-height:100dvh; border-radius:0; }
-.use-form-list{ max-height:none; flex:1; }
-}
+.toast-pop{ position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#111827; color:#fff; padding:8px 14px; border-radius:8px; font-size:11px; z-index:20000; }
+.use-popup{ background:#fff; width:min(500px,96%); max-height:85vh; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; animation:popIn 0.15s ease-out; }
+.use-popup-head{ display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid #e5e7eb; }
+.use-form-list{ padding:10px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; background:#f8fafc; }
+.use-field-row{ background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #e5e7eb; display:flex; flex-direction:column; gap:4px; }
+.use-label{ font-size:11px; font-weight:800; color:#0f172a; }
+.req{ color:#ef4444; }
+.use-input{ height:36px; border:2px solid #cbd5e1; border-radius:8px; padding:0 10px; font-size:14px; width:100%; background:#fff!important; color:#0f172a!important; }
+.formula-box{ padding:10px 12px; border-radius:8px; display:flex; justify-content:space-between; font-weight:900; font-size:13px; color:#0f172a; }
+.use-actions{ display:flex; justify-content:space-between; padding:12px 14px; background:#fff; border-top:1px solid #e5e7eb; }
 </style>

@@ -2,13 +2,12 @@
   import { onMount } from 'svelte';
   onMount(() => {
     try {
+      // Don't wait for anything
+      navigator.sendBeacon('/logout');
       localStorage.clear();
       sessionStorage.clear();
     } catch {}
-    window.location.replace('/login');
+    location.replace('/login');
   });
 </script>
-
-<div style="display:flex;justify-content:center;margin-top:100px">
-  Logging out...
-</div>
+<div style="padding:100px;text-align:center">Logging out...</div>

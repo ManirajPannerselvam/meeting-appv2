@@ -11,7 +11,11 @@
     onLogout = ()=>{},
     onHandleInvite = (_e:any)=>{},
     onDeleteContact = (_c:any)=>{},
-    onUpdateAvatar = (_e:any)=>{}
+    onUpdateAvatar = (_e:any)=>{},
+    onArchived = ()=>{},
+    onStarred = ()=>{},
+    onSettings = ()=>{},
+    onAvatarClick = (_e:any)=>{}
   } = $props();
 
   let search = $state("");
@@ -20,15 +24,18 @@
   let longPressTimer: any = $state(null);
   let showDeleteMenu: string | null = $state(null);
   let deleteTarget: any = $state(null);
+  let contextPos = $state({x:0, y:0});
+
+  function sanitizeSearch(s:string){ return (s||'').toString().slice(0,100).replace(/[<>]/g,''); }
 
   let filteredContacts = $derived.by(()=>{
     if(!search.trim()) return contacts;
-    const s = search.toLowerCase();
+    const s = sanitizeSearch(search).toLowerCase();
     return contacts.filter((c:any)=> c.name?.toLowerCase().includes(s) || c.email?.toLowerCase().includes(s) || c.last_message?.toLowerCase().includes(s))
   });
   let filteredGroups = $derived.by(()=>{
     if(!search.trim()) return groups;
-    const s = search.toLowerCase();
+    const s = sanitizeSearch(search).toLowerCase();
     return groups.filter((g:any)=> g.name?.toLowerCase().includes(s));
   });
   let displayContacts = $derived.by(()=>{
@@ -43,10 +50,7 @@
         if(a.isSelf) return -1; if(b.isSelf) return 1;
         const at = a.last_message_at? new Date(a.last_message_at).getTime():0;
         const bt = b.last_message_at? new Date(b.last_message_at).getTime():0;
-        if(bt!==at) return bt-at;
-        if(a.status==='accepted' && b.status!=='accepted') return -1;
-        if(b.status==='accepted' && a.status!=='accepted') return 1;
-        return 0;
+        if(bt!==at) return bt-at; return 0;
       });
     }
     return list;
@@ -59,17 +63,25 @@
   });
 
   function getInitials(n:string){ return n? n.trim().split(' ').map((x:string)=>x[0]).join('').toUpperCase().slice(0,2) : 'U'; }
+
   function clickOutside(node: HTMLElement, cb: () => void) {
-    const handle = (e: MouseEvent) => { if (!node.contains(e.target as Node)) setTimeout(cb, 10); };
+    const handle = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if(target.closest('.context-menu-fixed')) return;
+      if (!node.contains(e.target as Node)) cb();
+    };
     document.addEventListener('mousedown', handle, true);
     return { destroy() { document.removeEventListener('mousedown', handle, true); } };
+  }
+
+  function handleAvatarClick(c:any, e:MouseEvent, type:string){
+    e.stopPropagation();
+    onAvatarClick({detail:{contact:c, type}});
   }
 
   function handleContactClick(c:any, e: MouseEvent){
     e.stopPropagation();
     if(showDeleteMenu){ showDeleteMenu=null; return; }
-    if(c.status==='pending') return;
-    if(c.status==='invite_received') return;
     onSelectContact({detail: c});
   }
   function handleGroupClick(g:any, e: MouseEvent){
@@ -77,22 +89,43 @@
     if(showDeleteMenu){ showDeleteMenu=null; return; }
     onSelectGroup({detail: g});
   }
-  function onTouchStart(c:any){
-    longPressTimer = setTimeout(()=>{ deleteTarget=c; showDeleteMenu=c.id; if(navigator.vibrate) navigator.vibrate(50); },600);
+  function onTouchStart(c:any, e:TouchEvent){
+    const touch = e.touches?.[0];
+    if(touch) contextPos = {x: touch.clientX, y: touch.clientY};
+    longPressTimer = setTimeout(()=>{
+      deleteTarget=c; showDeleteMenu=c.id;
+      if(navigator.vibrate) navigator.vibrate(50);
+    },600);
   }
   function onTouchEnd(){ clearTimeout(longPressTimer); }
-  function onContextMenu(e: MouseEvent, c:any){ e.preventDefault(); deleteTarget=c; showDeleteMenu=c.id; }
-  function confirmDelete(){ if(deleteTarget){ onDeleteContact({detail: deleteTarget}); showDeleteMenu=null; } }
-  function triggerAvatarUpload(c:any, e: MouseEvent){
-    e.stopPropagation(); if(!c.isSelf) return;
-    const input=document.createElement('input'); input.type='file'; input.accept='image/*';
-    input.onchange=async(ev:any)=>{ const file=(ev.target as HTMLInputElement).files?.[0]; if(file) onUpdateAvatar({detail:{contact:c,file}}); };
-    input.click();
+
+  function onContextMenu(e: MouseEvent, c:any){
+    e.preventDefault();
+    e.stopPropagation();
+    // FIXED: Clamp to screen so menu always visible
+    let x = e.clientX;
+    let y = e.clientY;
+    if(x > window.innerWidth - 170) x = window.innerWidth - 170;
+    if(y > window.innerHeight - 100) y = window.innerHeight - 100;
+    contextPos = {x, y};
+    deleteTarget=c;
+    showDeleteMenu=c.id;
   }
+
+  // FIXED: No showContext bug - uses showDeleteMenu
+  function confirmDelete(){
+    if(!deleteTarget) return;
+    const target = {...deleteTarget};
+    showDeleteMenu = null;
+    deleteTarget = null;
+    // Dispatch - page will handle with optimistic delete
+    onDeleteContact?.({detail: target});
+  }
+
   function getLastMessage(c:any){
     if(c.isSelf) return c.last_message || 'Message yourself';
-    if(c.isInvite || c.isOutgoing) return c.last_message || '⏳ Invite pending';
-    if(c.isIncomingInvite) return '📩 Tap to Accept';
+    if(c.isInvite || c.isOutgoing || c.status==='pending') return '⏳ Invite pending - Tap to view';
+    if(c.isIncomingInvite || c.status==='invite_received' || c.status==='incoming') return '📩 Tap to Accept';
     if(c.last_message) return c.last_message.slice(0,38);
     if(c.email) return c.email.slice(0,26);
     return 'Tap to chat';
@@ -112,9 +145,9 @@
             <div class="dropdown" onclick={(e)=>{e.stopPropagation()}}>
               <button onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; onNewGroup(); }}>New group</button>
               <button onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; onNewContact(); }}>New contact</button>
-              <button onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; }}>Archived</button>
-              <button onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; }}>Starred messages</button>
-              <button onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; }}>Settings</button>
+              <button onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; onArchived(); }}>Archived</button>
+              <button onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; onStarred(); }}>Starred messages</button>
+              <button onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; onSettings(); }}>Settings</button>
               <button class="logout" onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; onLogout(); }}>Log out</button>
             </div>
           {/if}
@@ -122,7 +155,7 @@
       </div>
     </div>
     <div class="search-wrap">
-      <div class="search-box"><span class="search-icon">🔍</span><input bind:value={search} placeholder="Search or start new chat" /></div>
+      <div class="search-box"><span class="search-icon">🔍</span><input bind:value={search} placeholder="Search or start new chat" maxlength="100" autocomplete="off" /></div>
     </div>
     <div class="filters">
       {#each ['All','Unread','Favorites','Groups'] as f}
@@ -134,8 +167,13 @@
   <div class="chat-list">
     {#each displayGroups as g (g.id)}
       <div class="chat-row" class:selected={selectedGroup?.id===g.id} role="button" tabindex="0"
-        onclick={(e)=>handleGroupClick(g,e)} ontouchstart={()=>onTouchStart(g)} ontouchend={onTouchEnd} oncontextmenu={(e)=>onContextMenu(e,g)} onkeydown={(e)=>{ if(e.key==='Enter') handleGroupClick(g,e)}}>
-        <div class="avatar group"><span>👥</span></div>
+        onclick={(e)=>handleGroupClick(g,e)}
+        ontouchstart={(e)=>onTouchStart(g,e)} ontouchend={onTouchEnd} ontouchmove={onTouchEnd}
+        oncontextmenu={(e)=>onContextMenu(e,g)}
+        onkeydown={(e)=>{ if(e.key==='Enter') handleGroupClick(g,e)}}>
+        <div class="avatar group" onclick={(e)=>handleAvatarClick(g,e,'group')}>
+          {#if g.avatar_url}<img src={g.avatar_url} alt="" />{:else}<span>👥</span>{/if}
+        </div>
         <div class="info">
           <div class="top"><span class="name">{g.name}</span><span class="time">{g.last_time||''}</span></div>
           <div class="bottom"><span class="sub">{g.last_message || 'Tap to open group'}</span>{#if getUnread(g)>0}<span class="badge">{getUnread(g)}</span>{/if}</div>
@@ -144,9 +182,12 @@
     {/each}
 
     {#each displayContacts as c (c.id)}
-      <div class="chat-row wa-row" class:selected={selectedContact?.id===c.id} class:disabled={c.status==='pending'} role="button" tabindex="0"
-        onclick={(e)=>handleContactClick(c,e)} ontouchstart={()=>onTouchStart(c)} ontouchend={onTouchEnd} ontouchmove={onTouchEnd} oncontextmenu={(e)=>onContextMenu(e,c)} onkeydown={(e)=>{ if(e.key==='Enter') handleContactClick(c,e)}}>
-        <div class="avatar" class:self-avatar={c.isSelf} onclick={(e)=>triggerAvatarUpload(c,e)}>
+      <div class="chat-row wa-row" class:selected={selectedContact?.id===c.id} role="button" tabindex="0"
+        onclick={(e)=>handleContactClick(c,e)}
+        ontouchstart={(e)=>onTouchStart(c,e)} ontouchend={onTouchEnd} ontouchmove={onTouchEnd}
+        oncontextmenu={(e)=>onContextMenu(e,c)}
+        onkeydown={(e)=>{ if(e.key==='Enter') handleContactClick(c,e)}}>
+        <div class="avatar" class:self-avatar={c.isSelf} onclick={(e)=>handleAvatarClick(c,e,'contact')}>
           {#if c.avatar_url}<img src={c.avatar_url} alt="" />{:else if c.isSelf}<span>💾</span>{:else}<span>{getInitials(c.name||c.email)}</span>{/if}
         </div>
         <div class="info">
@@ -155,34 +196,29 @@
             <span class="time">{c.last_time||''}</span>
           </div>
           <div class="bottom">
-            {#if c.status==='pending'}<span class="sub pending">⏳ Invite pending</span>
-            {:else if c.status==='invite_received'}
-              <span class="sub">Invitation</span>
-              <span class="invite-mini">
-                <button class="mini-accept" onclick={(e)=>{ e.stopPropagation(); onHandleInvite({detail:{inviteId:c.id, action:'accepted'}}) }}>Accept</button>
-                <button class="mini-reject" onclick={(e)=>{ e.stopPropagation(); onHandleInvite({detail:{inviteId:c.id, action:'rejected'}}) }}>Reject</button>
-              </span>
+            {#if c.status==='pending' || c.isOutgoing || c.isInvite}
+              <span class="sub pending">⏳ Invite pending - Tap to view</span>
+            {:else if c.status==='invite_received' || c.isIncomingInvite || c.status==='incoming'}
+              <span class="sub incoming">📩 Tap to Accept</span>
             {:else}<span class="sub">{getLastMessage(c)}</span>{/if}
-            {#if getUnread(c)>0 && c.status!=='pending' && c.status!=='invite_received' &&!c.isSelf}<span class="badge">{getUnread(c)>99?'99+':getUnread(c)}</span>{/if}
+            {#if getUnread(c)>0 && c.status!=='pending' &&!c.isOutgoing &&!c.isIncomingInvite}<span class="badge">{getUnread(c)>99?'99+':getUnread(c)}</span>{/if}
           </div>
         </div>
-        {#if showDeleteMenu===c.id}
-          <div class="action-sheet" use:clickOutside={()=>showDeleteMenu=null}>
-            <button class="sheet-btn delete" onclick={(e)=>{ e.stopPropagation(); confirmDelete(); }}>🗑️ Delete</button>
-            <button class="sheet-btn" onclick={(e)=>{ e.stopPropagation(); showDeleteMenu=null; }}>Cancel</button>
-          </div>
-        {/if}
       </div>
     {/each}
-
-    {#if displayContacts.length===0 && displayGroups.length===0}
-      <div class="no-chat"><div>💬</div><p>No chats</p><button class="accept" onclick={()=>{search=''; activeFilter='All';}}>Clear filter</button></div>
-    {/if}
   </div>
 </div>
 
+{#if showDeleteMenu}
+  <div class="context-overlay" onclick={()=>{showDeleteMenu=null; deleteTarget=null;}} oncontextmenu={(e)=>{e.preventDefault(); showDeleteMenu=null;}}></div>
+  <div class="context-menu-fixed" style="left:{contextPos.x}px; top:{contextPos.y}px;">
+    <button class="sheet-btn delete" onclick={(e)=>{ e.stopPropagation(); confirmDelete(); }}>🗑️ Delete</button>
+    <button class="sheet-btn" onclick={(e)=>{ e.stopPropagation(); showDeleteMenu=null; deleteTarget=null; }}>Cancel</button>
+  </div>
+{/if}
+
 <style>
-.sidebar{width:100%; max-width:430px;height:100%; max-height:100%;background:#111b21;display:flex; flex-direction:column;overflow:hidden;}
+.sidebar{width:100%;max-width:430px;height:100%;max-height:100%;background:#111b21;display:flex;flex-direction:column;overflow:hidden;}
 .sidebar-top-fixed{flex-shrink:0;background:#111b21;z-index:5;}
 .sidebar-header{height:59px;background:#202c33;display:flex;justify-content:space-between;align-items:center;padding:0 16px;color:#fff;}
 .sidebar-header h1{margin:0;font-size:19px;font-weight:700;}
@@ -190,7 +226,7 @@
 .icon-btn{background:transparent;border:none;color:#aebac1;font-size:20px;cursor:pointer;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;}
 .icon-btn:hover{background:#374045;}
 .menu-container{position:relative;}
-.dropdown{position:absolute;right:0;top:40px;background:#233138;border-radius:8px;z-index:99;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.6);min-width:200px;border:1px solid #2a3942;}
+.dropdown{position:absolute;right:0;top:40px;background:#233138;border-radius:8px;z-index:9999;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.6);min-width:220px;border:1px solid #2a3942;}
 .dropdown button{display:block;width:100%;background:transparent;border:none;color:#e9edef;padding:12px 16px;text-align:left;cursor:pointer;font-size:14.5px;}
 .dropdown button:hover{background:#2a3942;}
 .dropdown button.logout{color:#f15c6d;border-top:1px solid #2a3942;}
@@ -199,33 +235,28 @@
 .search-icon{color:#8696a0;font-size:13px;}
 .search-box input{background:transparent;border:none;color:#d1d7db;width:100%;outline:none;font-size:14px;}
 .filters{display:flex;gap:8px;padding:8px 12px;background:#111b21;border-bottom:1px solid #1f2c34;overflow-x:auto;scrollbar-width:none;white-space:nowrap;}
-.filters::-webkit-scrollbar{display:none;}
-.filters button{background:#182229;color:#8696a0;border:none;border-radius:18px;padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap;flex-shrink:0;}
+.filters button{background:#182229;color:#8696a0;border:none;border-radius:18px;padding:6px 12px;font-size:13px;cursor:pointer;}
 .filters button.active{background:#0a332c;color:#53bdeb;font-weight:600;}
-.chat-list{flex:1; min-height:0;overflow-y:auto; overflow-x:hidden;-webkit-overflow-scrolling:touch;background:#111b21;}
-.chat-row{display:flex; align-items:center;padding:0 12px;cursor:pointer;position:relative;min-height:72px;}
+.chat-list{flex:1;min-height:0;overflow-y:auto;background:#111b21; contain: layout style;}
+.chat-row{display:flex;align-items:center;padding:0 12px;cursor:pointer;min-height:72px; position:relative;}
 .chat-row:hover{background:#202c33;}
 .chat-row.selected{background:#2a3942;}
-.chat-row.disabled{opacity:0.5;cursor:default;}
-.avatar{width:49px; height:49px; border-radius:50%;background:#2a3942; color:#fff;display:flex; align-items:center; justify-content:center;margin:8px 12px 8px 0;font-weight:600; flex-shrink:0; font-size:16px;overflow:hidden;}
+.avatar{width:49px;height:49px;border-radius:50%;background:#2a3942;color:#fff;display:flex;align-items:center;justify-content:center;margin:8px 12px 8px 0;font-weight:600;flex-shrink:0;overflow:hidden;cursor:pointer;}
 .avatar img{width:100%;height:100%;object-fit:cover;}
 .avatar.group{background:#00a884;}
-.avatar.self-avatar{background:#00a884;cursor:pointer;}
-.info{flex:1; min-width:0; padding:12px 0; border-top:1px solid #222d34;}
-.top{display:flex; justify-content:space-between; align-items:center; gap:8px;}
-.name{color:#e9edef;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;font-weight:400;}
-.time{color:#8696a0;font-size:12px;flex-shrink:0;}
-.bottom{display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:4px;}
+.avatar.self-avatar{background:#00a884; border:2px solid #00a884;}
+.info{flex:1;min-width:0;padding:12px 0;border-top:1px solid #222d34;}
+.top{display:flex;justify-content:space-between;gap:8px;}
+.name{color:#e9edef;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
+.time{color:#8696a0;font-size:12px;}
+.bottom{display:flex;justify-content:space-between;gap:8px;margin-top:4px;}
 .sub{color:#8696a0;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
-.sub.pending{color:#f1c40f;}
-.badge{background:#00a884;color:#111b21;min-width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;padding:0 6px;flex-shrink:0;}
-.invite-mini{display:flex;gap:6px;}
-.mini-accept{background:#00a884;color:#111b21;border:none;border-radius:12px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;}
-.mini-reject{background:#2a3942;color:#e9edef;border:none;border-radius:12px;padding:4px 10px;font-size:11px;cursor:pointer;}
-.action-sheet{position:absolute;right:10px;top:55px;background:#233138;border-radius:10px;z-index:20;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,0.6);min-width:150px;border:1px solid #2a3942;}
-.sheet-btn{display:block;width:100%;background:transparent;border:none;color:#e9edef;padding:12px 16px;text-align:left;cursor:pointer;font-size:14px;border-bottom:1px solid #2a3942;}
-.sheet-btn.delete{color:#f15c6d;}
-.accept{background:#00a884;color:#111b21;border:none;border-radius:16px;padding:6px 14px;font-size:12.5px;font-weight:700;cursor:pointer;}
-.no-chat{color:#8696a0;text-align:center;padding:70px 20px;display:flex;flex-direction:column;align-items:center;gap:10px;}
-.no-chat div{font-size:40px;opacity:0.4;}
+.sub.pending{color:#f1c40f;}.sub.incoming{color:#00e676;}
+.badge{background:#00a884;color:#111b21;min-width:20px;height:20px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;padding:0 6px;}
+.context-overlay{position:fixed; inset:0; z-index:9998; background:transparent;}
+.context-menu-fixed{position:fixed; z-index:9999; background:#233138; border-radius:12px; overflow:hidden; box-shadow:0 8px 30px rgba(0,0,0,0.7); min-width:160px; border:1px solid #2a3942; animation: popIn 0.12s ease;}
+@keyframes popIn{from{opacity:0; transform:scale(0.95);} to{opacity:1; transform:scale(1);}}
+.sheet-btn{display:block;width:100%;background:transparent;border:none;color:#e9edef;padding:14px 18px;text-align:left;cursor:pointer; font-size:14px;}
+.sheet-btn:hover{background:#2a3942;}
+.sheet-btn.delete{color:#f15c6d; font-weight:600;}
 </style>

@@ -31,7 +31,6 @@
   }
   function onTouchStart(e: TouchEvent){
     if(shouldIgnoreSwipe(e.target)) { isSwiping = false; return; }
-    // Disable swipe for templates and globe
     if($page.url.pathname.startsWith('/templates') || $page.url.pathname.startsWith('/globe') || $page.url.pathname.startsWith('/dashboard')) { isSwiping = false; return; }
     startX = e.touches[0].clientX; startY = e.touches[0].clientY; startTime = Date.now(); isSwiping = true;
   }
@@ -48,10 +47,7 @@
   function applyThemeFromStorage(){
     if(!browser) return;
     let saved = 'whatsapp';
-    try{ 
-      // support both keys
-      saved = localStorage.getItem('ems_theme') || localStorage.getItem('app-theme') || 'whatsapp'; 
-    }catch{}
+    try{ saved = localStorage.getItem('ems_theme') || localStorage.getItem('app-theme') || 'whatsapp'; }catch{}
     let t = saved.toLowerCase();
     if(t==='system'){
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -61,9 +57,10 @@
     } else {
       document.documentElement.setAttribute('data-theme', t);
       document.documentElement.setAttribute('data-social-theme', t);
-      // sync both keys
-      localStorage.setItem('ems_theme', t);
-      localStorage.setItem('app-theme', t);
+      try{
+        localStorage.setItem('ems_theme', t);
+        localStorage.setItem('app-theme', t);
+      }catch{}
     }
     const isDarkTheme = ['dark','whatsapp','discord','twitter','slack'].includes(t);
     document.documentElement.style.colorScheme = isDarkTheme ? 'dark' : 'light';
@@ -74,8 +71,10 @@
     try{
       const { data } = await supabase.from('settings').select('appearance').eq('id',1).maybeSingle();
       if(data?.appearance?.theme){
-        localStorage.setItem('ems_theme', data.appearance.theme);
-        localStorage.setItem('app-theme', data.appearance.theme);
+        try{
+          localStorage.setItem('ems_theme', data.appearance.theme);
+          localStorage.setItem('app-theme', data.appearance.theme);
+        }catch{}
         applyThemeFromStorage();
       }
     }catch{}
@@ -83,25 +82,52 @@
 
   onMount(() => {
     if(!browser) return;
-    applyThemeFromStorage(); 
-    loadThemeFromSettings();
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{
+    // FAST: theme immediate - no await
+    applyThemeFromStorage();
+    
+    // FAST: supabase call background la - blocking illa - 0ms delay
+    setTimeout(()=>{ loadThemeFromSettings(); }, 100);
+
+    // Hide loader ASAP from layout also - double safety
+    setTimeout(()=>{
+      const loader = document.getElementById('app-initial-loader');
+      if(loader && !loader.classList.contains('hide')){
+        loader.classList.add('hide');
+        setTimeout(()=> loader.remove(), 300);
+      }
+    }, 400);
+
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleThemeChange = ()=>{
       const raw = localStorage.getItem('ems_theme') || localStorage.getItem('app-theme');
       if(raw?.toLowerCase()==='system') applyThemeFromStorage();
-    });
+    };
+    mediaQuery.addEventListener('change', handleThemeChange);
+
     online = navigator.onLine;
     const conn: any = (navigator as any).connection;
-    if(conn){ rtt = conn.rtt; downlink = conn.downlink; conn.addEventListener('change', ()=>{ rtt = conn.rtt; downlink = conn.downlink; }); }
-    window.addEventListener('online', ()=> online = true);
-    window.addEventListener('offline', ()=> online = false);
+    let connListener: any = null;
+    if(conn){ 
+      rtt = conn.rtt; 
+      downlink = conn.downlink; 
+      connListener = ()=>{ rtt = conn.rtt; downlink = conn.downlink; };
+      conn.addEventListener('change', connListener); 
+    }
+    const onOnline = ()=> online = true;
+    const onOffline = ()=> online = false;
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
     window.addEventListener('touchstart', onTouchStart, { passive: true } as any);
     window.addEventListener('touchend', onTouchEnd, { passive: true } as any);
-  });
 
-  onDestroy(()=>{
-    if(!browser) return;
-    window.removeEventListener('touchstart', onTouchStart);
-    window.removeEventListener('touchend', onTouchEnd);
+    return ()=>{
+      mediaQuery.removeEventListener('change', handleThemeChange);
+      if(conn && connListener) conn.removeEventListener('change', connListener);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
   });
 </script>
 
@@ -124,13 +150,12 @@
 .net-bar{ height:24px; background:#111b21; color:#aebac1; display:flex; gap:12px; align-items:center; padding:0 12px; font-size:11px; font-family:monospace; border-bottom:1px solid #222d34; position:sticky; top:0; z-index:999; }
 .net-bar.offline{ background:#5a1a1a; color:#ffb4b4; }
 .net-close{ margin-left:auto; background:transparent; border:none; color:inherit; cursor:pointer; }
-.swipe-root{ min-height:100vh; touch-action: auto; } /* FIXED - was pan-y blocking globe */
+.swipe-root{ min-height:100vh; touch-action: auto; }
 .module-dots{ position:fixed; bottom:70px; left:50%; transform:translateX(-50%); display:flex; gap:6px; z-index:50; pointer-events:none; }
 .dot{ width:6px; height:6px; border-radius:50%; background:#3a4a54; opacity:0.5; transition:all 0.2s; }
 .dot.active{ background:#00a884; opacity:1; width:18px; border-radius:3px; }
 @media(min-width:769px){.module-dots{ display:none; } }
 
-/* DELETE YOUR OLD :global(:root) - now app.css handles it */
 :global(html){ background:var(--bg)!important; color:var(--text)!important; }
 :global(body){ background:var(--bg)!important; color:var(--text)!important; margin:0; }
 
@@ -151,13 +176,11 @@
 }
 :global(.user-dropdown a:hover){ background:#f3f4f6 !important; }
 
-/* FIX GLOBE - ALLOW CONTROL */
 :global(.globe-canvas), :global(canvas){
   touch-action: none !important;
   pointer-events: auto !important;
 }
 
-/* FIX WHITE ON WHITE IN BUILDER */
 :global(.preview-area label){ color:#111827 !important; font-weight:800 !important; }
 :global(.preview-area input){ background:#ffffff !important; color:#111827 !important; border:1.5px solid #94a3b8 !important; }
 </style>
