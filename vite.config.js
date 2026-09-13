@@ -4,29 +4,41 @@
  * File : vite.config.ts
  * ============================================================
  * PURPOSE
- * Vite + Tauri dev config - FAST OPEN + SECURE
+ * Vite + Tauri dev + Vercel prod - FAST OPEN + SECURE + NO 500
  * ============================================================
  */
 
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
+import path from "path";
 
 const host = process.env.TAURI_DEV_HOST;
+const isVercel = !!process.env.VERCEL;
 
 export default defineConfig(async () => ({
   plugins: [sveltekit()],
 
   clearScreen: false,
 
+  // ✅ VERCEL FIX: Isolate better-sqlite3 to desktop only
+  resolve: {
+    alias: isVercel ? {} : {
+      // On Tauri dev/build -> use full sqlite file
+      // On Vercel -> uses dummy src/lib/server/db.ts (no crash)
+      '$lib/server/db': path.resolve('./src/lib/server/db.desktop.ts')
+    }
+  },
+
   // ✅ SPEED: pre-bundle supabase for instant open
   optimizeDeps: {
     include: ['@supabase/supabase-js'],
-    exclude: ['@tauri-apps/api']
+    exclude: ['@tauri-apps/api', 'better-sqlite3']
   },
 
-  // ✅ SSR FIX: Prevent external error for manualChunks
+  // ✅ SSR FIX: Prevent external error + Vercel 500 fix
   ssr: {
-    noExternal: ['@supabase/supabase-js']
+    noExternal: ['@supabase/supabase-js'],
+    external: ['better-sqlite3', '@tauri-apps/api', '@tauri-apps/plugin-sql', 'ws']
   },
 
   // ✅ SPEED + SECURE: build split
