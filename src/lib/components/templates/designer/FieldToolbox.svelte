@@ -60,7 +60,7 @@ function addTool(tool: Tool) {
                 type="button"
                 class="tool"
                 title={tool.name}
-                on:click={() => addTool(tool)}
+                onclick={() => addTool(tool)}
             >
 
                 <div class="icon">

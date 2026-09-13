@@ -57,7 +57,7 @@
 			type="button"
 			class:selected={active === item.id}
 			disabled={item.disabled}
-			on:click={() => select(item)}
+			onclick={() => select(item)}
 		>
 
 			{#if item.icon}

@@ -95,18 +95,18 @@
     })
 </script>
 
-<svelte:window on:keydown={handleKeydown}/>
+<svelte:window onkeydown={handleKeydown}/>
 
-<div class="popup-card" on:click|stopPropagation>
+<div class="popup-card" onclick={(e) => { e.stopPropagation(); }}>
     <div class="header">
         <h2>📋 Templates</h2>
-        <button class="close" on:click={() => dispatch('close')} aria-label="Close">✕</button>
+        <button class="close" onclick={() => dispatch('close')} aria-label="Close">✕</button>
     </div>
 
     <div class="search">
         <span>🔍</span>
         <input bind:value={search} placeholder="Search template by name, code, category..." />
-        <button class="btn-new" on:click={() => dispatch('new')}>+ New</button>
+        <button class="btn-new" onclick={() => dispatch('new')}>+ New</button>
     </div>
 
     <div class="list">
@@ -129,15 +129,15 @@
                     </div>
                 </div>
                 <div class="actions">
-                    <button class="btn-edit" on:click={() => handleEdit(t)}>Edit</button>
+                    <button class="btn-edit" onclick={() => handleEdit(t)}>Edit</button>
                     <button 
                         class="btn-del" 
                         disabled={deletingId === t.id}
-                        on:click={() => deleteTemplate(t.id)}
+                        onclick={() => deleteTemplate(t.id)}
                     >
                         {deletingId === t.id ? '...' : 'Delete'}
                     </button>
-                    <button class="btn-use" on:click={() => handleUse(t)}>Use</button>
+                    <button class="btn-use" onclick={() => handleUse(t)}>Use</button>
                 </div>
             </div>
             {/each}
@@ -180,3 +180,4 @@
 .footer{ padding:12px 16px; text-align:center; font-size:12px; color:#64748b; border-top:1px solid #eee; }
 .empty{ text-align:center; color:#999; padding:40px 0; }
 </style>
+

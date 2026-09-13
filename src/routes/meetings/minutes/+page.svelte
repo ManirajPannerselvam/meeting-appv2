@@ -44,7 +44,7 @@
 <div class="page">
   <header class="top">
     <div><h1>Meetings</h1><p>Create and manage meetings • {meetings.length} total</p></div>
-    <button class="ghost" on:click={loadMeetings}>↻ Refresh</button>
+    <button class="ghost" onclick={loadMeetings}>↻ Refresh</button>
   </header>
 
   <div class="layout">
@@ -55,7 +55,7 @@
         <div class="field"><label>Title *</label><input bind:value={title} placeholder="e.g. Production Review"/></div>
         <div class="field"><label>Description</label><textarea bind:value={description} placeholder="Agenda, objective..." rows="4"></textarea></div>
         <div class="field"><label>Date *</label><input type="date" bind:value={date}/></div>
-        <button class="primary" on:click={createMeeting} disabled={saving}>{#if saving}Saving...{:else}➕ Create Meeting{/if}</button>
+        <button class="primary" onclick={createMeeting} disabled={saving}>{#if saving}Saving...{:else}➕ Create Meeting{/if}</button>
         <small class="hint">Press Enter after Title • Mobile friendly</small>
       </div>
 
@@ -85,14 +85,14 @@
         <div class="row"><span>Last</span><b>{meetings[0]?.title || "-"}</b></div>
         <div class="row"><span>Date</span><b>{date || "-"}</b></div>
         <div class="prog"><div style="width:{title && date? '100%' : title || date? '50%' : '0%'}"></div></div>
-        <button class="primary full" on:click={createMeeting} disabled={saving}>💾 Save</button>
+        <button class="primary full" onclick={createMeeting} disabled={saving}>💾 Save</button>
       </div>
     </aside>
   </div>
 
   <div class="mob-bar">
-    <button class="ghost" on:click={loadMeetings}>Refresh</button>
-    <button class="primary" on:click={createMeeting} disabled={saving}>Save</button>
+    <button class="ghost" onclick={loadMeetings}>Refresh</button>
+    <button class="primary" onclick={createMeeting} disabled={saving}>Save</button>
   </div>
 </div>
 

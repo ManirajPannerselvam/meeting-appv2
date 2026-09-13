@@ -65,11 +65,11 @@
 
 <div class="app">
   <div class="topbar">
-    <button class="icon-btn" on:click={()=>goto("/meeting-list")}>‹</button>
-    <div class="crumbs"><span class="c" on:click={()=>goto("/meeting-list")}>Meetings</span><span>/</span><b>#{id}</b></div>
+    <button class="icon-btn" onclick={()=>goto("/meeting-list")}>‹</button>
+    <div class="crumbs"><span class="c" onclick={()=>goto("/meeting-list")}>Meetings</span><span>/</span><b>#{id}</b></div>
     <div class="acts">
-      <button class="btn light" on:click={()=>goto(`/meetings/edit/${id}`)}>Edit</button>
-      <button class="btn dark" on:click={goMinutes}>Minutes</button>
+      <button class="btn light" onclick={()=>goto(`/meetings/edit/${id}`)}>Edit</button>
+      <button class="btn dark" onclick={goMinutes}>Minutes</button>
     </div>
   </div>
 
@@ -77,7 +77,7 @@
     {#if loading}
       <div class="card"><div class="sk h"></div><div class="sk w60"></div><div class="sk card"></div></div>
     {:else if !meeting}
-      <div class="card center"><h3>Meeting #{id} not found</h3><button class="btn dark" on:click={()=>goto("/meeting-list")}>Back to list</button></div>
+      <div class="card center"><h3>Meeting #{id} not found</h3><button class="btn dark" onclick={()=>goto("/meeting-list")}>Back to list</button></div>
     {:else}
       <div class="hero">
         <div class="meta">
@@ -113,9 +113,9 @@
               <div class="peeps">{#each meeting.participants as p,i}<div class="p"><div class="av" style="background:hsl({(i*47)%360} 70% 92%)">{p[0]?.toUpperCase()}</div><span>{p}</span></div>{/each}</div>
             {:else}<p class="muted">No participants</p>{/if}
             <div class="stack">
-              <button class="btn dark full" on:click={()=>goto(`/meetings/edit/${id}`)}>✏️ Edit</button>
-              <button class="btn light full" on:click={goMinutes}>📝 Minutes</button>
-              <button class="btn ghost full" on:click={()=>goto("/meeting-list")}>Back</button>
+              <button class="btn dark full" onclick={()=>goto(`/meetings/edit/${id}`)}>✏️ Edit</button>
+              <button class="btn light full" onclick={goMinutes}>📝 Minutes</button>
+              <button class="btn ghost full" onclick={()=>goto("/meeting-list")}>Back</button>
             </div>
           </div>
         </div>
@@ -125,9 +125,9 @@
   </div>
 
   <div class="mob">
-    <button class="btn light" on:click={()=>goto("/meeting-list")}>List</button>
-    <button class="btn light" on:click={()=>goto(`/meetings/edit/${id}`)}>Edit</button>
-    <button class="btn dark" on:click={goMinutes}>Minutes</button>
+    <button class="btn light" onclick={()=>goto("/meeting-list")}>List</button>
+    <button class="btn light" onclick={()=>goto(`/meetings/edit/${id}`)}>Edit</button>
+    <button class="btn dark" onclick={goMinutes}>Minutes</button>
   </div>
 </div>
 

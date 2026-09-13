@@ -51,12 +51,12 @@
 	}
 </script>
 
-<svelte:window on:keydown={handleKeydown} />
+<svelte:window onkeydown={handleKeydown} />
 
 {#if open}
 	<div
 		class="overlay"
-		on:click={handleOverlayClick}
+		onclick={handleOverlayClick}
 		role="presentation"
 	>
 		<div
@@ -71,7 +71,7 @@
 				<button
 					type="button"
 					class="close"
-					on:click={close}
+					onclick={close}
 					aria-label="Close dialog"
 				>
 					×

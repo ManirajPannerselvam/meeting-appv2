@@ -55,14 +55,14 @@
 	<div
 		class="overlay"
 		role="presentation"
-		on:click={closeSidebar}
+		onclick={closeSidebar}
 	>
 
 		<aside
 			class="sidebar"
 			role="navigation"
 			aria-label="Main navigation"
-			on:click|stopPropagation
+			onclick={(e) => { e.stopPropagation(); }}
 		>
 
 			<header class="header">
@@ -72,7 +72,7 @@
 				<button
 					type="button"
 					class="close"
-					on:click={closeSidebar}
+					onclick={closeSidebar}
 					aria-label="Close sidebar"
 				>
 					✕
@@ -87,7 +87,7 @@
 					<button
 						type="button"
 						class:selected={active === item.id}
-						on:click={() => navigate(item)}
+						onclick={() => navigate(item)}
 					>
 
 						{#if item.icon}
@@ -196,3 +196,4 @@
 		border-top: 1px solid #e5e7eb;
 	}
 </style>
+

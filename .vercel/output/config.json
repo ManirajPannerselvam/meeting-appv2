@@ -1,0 +1,391 @@
+{
+	"version": 3,
+	"routes": [
+		{
+			"src": "/_app/immutable/.+",
+			"headers": {
+				"cache-control": "public, immutable, max-age=31536000"
+			}
+		},
+		{
+			"handle": "filesystem"
+		},
+		{
+			"src": "^/?(?:/__data.json)?$",
+			"dest": "/"
+		},
+		{
+			"src": "^/actions/?(?:/__data.json)?$",
+			"dest": "/actions"
+		},
+		{
+			"src": "^/admin/?(?:/__data.json)?$",
+			"dest": "/admin"
+		},
+		{
+			"src": "^/admin/analytics/?(?:/__data.json)?$",
+			"dest": "/admin/analytics"
+		},
+		{
+			"src": "^/admin/audit/?(?:/__data.json)?$",
+			"dest": "/admin/audit"
+		},
+		{
+			"src": "^/admin/backup/?(?:/__data.json)?$",
+			"dest": "/admin/backup"
+		},
+		{
+			"src": "^/admin/finance/?(?:/__data.json)?$",
+			"dest": "/admin/finance"
+		},
+		{
+			"src": "^/admin/notifications/?(?:/__data.json)?$",
+			"dest": "/admin/notifications"
+		},
+		{
+			"src": "^/admin/roles/?(?:/__data.json)?$",
+			"dest": "/admin/roles"
+		},
+		{
+			"src": "^/admin/settings/?(?:/__data.json)?$",
+			"dest": "/admin/settings"
+		},
+		{
+			"src": "^/admin/system/?(?:/__data.json)?$",
+			"dest": "/admin/system"
+		},
+		{
+			"src": "^/admin/users/?(?:/__data.json)?$",
+			"dest": "/admin/users"
+		},
+		{
+			"src": "^/admin/workflows/?(?:/__data.json)?$",
+			"dest": "/admin/workflows"
+		},
+		{
+			"src": "^/ai-actions/?(?:/__data.json)?$",
+			"dest": "/ai-actions"
+		},
+		{
+			"src": "^/ai-assistant/?(?:/__data.json)?$",
+			"dest": "/ai-assistant"
+		},
+		{
+			"src": "^/ai-summary/?(?:/__data.json)?$",
+			"dest": "/ai-summary"
+		},
+		{
+			"src": "^/analytics/?(?:/__data.json)?$",
+			"dest": "/analytics"
+		},
+		{
+			"src": "^/api/audit/log/?(?:/__data.json)?$",
+			"dest": "/api/audit/log"
+		},
+		{
+			"src": "^/api/downtime/?(?:/__data.json)?$",
+			"dest": "/api/downtime"
+		},
+		{
+			"src": "^/api/logout/?(?:/__data.json)?$",
+			"dest": "/api/logout"
+		},
+		{
+			"src": "^/api/meetings/?(?:/__data.json)?$",
+			"dest": "/api/meetings"
+		},
+		{
+			"src": "^/api/meetings/([^/]+?)/?(?:/__data.json)?$",
+			"dest": "/api/meetings/[id]"
+		},
+		{
+			"src": "^/api/ping555555555555555555555555/?(?:/__data.json)?$",
+			"dest": "/api/ping555555555555555555555555"
+		},
+		{
+			"src": "^/api/reports/?(?:/__data.json)?$",
+			"dest": "/api/reports"
+		},
+		{
+			"src": "^/api/reports/dashboard/?(?:/__data.json)?$",
+			"dest": "/api/reports/dashboard"
+		},
+		{
+			"src": "^/api/reports/hourly/?(?:/__data.json)?$",
+			"dest": "/api/reports/hourly"
+		},
+		{
+			"src": "^/api/send-otp/?(?:/__data.json)?$",
+			"dest": "/api/send-otp"
+		},
+		{
+			"src": "^/api/sims/?(?:/__data.json)?$",
+			"dest": "/api/sims"
+		},
+		{
+			"src": "^/api/templates/?(?:/__data.json)?$",
+			"dest": "/api/templates"
+		},
+		{
+			"src": "^/api/templates/approve/?(?:/__data.json)?$",
+			"dest": "/api/templates/approve"
+		},
+		{
+			"src": "^/api/templates/check/?(?:/__data.json)?$",
+			"dest": "/api/templates/check"
+		},
+		{
+			"src": "^/api/templates/fields/?(?:/__data.json)?$",
+			"dest": "/api/templates/fields"
+		},
+		{
+			"src": "^/api/templates/install/?(?:/__data.json)?$",
+			"dest": "/api/templates/install"
+		},
+		{
+			"src": "^/api/templates/report-view/?(?:/__data.json)?$",
+			"dest": "/api/templates/report-view"
+		},
+		{
+			"src": "^/api/templates/reports/?(?:/__data.json)?$",
+			"dest": "/api/templates/reports"
+		},
+		{
+			"src": "^/api/templates/reports/batch/?(?:/__data.json)?$",
+			"dest": "/api/templates/reports/batch"
+		},
+		{
+			"src": "^/api/templates/report/?(?:/__data.json)?$",
+			"dest": "/api/templates/report"
+		},
+		{
+			"src": "^/api/templates/send/?(?:/__data.json)?$",
+			"dest": "/api/templates/send"
+		},
+		{
+			"src": "^/api/templates/share/?(?:/__data.json)?$",
+			"dest": "/api/templates/share"
+		},
+		{
+			"src": "^/api/templates/([^/]+?)/?(?:/__data.json)?$",
+			"dest": "/api/templates/[id]"
+		},
+		{
+			"src": "^/api/upload-avatar/?(?:/__data.json)?$",
+			"dest": "/api/upload-avatar"
+		},
+		{
+			"src": "^/api/user/status/?(?:/__data.json)?$",
+			"dest": "/api/user/status"
+		},
+		{
+			"src": "^/api/verify-otp/?(?:/__data.json)?$",
+			"dest": "/api/verify-otp"
+		},
+		{
+			"src": "^/auth/callback/?(?:/__data.json)?$",
+			"dest": "/auth/callback"
+		},
+		{
+			"src": "^/chat/?(?:/__data.json)?$",
+			"dest": "/chat"
+		},
+		{
+			"src": "^/communication/?(?:/__data.json)?$",
+			"dest": "/communication"
+		},
+		{
+			"src": "^/communication/feed/?(?:/__data.json)?$",
+			"dest": "/communication/feed"
+		},
+		{
+			"src": "^/communication/production/?(?:/__data.json)?$",
+			"dest": "/communication/production"
+		},
+		{
+			"src": "^/communication/shift-handover/?(?:/__data.json)?$",
+			"dest": "/communication/shift-handover"
+		},
+		{
+			"src": "^/dashboard/?(?:/__data.json)?$",
+			"dest": "/dashboard"
+		},
+		{
+			"src": "^/dev/health/?(?:/__data.json)?$",
+			"dest": "/dev/health"
+		},
+		{
+			"src": "^/dev/system-test/?(?:/__data.json)?$",
+			"dest": "/dev/system-test"
+		},
+		{
+			"src": "^/downtime/?(?:/__data.json)?$",
+			"dest": "/downtime"
+		},
+		{
+			"src": "^/engineering/issues/?(?:/__data.json)?$",
+			"dest": "/engineering/issues"
+		},
+		{
+			"src": "^/favicon\\.ico/?(?:/__data.json)?$",
+			"dest": "/favicon.ico"
+		},
+		{
+			"src": "^/forgot-password/?(?:/__data.json)?$",
+			"dest": "/(auth)/forgot-password"
+		},
+		{
+			"src": "^/loginbackup/?(?:/__data.json)?$",
+			"dest": "/loginbackup"
+		},
+		{
+			"src": "^/login/?(?:/__data.json)?$",
+			"dest": "/(auth)/login"
+		},
+		{
+			"src": "^/logout/?(?:/__data.json)?$",
+			"dest": "/logout"
+		},
+		{
+			"src": "^/machine-downtime/?(?:/__data.json)?$",
+			"dest": "/machine-downtime"
+		},
+		{
+			"src": "^/machine-downtime/add/?(?:/__data.json)?$",
+			"dest": "/machine-downtime/add"
+		},
+		{
+			"src": "^/machine-downtime/([^/]+?)/?(?:/__data.json)?$",
+			"dest": "/machine-downtime/[id]"
+		},
+		{
+			"src": "^/maintenance/downtime/?(?:/__data.json)?$",
+			"dest": "/maintenance/downtime"
+		},
+		{
+			"src": "^/meeting-actions/?(?:/__data.json)?$",
+			"dest": "/meeting-actions"
+		},
+		{
+			"src": "^/meeting-list/?(?:/__data.json)?$",
+			"dest": "/meeting-list"
+		},
+		{
+			"src": "^/meetings/?(?:/__data.json)?$",
+			"dest": "/meetings"
+		},
+		{
+			"src": "^/meetings/edit/([^/]+?)/?(?:/__data.json)?$",
+			"dest": "/meetings/edit/[id]"
+		},
+		{
+			"src": "^/meetings/minutes/?(?:/__data.json)?$",
+			"dest": "/meetings/minutes"
+		},
+		{
+			"src": "^/meetings/new/?(?:/__data.json)?$",
+			"dest": "/meetings/new"
+		},
+		{
+			"src": "^/meetings/([^/]+?)/?(?:/__data.json)?$",
+			"dest": "/meetings/[id]"
+		},
+		{
+			"src": "^/minutes/?(?:/__data.json)?$",
+			"dest": "/minutes"
+		},
+		{
+			"src": "^/minutes/([^/]+?)/?(?:/__data.json)?$",
+			"dest": "/minutes/[id]"
+		},
+		{
+			"src": "^/production-report/?(?:/__data.json)?$",
+			"dest": "/production-report"
+		},
+		{
+			"src": "^/register/?(?:/__data.json)?$",
+			"dest": "/(auth)/register"
+		},
+		{
+			"src": "^/report-summary/?(?:/__data.json)?$",
+			"dest": "/report-summary"
+		},
+		{
+			"src": "^/reportsbackup/?(?:/__data.json)?$",
+			"dest": "/reportsbackup"
+		},
+		{
+			"src": "^/reports/?(?:/__data.json)?$",
+			"dest": "/reports"
+		},
+		{
+			"src": "^/reset-password/?(?:/__data.json)?$",
+			"dest": "/(auth)/reset-password"
+		},
+		{
+			"src": "^/settings/?(?:/__data.json)?$",
+			"dest": "/settings"
+		},
+		{
+			"src": "^/sims/?(?:/__data.json)?$",
+			"dest": "/sims"
+		},
+		{
+			"src": "^/templates/?(?:/__data.json)?$",
+			"dest": "/templates"
+		},
+		{
+			"src": "^/templates/categories/?(?:/__data.json)?$",
+			"dest": "/templates/categories"
+		},
+		{
+			"src": "^/templates/create/?(?:/__data.json)?$",
+			"dest": "/templates/create"
+		},
+		{
+			"src": "^/templates/([^/]+?)/?(?:/__data.json)?$",
+			"dest": "/templates/[id]"
+		},
+		{
+			"src": "^/templates/([^/]+?)/preview/?(?:/__data.json)?$",
+			"dest": "/templates/[id]/preview"
+		},
+		{
+			"src": "^/templates/([^/]+?)/preview/versions/?(?:/__data.json)?$",
+			"dest": "/templates/[id]/preview/versions"
+		},
+		{
+			"src": "^/users/?(?:/__data.json)?$",
+			"dest": "/users"
+		},
+		{
+			"src": "^/users/create/?(?:/__data.json)?$",
+			"dest": "/users/create"
+		},
+		{
+			"src": "^/users/import/?(?:/__data.json)?$",
+			"dest": "/users/import"
+		},
+		{
+			"src": "^/users/([^/]+?)/?(?:/__data.json)?$",
+			"dest": "/users/[id]"
+		},
+		{
+			"src": "^/users/([^/]+?)/activity/?(?:/__data.json)?$",
+			"dest": "/users/[id]/activity"
+		},
+		{
+			"src": "^/users/([^/]+?)/permissions/?(?:/__data.json)?$",
+			"dest": "/users/[id]/permissions"
+		},
+		{
+			"src": "^/users/([^/]+?)/profile/?(?:/__data.json)?$",
+			"dest": "/users/[id]/profile"
+		},
+		{
+			"src": "/.*",
+			"dest": "/![-]/catchall"
+		}
+	],
+	"overrides": {}
+}

@@ -136,13 +136,13 @@ function saveDowntime(){
 <input
 type="time"
 bind:value={breakdown.startTime}
-on:change={calculateDT}
+onchange={calculateDT}
 />
 
 <input
 type="time"
 bind:value={breakdown.endTime}
-on:change={calculateDT}
+onchange={calculateDT}
 />
 
 <input
@@ -189,7 +189,7 @@ bind:value={breakdown.remarks}></textarea>
 
 <button
 class="save"
-on:click={saveDowntime}
+onclick={saveDowntime}
 >
 
 💾 Save Downtime

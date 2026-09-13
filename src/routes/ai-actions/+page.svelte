@@ -18,7 +18,7 @@
   placeholder="Paste meeting notes"
 ></textarea>
 
-<button on:click={generateActions}>
+<button onclick={generateActions}>
   Extract Actions
 </button>
 

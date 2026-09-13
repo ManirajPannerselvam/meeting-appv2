@@ -109,14 +109,14 @@ Loading Preview...
 
 			<button
 				class="back"
-				on:click={() => goto(`/templates/${id}`)}
+				onclick={() => goto(`/templates/${id}`)}
 			>
 				← Back
 			</button>
 
 			<button
 				class="print"
-				on:click={() => window.print()}
+				onclick={() => window.print()}
 			>
 				Print
 			</button>

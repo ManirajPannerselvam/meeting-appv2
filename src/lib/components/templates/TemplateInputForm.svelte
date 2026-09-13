@@ -86,7 +86,7 @@
 <div class="form-overlay">
   <div class="form-header">
     <h3>📋 {template?.name || 'Report'}</h3>
-    <button class="close" on:click={cancel}>✕</button>
+    <button class="close" onclick={cancel}>✕</button>
   </div>
 
   <div class="form-body">
@@ -101,18 +101,18 @@
           <label>{field.field_label}{#if field.required}<span class="req">*</span>{/if}</label>
           
           {#if type === 'textarea'}
-            <textarea value={values[field.field_name] ?? ""} on:input={(e)=>updateValue(field,e)} placeholder={field.field_label}></textarea>
+            <textarea value={values[field.field_name] ?? ""} oninput={(e)=>updateValue(field,e)} placeholder={field.field_label}></textarea>
           {:else if type === 'dropdown' || type === 'select'}
-            <select value={values[field.field_name] ?? ""} on:change={(e)=>updateValue(field,e)}>
+            <select value={values[field.field_name] ?? ""} onchange={(e)=>updateValue(field,e)}>
               <option value="">Select {field.field_label}</option>
               {#each (Array.isArray(field.options) ? field.options : (()=>{try{return JSON.parse(field.options||"[]")}catch{return []}})()) as opt}
                 <option value={typeof opt === 'string' ? opt : opt.value || opt.label}>{typeof opt === 'string' ? opt : opt.label || opt.value}</option>
               {/each}
             </select>
           {:else if type === 'number'}
-            <input type="text" inputmode="numeric" value={values[field.field_name] ?? ""} on:input={(e)=>updateValue(field,e)} placeholder={field.field_label} />
+            <input type="text" inputmode="numeric" value={values[field.field_name] ?? ""} oninput={(e)=>updateValue(field,e)} placeholder={field.field_label} />
           {:else}
-            <input type="text" value={values[field.field_name] ?? ""} on:input={(e)=>updateValue(field,e)} placeholder={field.field_label} />
+            <input type="text" value={values[field.field_name] ?? ""} oninput={(e)=>updateValue(field,e)} placeholder={field.field_label} />
           {/if}
         </div>
       {/each}
@@ -120,8 +120,8 @@
   </div>
 
   <div class="form-footer">
-    <button class="btn-cancel" on:click={cancel} disabled={sending}>Cancel</button>
-    <button class="btn-send" on:click={send} disabled={loading || sending}>{#if sending}Sending...{:else}Send Report{/if}</button>
+    <button class="btn-cancel" onclick={cancel} disabled={sending}>Cancel</button>
+    <button class="btn-send" onclick={send} disabled={loading || sending}>{#if sending}Sending...{:else}Send Report{/if}</button>
   </div>
 </div>
 

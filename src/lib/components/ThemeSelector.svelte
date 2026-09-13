@@ -8,7 +8,7 @@
 
 <div class="theme-grid">
   {#each themes as th}
-    <button class="theme-btn {current===th?'active':''}" on:click={()=>themeStore.setTheme(th)}>
+    <button class="theme-btn {current===th?'active':''}" onclick={()=>themeStore.setTheme(th)}>
       <span class="dot {th}"></span>
       <span class="name">{th}</span>
     </button>

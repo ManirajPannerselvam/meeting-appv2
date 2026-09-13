@@ -84,7 +84,7 @@
 
 <h1>System Test</h1>
 
-<button on:click={runTests}>
+<button onclick={runTests}>
 	Run All Tests
 </button>
 

@@ -212,8 +212,8 @@ async function saveTemplate() {
             </div>
         </div>
         <div class="actions">
-            <button class="btn ghost" on:click={() => dispatch("close")}>Cancel</button>
-            <button class="btn primary" disabled={saving} on:click={saveTemplate}>
+            <button class="btn ghost" onclick={() => dispatch("close")}>Cancel</button>
+            <button class="btn primary" disabled={saving} onclick={saveTemplate}>
                 {#if saving}Saving...{:else if template?.id}💾 Update Template{:else}💾 Save Template{/if}
             </button>
         </div>
@@ -229,14 +229,14 @@ async function saveTemplate() {
 
         <div class="main">
             <div class="tabs">
-                <button class:active={activeTab === "fields"} on:click={() => activeTab = "fields"}>Fields ({fields.length})</button>
-                <button class:active={activeTab === "preview"} on:click={() => activeTab = "preview"}>Preview</button>
+                <button class:active={activeTab === "fields"} onclick={() => activeTab = "fields"}>Fields ({fields.length})</button>
+                <button class:active={activeTab === "preview"} onclick={() => activeTab = "preview"}>Preview</button>
             </div>
 
             {#if activeTab === "fields"}
                 <!-- NEW DESIGN BOX - FULL FILL TILL DOWNSIDE -->
                 <div class="card design-card">
-                    <div class="design-head" on:click={()=>showOptions=!showOptions}>
+                    <div class="design-head" onclick={()=>showOptions=!showOptions}>
                         <span>⚙️ Design Box - {cols}x{rows} = {totalDots} dots | Gap {gap}px - Full Fill</span>
                         <span>{showOptions?'▲':'▼'}</span>
                     </div>
@@ -246,12 +246,12 @@ async function saveTemplate() {
                         <div class="opt-group"><label>Cols: {cols}</label><input type="range" min="10" max="50" bind:value={cols} /></div>
                         <div class="opt-group"><label>Rows: {rows}</label><input type="range" min="10" max="40" bind:value={rows} /></div>
                         <div class="opt-group"><label>Dot: {dotSize}px</label><input type="range" min="1" max="6" step="0.5" bind:value={dotSize} /></div>
-                        <div class="opt-actions"><button on:click={fillFullBox}>Full Box</button><button on:click={fillDense}>Dense</button><label><input type="checkbox" bind:checked={showGrid}/> Grid</label></div>
+                        <div class="opt-actions"><button onclick={fillFullBox}>Full Box</button><button onclick={fillDense}>Dense</button><label><input type="checkbox" bind:checked={showGrid}/> Grid</label></div>
                     </div>
                     {/if}
                     <div id="board" class="board-fixed" style="height:{boardHeight}px; background-size:{gap}px {gap}px; background-image:{showGrid?`linear-gradient(to right, #f1f5f9 1px, transparent 1px),linear-gradient(to bottom, #f1f5f9 1px, transparent 1px)`: 'none'};" on:touchmove={onTouchMove} on:touchend={onUp}>
                         {#each Array(rows) as _,r}{#each Array(cols) as _,c}<div class="sdot" style="left:{c*gap+8}px; top:{r*gap+8}px; width:{dotSize}px; height:{dotSize}px; opacity:{dotOpacity};"></div>{/each}{/each}
-                        {#each placed as p}<div class="mod" class:active={p.fIndex===selectedFieldIndex} style="left:{p.x*gap+2}px; top:{p.y*gap+2}px; width:{p.w*gap-4}px; height:{p.h*gap-6}px;" on:mousedown={(e)=>onDown(e,p)} on:touchstart={(e)=>onTouchStart(e,p)} on:click={()=>selectedFieldIndex=p.fIndex}><span>{fields[p.fIndex]?.label}</span></div>{/each}
+                        {#each placed as p}<div class="mod" class:active={p.fIndex===selectedFieldIndex} style="left:{p.x*gap+2}px; top:{p.y*gap+2}px; width:{p.w*gap-4}px; height:{p.h*gap-6}px;" on:mousedown={(e)=>onDown(e,p)} on:touchstart={(e)=>onTouchStart(e,p)} onclick={()=>selectedFieldIndex=p.fIndex}><span>{fields[p.fIndex]?.label}</span></div>{/each}
                     </div>
                 </div>
 

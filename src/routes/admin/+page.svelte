@@ -119,42 +119,42 @@
 
 			<button
 				type="button"
-				on:click={() => goto('/admin/users')}
+				onclick={() => goto('/admin/users')}
 			>
 				User Management
 			</button>
 
 			<button
 				type="button"
-				on:click={() => goto('/admin/roles')}
+				onclick={() => goto('/admin/roles')}
 			>
 				Roles
 			</button>
 
 			<button
 				type="button"
-				on:click={() => goto('/admin/permissions')}
+				onclick={() => goto('/admin/permissions')}
 			>
 				Permissions
 			</button>
 
 			<button
 				type="button"
-				on:click={() => goto('/admin/system')}
+				onclick={() => goto('/admin/system')}
 			>
 				System Settings
 			</button>
 
 			<button
 				type="button"
-				on:click={() => goto('/admin/backups')}
+				onclick={() => goto('/admin/backups')}
 			>
 				Backup Center
 			</button>
 
 			<button
 				type="button"
-				on:click={() => goto('/admin/integrations')}
+				onclick={() => goto('/admin/integrations')}
 			>
 				Integrations
 			</button>

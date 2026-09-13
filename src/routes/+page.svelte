@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { goto } from '$app/navigation';goto('/chat');
+  import { goto } from '$app/navigation';
   import { supabase } from '$lib/supabase';
   import type { Template, TemplateField } from '$lib/types';
 
@@ -25,10 +25,9 @@
 
   let activeTab = $state('report');
 
-  // WHATSAPP SWIPE TECH - FIXED Svelte 5 SYNTAX
   let startX = $state(0);
   let startY = $state(0);
-  const tabs = ['/chat', '/reports', '/settings'];
+  const tabs = ['/chat', '/reports', '/settings'] as const;
 
   function onTouchStart(e: TouchEvent){
     startX = e.touches[0].clientX;
@@ -44,37 +43,50 @@
     else goto(tabs[(idx - 1 + tabs.length) % tabs.length]);
   }
 
+  function sanitizeStr(s:any, max=120){
+    if(typeof s!=='string') return '';
+    return s.replace(/[<>`$]/g,'').trim().slice(0,max);
+  }
+
   function normalizeFields(template: Template | null): TemplateField[] {
     if (!template) return [];
     return (template.data?.fields || []).map((f: any) => {
         let options: any[] = [];
         try { options = typeof f.options === 'string'? JSON.parse(f.options || '[]') : (f.options || []); } catch { options = []; }
-        const formula = (f.formula || '').trim();
+        const safeOptions = Array.isArray(options)? options.map(o=>sanitizeStr(String(o),50)).slice(0,100) : [];
+        const formula = (f.formula || '').toString().slice(0,200).trim();
         return {
-            name: f.field_name || f._key || f.name,
-            label: f.label || f.field_name,
-            type: f.field_type || f.type,
-            options,
+            name: sanitizeStr(f.field_name || f._key || f.name,50),
+            label: sanitizeStr(f.label || f.field_name,80),
+            type: (f.field_type || f.type || 'text').toString().slice(0,20),
+            options: safeOptions,
             required:!!f.required,
-            default_value: f.default_value?? '',
+            default_value: typeof f.default_value==='string'? sanitizeStr(f.default_value,100) : f.default_value?? '',
             formula,
             computed: formula.length > 0 || f.field_type === 'formula'
-        };
+        } as any;
     });
   }
 
   function evaluateFormula(formula: string, values: Record<string, any>): number {
-    if (!formula) return 0;
+    if (!formula || formula.length>200) return 0;
     try {
         let expression = formula;
-        Object.entries(values).forEach(([key, value]) => {
-            const number = Number(value) || 0;
-            const regex = new RegExp(`\\{${key}\\}`, 'gi');
-            expression = expression.replace(regex, number.toString());
-        });
-        expression = expression.replace(/[^0-9+\-*/().% ]/g, '').replace(/%/g, '');
+        // only allow known keys
+        for(const [key, value] of Object.entries(values)){
+          if(!/^[a-zA-Z0-9_]+$/.test(key)) continue;
+          const number = Number(value);
+          const safeNum = isFinite(number)? Math.max(-1e9, Math.min(1e9, number)) : 0;
+          const regex = new RegExp(`\\{${key}\\}`, 'gi');
+          expression = expression.replace(regex, safeNum.toString());
+        }
+        // SECURE: only numbers and operators left
+        if(!/^[0-9+\-*/().% ]+$/.test(expression)) return 0;
+        expression = expression.replace(/%/g, '');
         if(!expression.trim()) return 0;
-        const result = new Function(`return (${expression})`)();
+        // block long or nested
+        if(expression.length>120 || expression.includes('**')) return 0;
+        const result = Function(`"use strict"; return (${expression})`)();
         if (!isFinite(result)) return 0;
         return Number(Number(result).toFixed(2));
     } catch { return 0; }
@@ -84,18 +96,18 @@
     const { data: { session } } = await supabase.auth.getSession();
     if(!session){ goto('/login'); return; }
     loadingTemplates = true;
-    const { data, error } = await supabase.from("templates").select('*').order('name');
-    if (error) { message = "Failed: " + error.message; messageType = 'error'; } else { templates = data || []; }
-    loadingTemplates = false;
+    try{
+      const { data, error } = await supabase.from("templates").select('id,name,description,category,template_code,data').order('name').limit(200);
+      if (error) { message = "Failed: " + sanitizeStr(error.message,100); messageType = 'error'; } else { templates = (data as any) || []; }
+    } finally { loadingTemplates = false; }
   });
 
-  // auto reset form when template changes
   $effect(()=>{
     if (selectedTemplate && previousTemplateId!== selectedTemplate.id) {
       previousTemplateId = selectedTemplate.id;
       const newData: Record<string, any> = {};
       const stationField = allFields.find((f) => f.name.toLowerCase() === 'station');
-      station = stationField?.options?.[0] || '';
+      station = sanitizeStr(stationField?.options?.[0] || '',50);
       formFields.forEach((field) => { newData[field.name] = field.type === 'number'? Number(field.default_value) || 0 : field.default_value || ''; });
       formData = newData;
     }
@@ -113,7 +125,7 @@
     for (const field of formFields) {
         const value = formData[field.name];
         if (field.required && (value === "" || value === null || value === undefined)) {
-            message = `${field.label} is required`; messageType = "error"; return;
+            message = `${sanitizeStr(field.label,30)} is required`; messageType = "error"; return;
         }
     }
     if (stationOptions.length &&!station) { message = "Please select Station"; messageType = "error"; return; }
@@ -126,28 +138,28 @@
         const { data: { user } } = await supabase.auth.getUser();
         if(!user){ goto('/login'); return; }
         const { data: reportData, error } = await supabase.from("template_reports").insert([{
-            template_id: selectedTemplate.id,
-            template_version: selectedTemplate.data?.version || 1,
+            template_id: selectedTemplate.id.slice(0,100),
+            template_version: Number(selectedTemplate.data?.version) || 1,
             sender: user.id,
             room_id: 'factory-floor',
             report_date: new Date().toISOString(),
-            values: {...formData,...calculated, shift, station, t_code: selectedTemplate.template_code },
+            values: {...formData,...calculated, shift: sanitizeStr(shift,10), station: sanitizeStr(station,50), t_code: sanitizeStr(selectedTemplate.template_code||'',30) },
             created_at: new Date().toISOString()
-        }]).select().single();
+        }]).select('id').single();
         if (error) throw error;
         await supabase.from("messages").insert([{
             sender_id: user.id,
             room_id: 'factory-floor',
             type: 'template',
             report_id: String(reportData.id),
-            content: `📋 ${selectedTemplate.name} - ${station} / Shift ${shift}`,
+            content: `📋 ${sanitizeStr(selectedTemplate.name,50)} - ${sanitizeStr(station,20)} / Shift ${sanitizeStr(shift,5)}`,
             created_at: new Date().toISOString()
         }]);
         message = "✅ Saved + Shared to chat"; messageType = "success";
         const cleared: Record<string, any> = {};
         formFields.forEach(field => { cleared[field.name] = field.type === 'number'? Number(field.default_value) || 0 : field.default_value || ""; });
         formData = cleared;
-    } catch (err: any) { message = err.message || "Insert Failed"; messageType = "error"; }
+    } catch (err: any) { message = sanitizeStr(err.message || "Insert Failed",100); messageType = "error"; }
     finally { loading = false; setTimeout(() => message = "", 3000); }
   }
 
@@ -174,12 +186,12 @@
     {:else}
     <select id="template" bind:value={selectedTemplateId}>
       <option value="">-- Select Template --</option>
-      {#each templates as t}<option value={t.id}>{t.icon} {t.name} v{t.data?.version || 1}</option>{/each}
+      {#each templates as t}<option value={t.id}>{sanitizeStr(t.icon||'📋',5)} {sanitizeStr(t.name,50)} v{t.data?.version || 1}</option>{/each}
     </select>
     {/if}
 
     {#if selectedTemplate}
-      <div class="meta"><strong>Category:</strong> {selectedTemplate.category} | <strong>Desc:</strong> {selectedTemplate.description}</div>
+      <div class="meta"><strong>Category:</strong> {sanitizeStr(selectedTemplate.category,30)} | <strong>Desc:</strong> {sanitizeStr(selectedTemplate.description,100)}</div>
       <div class="grid-2">
         <div><label for="shift">Shift</label><select id="shift" bind:value={shift}><option value="A">Shift A</option><option value="B">Shift B</option><option value="C">Shift C</option></select></div>
         {#if stationOptions.length > 0}<div><label for="station">Station</label><select id="station" bind:value={station} required><option value="">-- Select Station --</option>{#each stationOptions as s}<option value={s}>{s}</option>{/each}</select></div>{/if}
@@ -191,19 +203,18 @@
             <label for={field.name}>{field.label} {field.required? '*' : ''}</label>
             {#if field.type === 'number'}<input id={field.name} type="number" step="any" bind:value={formData[field.name]} required={field.required} inputmode="decimal" />
             {:else if field.type === 'dropdown'}<select id={field.name} bind:value={formData[field.name]} required={field.required}><option value="">-- Select --</option>{#each field.options || [] as opt}<option value={opt}>{opt}</option>{/each}</select>
-            {:else if field.type === 'textarea'}<textarea id={field.name} bind:value={formData[field.name]} rows="3" required={field.required}></textarea>
+            {:else if field.type === 'textarea'}<textarea id={field.name} bind:value={formData[field.name]} rows="3" required={field.required} maxlength="500"></textarea>
             {:else if field.type === 'date'}<input id={field.name} type="date" bind:value={formData[field.name]} required={field.required} />
-            {:else}<input id={field.name} type="text" bind:value={formData[field.name]} required={field.required} />{/if}
+            {:else}<input id={field.name} type="text" bind:value={formData[field.name]} required={field.required} maxlength="200" />{/if}
           </div>
         {/each}
         {#if computedFields.length > 0}<div class="computed-preview"><h4>Calculated Values</h4>{#each computedFields as field}<div class="computed-row"><span>{field.label}:</span><strong>{previewValues[field.name]?? 0}</strong></div>{/each}</div>{/if}
         <button type="submit" disabled={loading ||!selectedTemplate} class="btn-submit">{loading? 'Saving...' : 'Submit Data'}</button>
       </form>
     {/if}
-    {#if message}<div class="alert {messageType}">{message}</div>{/if}
+    {#if message}<div class="alert {messageType}" role="alert">{message}</div>{/if}
   </div>
 
-  <!-- DASHBOARD HIDDEN - ONLY 3 TABS - FIXED SYNTAX -->
   <nav class="bottom-nav">
     <button class:active={activeTab==='chat'} onclick={()=>goTab('chat')}>💬<small>Chat</small></button>
     <button class:active={activeTab==='report'} onclick={()=>goTab('report')}>📋<small>Report</small></button>
@@ -223,7 +234,7 @@
 label{display:block;margin-bottom:6px;font-weight:600;color:#374151;font-size:14px;}
 select,input,textarea{width:100%;padding:10px;border:2px solid #e5e7eb;border-radius:8px;font-size:14px;margin-bottom:16px;box-sizing:border-box;}
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-.meta{background:#eff6ff;padding:12px;border-radius:8px;margin:16px 0;color:#1e40af;font-size:14px;}
+.meta{background:#eff6ff;padding:12px;border-radius:8px;margin:16px 0;color:#1e40af;font-size:14px;word-break:break-word;}
 .computed-preview{background:#f0fdf4;border:1px dashed #16a34a;padding:12px;border-radius:8px;margin-bottom:16px;}
 .computed-row{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin:4px 0;flex-wrap:wrap;}
 .btn-submit{width:100%;padding:12px;border:none;border-radius:8px;background:#2563eb;color:white;font-weight:700;font-size:16px;cursor:pointer;}

@@ -26,7 +26,7 @@
   </div>
 
   <div class="right">
-    <button class="logout" on:click={logout}>
+    <button class="logout" onclick={logout}>
       🚪 Logout
     </button>
   </div>

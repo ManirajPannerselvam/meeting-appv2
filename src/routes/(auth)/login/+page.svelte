@@ -47,7 +47,7 @@
 
 <div class="login-wrapper">
 	<div class="card-box">
-		<button class="close-btn" type="button" on:click={closeLogin} aria-label="Close">✕</button>
+		<button class="close-btn" type="button" onclick={closeLogin} aria-label="Close">✕</button>
 		<Card title="Sign In">
 			<form
 				method="POST"
@@ -61,7 +61,7 @@
 						}
 					};
 				}}
-				on:submit={(e) => { if (!validate()) e.preventDefault(); }}
+				onsubmit={(e) => { if (!validate()) e.preventDefault(); }}
 			>
 				{#if form?.error}<div class="server-error">{form.error}</div>{/if}
 				<Input label="Email" type="email" name="email" bind:value={email} error={emailError} required />

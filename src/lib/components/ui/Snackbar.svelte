@@ -65,7 +65,7 @@
 
 		<button
 			type="button"
-			on:click={close}
+			onclick={close}
 			aria-label="Close notification"
 		>
 			✕

@@ -152,7 +152,7 @@
 
 			<input
 				type="file"
-				on:change={(e) =>
+				onchange={(e) =>
 					profilePhoto =
 						(e.currentTarget as HTMLInputElement).files?.[0] ??
 						null}
@@ -166,13 +166,13 @@
 
 		<button
 			class="primary"
-			on:click={saveUser}
+			onclick={saveUser}
 		>
 			Create User
 		</button>
 
 		<button
-			on:click={() => goto('/users')}
+			onclick={() => goto('/users')}
 		>
 			Cancel
 		</button>

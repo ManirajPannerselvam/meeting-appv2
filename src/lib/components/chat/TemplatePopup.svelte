@@ -73,7 +73,7 @@
     function handleKeydown(event: KeyboardEvent, action: () => void) { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); action(); } }
 </script>
 
-<div class="overlay" role="presentation" on:click={(event) => { if (event.target === event.currentTarget) close(); }}>
+<div class="overlay" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) close(); }}>
     <section class="popup" role="dialog" aria-modal="true" aria-labelledby="template-title">
         <header class="popup-header">
             <div class="title-wrap">
@@ -83,16 +83,16 @@
                     <p>{filteredTemplates.length} {filteredTemplates.length === 1 ? "template" : "templates"}</p>
                 </div>
             </div>
-            <button type="button" class="close-btn" title="Close" aria-label="Close templates" on:click={close}>×</button>
+            <button type="button" class="close-btn" title="Close" aria-label="Close templates" onclick={close}>×</button>
         </header>
 
         <div class="toolbar">
             <div class="search-box">
                 <span aria-hidden="true">🔍</span>
                 <input bind:value={search} type="search" placeholder="Search template by name, code, category..." aria-label="Search templates" />
-                {#if search}<button type="button" class="clear-search" aria-label="Clear template search" on:click={() => (search = "")}>×</button>{/if}
+                {#if search}<button type="button" class="clear-search" aria-label="Clear template search" onclick={() => (search = "")}>×</button>{/if}
             </div>
-            <button type="button" class="new-btn" title="Create new template" on:click={handleNew}><span>+</span> New</button>
+            <button type="button" class="new-btn" title="Create new template" onclick={handleNew}><span>+</span> New</button>
         </div>
 
         <div class="template-list">
@@ -102,24 +102,24 @@
                 <div class="empty-state">
                     <div class="empty-icon">📋</div>
                     {#if search}
-                        <h3>No templates found</h3><p>Try a different search term.</p><button type="button" class="secondary-btn" on:click={() => (search = "")}>Clear Search</button>
+                        <h3>No templates found</h3><p>Try a different search term.</p><button type="button" class="secondary-btn" onclick={() => (search = "")}>Clear Search</button>
                     {:else}
-                        <h3>No templates yet</h3><p>Create your first reporting template.</p><button type="button" class="new-empty-btn" on:click={handleNew}>+ Create Template</button>
+                        <h3>No templates yet</h3><p>Create your first reporting template.</p><button type="button" class="new-empty-btn" onclick={handleNew}>+ Create Template</button>
                     {/if}
                 </div>
             {:else}
                 {#each filteredTemplates as template (template.id ?? template.template_code)}
                     <article class="template-card">
-                        <div class="template-icon" role="button" tabindex="0" aria-label={`Use ${template.name || "template"}`} on:click={() => handleUse(template)} on:keydown={(event) => handleKeydown(event, () => handleUse(template))}>📄</div>
+                        <div class="template-icon" role="button" tabindex="0" aria-label={`Use ${template.name || "template"}`} onclick={() => handleUse(template)} onkeydown={(event) => handleKeydown(event, () => handleUse(template))}>📄</div>
                         <div class="template-info">
                             <div class="name-row"><h3>{template.name || "Untitled Template"}</h3>{#if template.template_code}<span class="code">{template.template_code}</span>{/if}</div>
                             <div class="meta">Fields: {getFields(template).length}<span>•</span>{getDepartment(template)}</div>
                             <p class="description">{getDescription(template)}</p>
                         </div>
                         <div class="actions">
-                            <button type="button" class="action edit" on:click={() => handleEdit(template)}>Edit</button>
-                            <button type="button" class="action delete" disabled={deletingId === template.id} on:click={() => handleDelete(template)}>{deletingId === template.id ? "..." : "Delete"}</button>
-                            <button type="button" class="action use" on:click={() => handleUse(template)}>Use</button>
+                            <button type="button" class="action edit" onclick={() => handleEdit(template)}>Edit</button>
+                            <button type="button" class="action delete" disabled={deletingId === template.id} onclick={() => handleDelete(template)}>{deletingId === template.id ? "..." : "Delete"}</button>
+                            <button type="button" class="action use" onclick={() => handleUse(template)}>Use</button>
                         </div>
                     </article>
                 {/each}

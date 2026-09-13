@@ -42,7 +42,7 @@
 			<h2>🤖 AI Executive Summary</h2>
 			<small>Last 7 Days Analysis</small>
 	</div>
-	<button class="view" on:click={goReport}>
+	<button class="view" onclick={goReport}>
 			Open Report →
 		</button>
 	</div>

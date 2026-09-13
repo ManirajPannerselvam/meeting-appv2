@@ -58,7 +58,7 @@
 
 	<form
 		method="POST"
-		on:submit={(event) => {
+		onsubmit={(event) => {
 			if (!validate()) {
 				event.preventDefault();
 			}

@@ -502,21 +502,21 @@
     <div class="toolbar-buttons">
         <button
             class="green"
-            on:click={refreshLogs}
+            onclick={refreshLogs}
         >
             🔄 Refresh
         </button>
 
         <button
             class="blue"
-            on:click={exportCSV}
+            onclick={exportCSV}
         >
             📤 Export CSV
         </button>
 
         <button
             class="orange"
-            on:click={printLogs}
+            onclick={printLogs}
         >
             🖨 Print
         </button>
@@ -599,7 +599,7 @@
                             <td>
                                 <button
                                     class="small blue"
-                                    on:click={() =>
+                                    onclick={() =>
                                         openLog(log)
                                     }
                                 >
@@ -617,7 +617,7 @@
     {#if !loading && filteredLogs.length > 0}
         <div class="pagination">
             <button
-                on:click={previousPage}
+                onclick={previousPage}
                 disabled={currentPage === 1}
             >
                 ◀ Previous
@@ -630,7 +630,7 @@
             </span>
 
             <button
-                on:click={nextPage}
+                onclick={nextPage}
                 disabled={currentPage === totalPages}
             >
                 Next ▶
@@ -790,7 +790,7 @@
 
                 <button
                     class="close"
-                    on:click={closeDetails}
+                    onclick={closeDetails}
                     aria-label="Close"
                 >
                     ✕
@@ -927,7 +927,7 @@
             <div class="dialog-footer">
                 <button
                     class="secondary"
-                    on:click={closeDetails}
+                    onclick={closeDetails}
                 >
                     Close
                 </button>

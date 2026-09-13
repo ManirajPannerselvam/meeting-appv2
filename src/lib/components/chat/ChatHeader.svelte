@@ -32,23 +32,23 @@
 
 <div class="chat-top-bar">
   <div class="left">
-    {#if showBack}<button class="back-btn" on:click={onBack}>←</button>{/if}
+    {#if showBack}<button class="back-btn" onclick={onBack}>←</button>{/if}
     <div class="top-avatar">{#if avatarUrl}<img src={avatarUrl} alt="" />{:else}{getInitials(title)}{/if}</div>
     <div class="top-info"><div class="top-name">{title}</div><div class="top-sub">{subtitle || 'click here for contact info'}</div></div>
   </div>
   <div class="right">
-    <button class="top-icon" on:click={() => showSearch =!showSearch}>🔍</button>
+    <button class="top-icon" onclick={() => showSearch =!showSearch}>🔍</button>
     <div class="menu-wrap" use:clickOutside={() => showMenu = false}>
-      <button class="top-icon" on:click={toggleMenu}>⋮</button>
+      <button class="top-icon" onclick={toggleMenu}>⋮</button>
       {#if showMenu}
         <div class="dropdown">
-          <button class="dropdown-item" on:click={() => doAction('info')}>Contact info</button>
-          <button class="dropdown-item" on:click={() => doAction('mute')}>Mute notifications</button>
-          <button class="dropdown-item" on:click={() => doAction('clear')}>Clear chat</button>
+          <button class="dropdown-item" onclick={() => doAction('info')}>Contact info</button>
+          <button class="dropdown-item" onclick={() => doAction('mute')}>Mute notifications</button>
+          <button class="dropdown-item" onclick={() => doAction('clear')}>Clear chat</button>
           {#if isGroup}
-            <button class="dropdown-item danger" on:click={() => doAction('exit')}>Exit group</button>
+            <button class="dropdown-item danger" onclick={() => doAction('exit')}>Exit group</button>
           {:else}
-            <button class="dropdown-item danger" on:click={() => doAction('block')}>Block</button>
+            <button class="dropdown-item danger" onclick={() => doAction('block')}>Block</button>
           {/if}
         </div>
       {/if}
@@ -56,7 +56,7 @@
   </div>
 </div>
 
-{#if showSearch}<div class="search-bar"><input placeholder="Search..." autofocus /><button on:click={() => showSearch = false}>✕</button></div>{/if}
+{#if showSearch}<div class="search-bar"><input placeholder="Search..." autofocus /><button onclick={() => showSearch = false}>✕</button></div>{/if}
 
 <style>
 .chat-top-bar{height:64px;background:linear-gradient(90deg,#202c33 0%,#2a3942 100%);border-left:1px solid #2a3942;border-bottom:1px solid #2a3942;display:flex;align-items:center;justify-content:space-between;padding:0 16px;position:relative;}

@@ -47,7 +47,7 @@
 
     <button
         class="primary"
-        on:click={addField}
+        onclick={addField}
     >
         + Add Field
     </button>
@@ -76,7 +76,7 @@
 
             <button
                 class="primary"
-                on:click={addField}
+                onclick={addField}
             >
                 Add First Field
             </button>
@@ -90,7 +90,7 @@
             <div
                 class="row"
                 class:selected={selectedIndex === item.index}
-                on:click={() => select(item.index)}
+                onclick={() => select(item.index)}
             >
 
                 <div>{item.index + 1}</div>
@@ -129,14 +129,14 @@
 
                     <button
                         title="Duplicate"
-                        on:click|stopPropagation={() => dispatch("duplicate", item.index)}
+                        onclick={(e) => { e.stopPropagation(); dispatch("duplicate", item.index)}
                     >
                         📄
                     </button>
 
                     <button
                         title="Delete"
-                        on:click|stopPropagation={() => remove(item.index)}
+                        onclick={(e) => { e.stopPropagation(); remove(item.index)}
                     >
                         🗑
                     </button>
@@ -273,3 +273,4 @@ font-size:11px;
 margin-top:3px;
 }
 </style>
+

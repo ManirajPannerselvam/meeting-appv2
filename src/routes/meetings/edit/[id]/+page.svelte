@@ -82,8 +82,8 @@
 
 <div class="page">
   <div class="topbar">
-    <div class="left"><button class="back" on:click={()=>goto(`/meetings/${id}`)}>←</button><div><h1>Edit Meeting #{id}</h1><small>{referenceNo}</small></div></div>
-    <div class="right desktop"><button class="btn ghost" on:click={()=>goto(`/meetings/${id}`)}>Cancel</button><button class="btn black" on:click={saveEdit} disabled={saving}>{saving?"Saving...":"Update"}</button></div>
+    <div class="left"><button class="back" onclick={()=>goto(`/meetings/${id}`)}>←</button><div><h1>Edit Meeting #{id}</h1><small>{referenceNo}</small></div></div>
+    <div class="right desktop"><button class="btn ghost" onclick={()=>goto(`/meetings/${id}`)}>Cancel</button><button class="btn black" onclick={saveEdit} disabled={saving}>{saving?"Saving...":"Update"}</button></div>
   </div>
 
   {#if loadingPage}
@@ -135,17 +135,17 @@
           <div><span>Progress</span><b>{progress}%</b></div>
         </div>
         <div class="bar"><div style="width:{progress}%"></div></div>
-        <button class="btn black full" on:click={saveEdit} disabled={saving}>{saving?"Updating...":"💾 Update Meeting"}</button>
-        <button class="btn ghost full mt" on:click={()=>goto(`/meetings/${id}`)}>View Meeting</button>
-        <button class="btn ghost full mt" on:click={()=>goto("/meeting-list")}>Back to List</button>
+        <button class="btn black full" onclick={saveEdit} disabled={saving}>{saving?"Updating...":"💾 Update Meeting"}</button>
+        <button class="btn ghost full mt" onclick={()=>goto(`/meetings/${id}`)}>View Meeting</button>
+        <button class="btn ghost full mt" onclick={()=>goto("/meeting-list")}>Back to List</button>
       </div>
     </div>
   </div>
   {/if}
 
   <div class="bottombar">
-    <button class="btn ghost" on:click={()=>goto(`/meetings/${id}`)}>Cancel</button>
-    <button class="btn black" on:click={saveEdit} disabled={saving}>Update</button>
+    <button class="btn ghost" onclick={()=>goto(`/meetings/${id}`)}>Cancel</button>
+    <button class="btn black" onclick={saveEdit} disabled={saving}>Update</button>
   </div>
 </div>
 

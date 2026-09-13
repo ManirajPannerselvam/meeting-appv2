@@ -133,7 +133,7 @@ Loading Versions...
 		</div>
 
 		<button
-			on:click={() => goto(`/templates/${id}`)}
+			onclick={() => goto(`/templates/${id}`)}
 		>
 			← Back
 		</button>
@@ -204,14 +204,14 @@ Loading Versions...
 
 					<button
 						class="blue"
-						on:click={() => compare(item.version)}
+						onclick={() => compare(item.version)}
 					>
 						Compare
 					</button>
 
 					<button
 						class="green"
-						on:click={() => download(item.version)}
+						onclick={() => download(item.version)}
 					>
 						Download
 					</button>
@@ -220,7 +220,7 @@ Loading Versions...
 
 					<button
 						class="orange"
-						on:click={() => rollback(item.version)}
+						onclick={() => rollback(item.version)}
 					>
 						Rollback
 					</button>

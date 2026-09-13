@@ -64,7 +64,7 @@
 <div class="card">
 	<div class="header">
 	<h2>📅 Recent Meetings</h2>
-		<button class="view-all" on:click={() => goto("/meeting-list")}>
+		<button class="view-all" onclick={() => goto("/meeting-list")}>
 			View All
 	</button>
 	</div>
@@ -93,8 +93,8 @@
 					<tr 
 							role="button" 
 							tabindex="0"
-							on:click={() => openMeeting(meeting.id)}
-							on:keydown={(e) => handleRowKeydown(e, meeting.id)}
+							onclick={() => openMeeting(meeting.id)}
+							onkeydown={(e) => handleRowKeydown(e, meeting.id)}
 						>
 							<td>#{meeting.id}</td>
 							<td>

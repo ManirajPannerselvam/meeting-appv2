@@ -1,7 +1,7 @@
 /**
  * Temple Operations Reporting System
  * File : src/lib/supabase/client.ts
- * 2 PROJECT - FAST OPEN + SECURE
+ * 2 PROJECT - FAST OPEN + SECURE - FIXED
  */
 import { createBrowserClient } from '@supabase/ssr';
 import { browser } from '$app/environment';
@@ -15,15 +15,15 @@ import {
 if (!PUBLIC_SUPABASE_CHAT_URL) throw new Error('Missing PUBLIC_SUPABASE_CHAT_URL');
 if (!PUBLIC_SUPABASE_TEMPLATES_URL) throw new Error('Missing PUBLIC_SUPABASE_TEMPLATES_URL');
 
-if (browser && PUBLIC_SUPABASE_CHAT_URL === PUBLIC_SUPABASE_TEMPLATES_URL) {
-	console.warn('[Supabase] CHAT and TEMPLATES URLs SAME');
-}
-
 let chatClient: ReturnType<typeof createBrowserClient> | null = null;
 let templateClient: ReturnType<typeof createBrowserClient> | null = null;
 
 function getChatSingleton(){
   if(chatClient) return chatClient;
+  if(!browser){
+    // ✅ SECURE: don't create browser client on server
+    return null as any;
+  }
   chatClient = createBrowserClient(
     PUBLIC_SUPABASE_CHAT_URL,
     PUBLIC_SUPABASE_CHAT_ANON_KEY,
@@ -32,7 +32,11 @@ function getChatSingleton(){
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
-        flowType: 'pkce'
+        flowType: 'pkce',
+        storageKey: 'ems_chat_auth'
+      },
+      realtime: {
+        params: { eventsPerSecond: 10 }
       },
       global: { fetch: fetch }
     }
@@ -42,55 +46,71 @@ function getChatSingleton(){
 
 function getTemplateSingleton(){
   if(templateClient) return templateClient;
+  if(!browser) return null as any;
   templateClient = createBrowserClient(
     PUBLIC_SUPABASE_TEMPLATES_URL,
     PUBLIC_SUPABASE_TEMPLATES_ANON_KEY,
     {
-      auth: { persistSession: false, autoRefreshToken: false },
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+      realtime: { params: { eventsPerSecond: 2 } },
       global: { fetch: fetch }
     }
   );
   return templateClient;
 }
 
-export const supabaseChat = getChatSingleton();
-export const supabaseTemplates = getTemplateSingleton();
+// ✅ SPEED: lazy getters - not created on SSR
+export const supabaseChat = browser ? getChatSingleton() : null as any;
+export const supabaseTemplates = browser ? getTemplateSingleton() : null as any;
 
 export const supabaseAuth = supabaseChat;
 export const supabaseSettings = supabaseChat;
 export const supabaseProfiles = supabaseChat;
 export const supabase = supabaseChat;
-export default supabase;
+export default supabaseChat;
 
 const CACHE_KEYS = {
   recentContacts: 'recent_contacts_cache_v2',
   settings: 'ems_settings_cache'
 };
 
+// ✅ FIXED: proper wrapper with _ts
+type CacheWrapper = { _ts: number; data: any[] };
+
 export function getRecentContactsFast(): any[] | null {
   if(!browser) return null;
   try{
     const cached = localStorage.getItem(CACHE_KEYS.recentContacts);
     if(!cached) return null;
-    const parsed = JSON.parse(cached);
-    if(!Array.isArray(parsed)) return null;
-    if((parsed as any)._ts && Date.now() - (parsed as any)._ts > 5*60*1000) return null;
-    return parsed;
+    const parsed = JSON.parse(cached) as CacheWrapper | any[];
+    // support old array format + new wrapper
+    let arr: any[] = [];
+    let ts = 0;
+    if(Array.isArray(parsed)){
+      arr = parsed;
+      ts = (parsed as any)._ts || 0;
+    } else if(parsed?.data && Array.isArray(parsed.data)){
+      arr = parsed.data;
+      ts = parsed._ts || 0;
+    } else return null;
+    if(ts && Date.now() - ts > 5*60*1000) return null;
+    if(!Array.isArray(arr)) return null;
+    return arr;
   }catch{ return null; }
 }
 
 export function setRecentContactsCache(data:any[]){
-  if(!browser) return;
+  if(!browser || !Array.isArray(data)) return;
   try{
     const safe = data.slice(0,30).map((c:any)=> ({
-      id: c.id,
-      actual_user_id: c.actual_user_id || c.id,
+      id: String(c.id||'').slice(0,80),
+      actual_user_id: String(c.actual_user_id || c.id || '').slice(0,80),
       name: String(c.name||'').slice(0,80),
-      avatar_url: c.avatar_url||c.avatar||'',
-      last_message_at: c.last_message_at||c.lastAt||new Date().toISOString()
+      avatar_url: String(c.avatar_url||c.avatar||'').slice(0,300),
+      last_message_at: String(c.last_message_at||c.lastAt||new Date().toISOString()).slice(0,40)
     }));
-    (safe as any)._ts = Date.now();
-    localStorage.setItem(CACHE_KEYS.recentContacts, JSON.stringify(safe));
+    const wrapper: CacheWrapper = { _ts: Date.now(), data: safe };
+    localStorage.setItem(CACHE_KEYS.recentContacts, JSON.stringify(wrapper));
   }catch{}
 }
 
@@ -102,30 +122,26 @@ export function getTemplateClient() {
   return getTemplateSingleton();
 }
 
-// ✅ FIXED: no contacts table - use profiles, handle 400 gracefully
 export async function preloadInBackground(){
   if(!browser) return;
   try{
-    // Project 1 CHAT: profiles exists - safe
-    const p1 = supabaseChat.from('profiles').select('id,name,avatar_url').limit(10).then(({data, error})=>{
-      if(!error && data && data.length) setRecentContactsCache(data);
+    const chat = getChatSingleton();
+    if(!chat) return;
+    const p1 = chat.from('profiles').select('id,name,avatar_url').limit(10).then(({data})=>{
+      if(data?.length) setRecentContactsCache(data);
     }).catch(()=>{});
-
-    // Project 2 TEMPLATES: safe check - ignore 404
-    const p2 = supabaseTemplates.from('templates').select('id').limit(1).then(()=>{}).catch(()=>{});
-
+    const tmpl = getTemplateSingleton();
+    const p2 = tmpl ? tmpl.from('templates').select('id').limit(1).then(()=>{}).catch(()=>{}) : Promise.resolve();
     await Promise.allSettled([p1, p2]);
   }catch{}
 }
 
 export async function checkTemplatesConnection() {
   try {
-    const { data, error } = await supabaseTemplates.from('templates').select('id').limit(1);
-    if (error) {
-      console.warn('[Templates DB] check failed:', error.message);
-      return false;
-    }
-    return true;
+    const tmpl = getTemplateSingleton();
+    if(!tmpl) return false;
+    const { error } = await tmpl.from('templates').select('id').limit(1);
+    return !error;
   } catch { return false; }
 }
 

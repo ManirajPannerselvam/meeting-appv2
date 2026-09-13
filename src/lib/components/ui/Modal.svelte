@@ -52,12 +52,12 @@
 	}
 </script>
 
-<svelte:window on:keydown={onKeydown} />
+<svelte:window onkeydown={onKeydown} />
 
 {#if open}
 	<div
 		class="backdrop"
-		on:click={onBackdrop}
+		onclick={onBackdrop}
 		transition:fade
 	>
 		<div
@@ -74,7 +74,7 @@
 					<button
 						class="close"
 						type="button"
-						on:click={close}
+						onclick={close}
 						aria-label="Close"
 					>
 						✕

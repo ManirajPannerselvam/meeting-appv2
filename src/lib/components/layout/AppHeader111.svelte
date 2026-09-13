@@ -53,7 +53,7 @@
 			<button
 				type="button"
 				class="menu"
-				on:click={openMenu}
+				onclick={openMenu}
 				aria-label="Open menu"
 			>
 				☰
@@ -81,7 +81,7 @@
 		<button
 			type="button"
 			class="profile"
-			on:click={openProfile}
+			onclick={openProfile}
 			aria-label="Profile"
 		>
 

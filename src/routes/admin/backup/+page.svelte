@@ -100,10 +100,10 @@ onMount(loadSystemStatus);
         <div><h1>🖥 System Monitor</h1><p>Enterprise Infrastructure Dashboard</p></div>
         <div class="header-actions">
             <label class="toggle"><input type="checkbox" bind:checked={autoRefresh}/> Auto Refresh</label>
-            <button class={maintenanceMode? "red" : "orange"} on:click={toggleMaintenance}>
+            <button class={maintenanceMode? "red" : "orange"} onclick={toggleMaintenance}>
                 {maintenanceMode? "Disable Maintenance" : "Enable Maintenance"}
             </button>
-            <button class="green" on:click={loadSystemStatus}>Refresh</button>
+            <button class="green" onclick={loadSystemStatus}>Refresh</button>
         </div>
     </div>
 
@@ -207,7 +207,7 @@ onMount(loadSystemStatus);
         <h2>⚙ Maintenance Mode</h2>
         <div class="maintenance-panel">
             <div><h3>Current Status</h3><p>{maintenanceMode? "Maintenance Mode Enabled" : "System Running Normally"}</p></div>
-            <button class={maintenanceMode? "red" : "green"} on:click={toggleMaintenance}>{maintenanceMode? "Disable" : "Enable"}</button>
+            <button class={maintenanceMode? "red" : "green"} onclick={toggleMaintenance}>{maintenanceMode? "Disable" : "Enable"}</button>
         </div>
     </div>
 
@@ -256,9 +256,9 @@ onMount(loadSystemStatus);
     <div class="card white-card">
         <h2>📤 Reports</h2>
         <div class="action-buttons">
-            <button class="blue" on:click={exportCSV}>Export CSV</button>
-            <button class="orange" on:click={printLogs}>Print Report</button>
-            <button class="green" on:click={loadSystemStatus}>Refresh</button>
+            <button class="blue" onclick={exportCSV}>Export CSV</button>
+            <button class="orange" onclick={printLogs}>Print Report</button>
+            <button class="green" onclick={loadSystemStatus}>Refresh</button>
         </div>
     </div>
 

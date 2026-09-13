@@ -8,7 +8,8 @@
   let loading = false;
   let error = '';
 
-  async function handleSignup() {
+  async function handleSignup(e: Event) {
+    e.preventDefault();
     loading = true;
     error = '';
     
@@ -17,18 +18,26 @@
       loading = false;
       return;
     }
+    if(password.length < 6){
+      error = 'Password must be 6+ characters';
+      loading = false;
+      return;
+    }
+
+    const cleanEmail = email.toLowerCase().trim();
+    const cleanPhone = phone.trim().replace(/\D/g,'').slice(0,15); // ✅ SECURE: sanitize phone
 
     const { data, error: err } = await supabase.auth.signUp({
-      email: email.toLowerCase().trim(),
+      email: cleanEmail,
       password,
       options: {
         data: {
           full_name: fullName.trim(),
           name: fullName.trim(),
-          phone: phone.trim(),
+          phone: cleanPhone,
           avatar_url: ''
         },
-        emailRedirectTo: `http://localhost:1420/auth/callback`
+        emailRedirectTo: `${window.location.origin}/auth/callback`
       }
     });
     
@@ -38,40 +47,35 @@
       return;
     }
 
-    // Save to profiles table - so setting + chat gets it instantly
     if (data.user) {
       try {
-        await supabase.from('profiles').upsert({ 
-          id: data.user.id,
-          name: fullName.trim(),
-          full_name: fullName.trim(),
-          email: email.toLowerCase().trim(),
-          phone: phone.trim(),
-          avatar_url: '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
-
-        await supabase.from('user_profiles').upsert({
-          id: data.user.id,
-          avatar_url: '',
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'id' });
-
-        // Link invite if email was invited before signup
-        await supabase.from('contact_invites')
-          .update({ 
+        // ✅ SPEED: parallel upserts
+        await Promise.all([
+          supabase.from('profiles').upsert({ 
+            id: data.user.id,
+            name: fullName.trim(),
+            full_name: fullName.trim(),
+            email: cleanEmail,
+            phone: cleanPhone,
+            avatar_url: '',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' }),
+          supabase.from('user_profiles').upsert({
+            id: data.user.id,
+            avatar_url: '',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'id' }),
+          supabase.from('contact_invites').update({ 
             invited_user: data.user.id, 
             status: 'accepted' 
-          })
-          .eq('email', email.toLowerCase().trim())
-          .is('invited_user', null);
+          }).eq('email', cleanEmail).is('invited_user', null)
+        ]);
       } catch (e) {
         console.log('profile/invite link failed', e);
       }
     }
 
-    goto('/login?msg=Check email to confirm');
+    await goto('/login?msg=Check email to confirm');
     loading = false;
   }
 </script>
@@ -79,20 +83,20 @@
 <div class="auth-page">
   <div class="card">
     <h2>Create Account</h2>
-    {#if error}<div class="error">{error}</div>{/if}
+    {#if error}<div class="error" role="alert">{error}</div>{/if}
     
-    <form on:submit|preventDefault={handleSignup}>
-      <label>Full Name *</label>
-      <input type="text" bind:value={fullName} required placeholder="Your name" />
+    <form onsubmit={handleSignup} novalidate>
+      <label for="fullname">Full Name *</label>
+      <input id="fullname" type="text" bind:value={fullName} required placeholder="Your name" autocomplete="name" maxlength="80" />
       
-      <label>Email *</label>
-      <input type="email" bind:value={email} required />
+      <label for="email">Email *</label>
+      <input id="email" type="email" bind:value={email} required autocomplete="email" />
       
-      <label>Phone</label>
-      <input type="tel" bind:value={phone} placeholder="Optional - for profile" />
+      <label for="phone">Phone</label>
+      <input id="phone" type="tel" bind:value={phone} placeholder="Optional" autocomplete="tel" maxlength="15" />
       
-      <label>Password *</label>
-      <input type="password" bind:value={password} required minlength="6" />
+      <label for="password">Password *</label>
+      <input id="password" type="password" bind:value={password} required minlength="6" autocomplete="new-password" />
       
       <button type="submit" disabled={loading}>
         {loading ? 'Creating...' : 'Create Account'}

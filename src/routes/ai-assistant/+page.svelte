@@ -30,7 +30,7 @@
   placeholder="Paste meeting notes here..."
 ></textarea>
 
-<button on:click={generateAI}>
+<button onclick={generateAI}>
   Generate Summary
 </button>
 

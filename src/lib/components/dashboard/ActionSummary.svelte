@@ -41,8 +41,8 @@
 		class="card total"
 	role="button"
 		tabindex="0"
-		on:click={() => goto("/meeting-actions")}
-		on:keydown={(e) => handleKeydown(e, "all")}
+		onclick={() => goto("/meeting-actions")}
+		onkeydown={(e) => handleKeydown(e, "all")}
 	>
 	<h2>{stats.total}</h2>
 		<p>Total Actions</p>
@@ -52,8 +52,8 @@
 		class="card blue"
 	role="button"
 		tabindex="0"
-		on:click={() => openStatus("Pending")}
-		on:keydown={(e) => handleKeydown(e, "Pending")}
+		onclick={() => openStatus("Pending")}
+		onkeydown={(e) => handleKeydown(e, "Pending")}
 	>
 	<h2>{stats.pending}</h2>
 	<p>Pending</p>
@@ -63,8 +63,8 @@
 		class="card orange"
 	role="button"
 		tabindex="0"
-		on:click={() => openStatus("Open")}
-		on:keydown={(e) => handleKeydown(e, "Open")}
+		onclick={() => openStatus("Open")}
+		onkeydown={(e) => handleKeydown(e, "Open")}
 	>
 	<h2>{stats.open}</h2>
 	<p>Open</p>
@@ -74,8 +74,8 @@
 		class="card green"
 	role="button"
 		tabindex="0"
-		on:click={() => openStatus("Completed")}
-		on:keydown={(e) => handleKeydown(e, "Completed")}
+		onclick={() => openStatus("Completed")}
+		onkeydown={(e) => handleKeydown(e, "Completed")}
 	>
 	<h2>{stats.completed}</h2>
 	<p>Completed</p>
@@ -85,8 +85,8 @@
 		class="card red"
 		role="button"
 		tabindex="0"
-		on:click={() => openStatus("Overdue")}
-		on:keydown={(e) => handleKeydown(e, "Overdue")}
+		onclick={() => openStatus("Overdue")}
+		onkeydown={(e) => handleKeydown(e, "Overdue")}
 	>
 	<h2>{stats.overdue}</h2>
 	<p>Overdue</p>

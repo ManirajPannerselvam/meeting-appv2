@@ -15,7 +15,7 @@
 	<p>{message}</p>
 
 	{#if showRetry}
-		<button on:click={() => dispatch("retry")}>
+		<button onclick={() => dispatch("retry")}>
 			{retryText}
 	</button>
 	{/if}

@@ -192,7 +192,7 @@ bind:value={form.action_taken}>
 </div>
 
 <button
-on:click={save}
+onclick={save}
 disabled={saving}>
 
 {saving?"Updating...":"Update Downtime"}

@@ -132,7 +132,7 @@ bind:value={handover.pendingAction}>
 
 <button
 class="save"
-on:click={saveHandover}
+onclick={saveHandover}
 >
 
 💾 Save Shift Handover

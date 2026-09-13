@@ -210,8 +210,8 @@ $: selectedYear, selectedMonth, loadAnalytics();
     <!-- EXPORT -->
     <div class="table-card"><h2>📤 Reports</h2>
         <div class="action-buttons">
-            <button class="blue" on:click={exportAnalyticsCSV}>Export CSV</button>
-            <button class="orange" on:click={() => window.print()}>Print Dashboard</button>
+            <button class="blue" onclick={exportAnalyticsCSV}>Export CSV</button>
+            <button class="orange" onclick={() => window.print()}>Print Dashboard</button>
         </div>
     </div>
 

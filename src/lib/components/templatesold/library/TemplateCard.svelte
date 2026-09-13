@@ -10,7 +10,7 @@ const dispatch=createEventDispatcher();
 
 <div
 class="card"
-on:click={()=>dispatch("select",item)}
+onclick={()=>dispatch("select",item)}
 >
 
 <div class="icon">

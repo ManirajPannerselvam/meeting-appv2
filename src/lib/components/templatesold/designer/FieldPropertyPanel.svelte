@@ -46,15 +46,15 @@ $: if(field?.field_type === "formula"){
 
         <!-- BASIC -->
         <label>Label</label>
-        <input type="text" bind:value={field.label} on:input={updateLabel} placeholder="Field Label" />
+        <input type="text" bind:value={field.label} oninput={updateLabel} placeholder="Field Label" />
 
         <label>Field Name</label>
-        <input type="text" bind:value={field.field_name} on:input={update} placeholder="field_name" />
+        <input type="text" bind:value={field.field_name} oninput={update} placeholder="field_name" />
         <small class="hint">Used in formulas. Lowercase, no spaces.</small>
 
         <!-- FIX 9: METRIC -->
         <label>Metric Type</label>
-        <select bind:value={field.metric} on:change={update}>
+        <select bind:value={field.metric} onchange={update}>
             <option value="">-- None --</option>
             <option value="input">Input</option>
             <option value="output">Output</option>
@@ -68,7 +68,7 @@ $: if(field?.field_type === "formula"){
         <small class="hint">Set this to enable auto KPI formulas. KPIs use Metric, not Label.</small>
 
         <label>Field Type</label>
-        <select bind:value={field.field_type} on:change={update}>
+        <select bind:value={field.field_type} onchange={update}>
             <option value="text">Text</option>
             <option value="number">Number</option>
             <option value="date">Date</option>
@@ -79,23 +79,23 @@ $: if(field?.field_type === "formula"){
         </select>
 
         <label>Placeholder</label>
-        <input type="text" bind:value={field.placeholder} on:input={update} />
+        <input type="text" bind:value={field.placeholder} oninput={update} />
 
         <label>Default Value</label>
-        <input type="text" bind:value={field.default_value} on:input={update} />
+        <input type="text" bind:value={field.default_value} oninput={update} />
 
         <!-- VALIDATION -->
         <h4>Validation</h4>
         <div class="check">
-            <input type="checkbox" bind:checked={field.required} on:change={update} id="req" />
+            <input type="checkbox" bind:checked={field.required} onchange={update} id="req" />
             <label for="req">Required</label>
         </div>
         <div class="check">
-            <input type="checkbox" bind:checked={field.readonly} on:change={update} id="ro" disabled={field.field_type === "formula"} />
+            <input type="checkbox" bind:checked={field.readonly} onchange={update} id="ro" disabled={field.field_type === "formula"} />
             <label for="ro">Readonly</label>
         </div>
         <div class="check">
-            <input type="checkbox" bind:checked={field.hidden} on:change={update} id="hid" />
+            <input type="checkbox" bind:checked={field.hidden} onchange={update} id="hid" />
             <label for="hid">Hidden</label>
         </div>
 
@@ -103,10 +103,10 @@ $: if(field?.field_type === "formula"){
         {#if field.field_type === "number"}
             <h4>Number Settings</h4>
             <label>Minimum Value</label>
-            <input type="number" bind:value={field.min_value} on:input={update} />
+            <input type="number" bind:value={field.min_value} oninput={update} />
 
             <label>Maximum Value</label>
-            <input type="number" bind:value={field.max_value} on:input={update} />
+            <input type="number" bind:value={field.max_value} oninput={update} />
         {/if}
 
         <!-- DROPDOWN -->
@@ -115,7 +115,7 @@ $: if(field?.field_type === "formula"){
             <textarea
                 rows="7"
                 bind:value={field.options}
-                on:input={update}
+                oninput={update}
                 placeholder='[
   "Option 1",
   "Option 2"
@@ -134,7 +134,7 @@ $: if(field?.field_type === "formula"){
         <!-- REFERENCE -->
         {#if field.field_type === "reference"}
             <h4>Reference Template</h4>
-            <select bind:value={field.reference_template_id} on:change={update}>
+            <select bind:value={field.reference_template_id} onchange={update}>
                 <option value="">-- Select Template --</option>
                 {#each templates as t}
                     <option value={t.id}>{t.name} ({t.template_code})</option>
@@ -149,7 +149,7 @@ $: if(field?.field_type === "formula"){
             <textarea
                 rows="6"
                 bind:value={field.formula}
-                on:input={update}
+                oninput={update}
                 placeholder="({output}/{input})*100"
             ></textarea>
             <small class="hint">

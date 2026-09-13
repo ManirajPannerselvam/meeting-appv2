@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+    <meta name="theme-color" content="#111827" />
+    <meta name="color-scheme" content="dark light" />
     <title>ORG - Tauri + SvelteKit</title>
     %sveltekit.head%
     <style>
@@ -16,22 +18,35 @@
         overscroll-behavior: none;
         -webkit-tap-highlight-color: transparent;
         touch-action: pan-y;
-        user-select: none;
+        /* ✅ SECURE: prevent text selection but allow inputs */
         -webkit-user-select: none;
+        user-select: none;
         -webkit-touch-callout: none;
+      }
+      /* ✅ FIX: allow select in inputs and contenteditable */
+      input, textarea, [contenteditable] {
+        -webkit-user-select: text!important;
+        user-select: text!important;
       }
       body {
         padding-bottom: env(safe-area-inset-bottom);
         position: fixed;
         overflow: hidden;
         width: 100%;
+        /* ✅ SPEED: GPU layer */
+        transform: translateZ(0);
+        will-change: scroll-position;
       }
       #svelte {
         width: 100%;
         height: 100%;
+        height: 100dvh;
         overflow-y: auto;
         -webkit-overflow-scrolling: touch;
         touch-action: pan-y;
+        overscroll-behavior-y: contain;
+        /* ✅ SPEED: content-visibility for large lists */
+        contain: layout style;
       }
     </style>
   </head>
@@ -41,16 +56,36 @@
     <script>
       // FIX: Block browser swipe-back - KEEP AS IS - SECURE
       let touchStartX = 0;
+      let touchStartY = 0;
       document.addEventListener('touchstart', function(e) {
+        if(e.touches.length!== 1) return;
         touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
       }, { passive: true });
 
       document.addEventListener('touchmove', function(e) {
-        const diff = e.touches[0].clientX - touchStartX;
-        if (touchStartX < 30 && diff > 10) {
+        if(e.touches.length!== 1) return;
+        const diffX = e.touches[0].clientX - touchStartX;
+        const diffY = e.touches[0].clientY - touchStartY;
+        // ✅ SECURE: only block horizontal edge swipe, allow vertical scroll
+        if (touchStartX < 30 && diffX > 10 && Math.abs(diffX) > Math.abs(diffY)) {
+          e.preventDefault();
+        }
+        // ✅ SECURE: block right edge swipe too
+        if (touchStartX > window.innerWidth - 30 && diffX < -10 && Math.abs(diffX) > Math.abs(diffY)) {
           e.preventDefault();
         }
       }, { passive: false });
+
+      // ✅ SPEED: remove Vercel analytics error in dev
+      if(location.hostname === 'localhost' || location.hostname === '127.0.0.1'){
+        window.addEventListener('error', function(e){
+          if(e.message && e.message.includes('startTime')) e.preventDefault();
+        });
+        window.addEventListener('unhandledrejection', function(e){
+          if(e.reason && String(e.reason).includes('startTime')) e.preventDefault();
+        });
+      }
     </script>
   </body>
 </html>

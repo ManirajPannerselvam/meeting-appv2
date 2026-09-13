@@ -148,14 +148,14 @@
                         <textarea 
                             id={field.field_name}
                             value={values[field.field_name] ?? ""}
-                            on:input={(e) => updateValue(field, e)}
+                            oninput={(e) => updateValue(field, e)}
                             placeholder={field.field_label}
                         ></textarea>
                     {:else if type === 'select'}
                         <select
                             id={field.field_name}
                             value={values[field.field_name] ?? ""}
-                            on:change={(e) => updateValue(field, e)}
+                            onchange={(e) => updateValue(field, e)}
                         >
                             <option value="">Select {field.field_label}</option>
                             {#each field.options || [] as opt}
@@ -167,7 +167,7 @@
                             id={field.field_name}
                             type={type}
                             value={values[field.field_name] ?? ""}
-                            on:input={(e) => updateValue(field, e)}
+                            oninput={(e) => updateValue(field, e)}
                             placeholder={field.field_label}
                         />
                     {/if}
@@ -177,8 +177,8 @@
     {/if}
     
     <div class="actions">
-        <button class="btn-cancel" on:click={cancel} disabled={sending}>Cancel</button>
-        <button class="btn-send" on:click={send} disabled={loading || sending}>
+        <button class="btn-cancel" onclick={cancel} disabled={sending}>Cancel</button>
+        <button class="btn-send" onclick={send} disabled={loading || sending}>
             {#if sending} Sending... {:else} Send Report {/if}
         </button>
     </div>

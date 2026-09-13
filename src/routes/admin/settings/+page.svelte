@@ -441,7 +441,7 @@
             </div>
         </div>
 
-        <button class="green save-button" on:click={saveSettings} disabled={saving || loading}>
+        <button class="green save-button" onclick={saveSettings} disabled={saving || loading}>
             {saving ? "Saving..." : "💾 Save Settings"}
         </button>
     </div>
@@ -613,7 +613,7 @@
                     <input
                         type="file"
                         accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                        on:change={uploadLogo}
+                        onchange={uploadLogo}
                         disabled={uploadingLogo}
                     />
 
@@ -626,7 +626,7 @@
                     <div class="full logo-section">
                         <img src={logoUrl} alt="Company Logo" class="logo-preview" />
 
-                        <button class="red remove-button" on:click={removeLogo}>
+                        <button class="red remove-button" onclick={removeLogo}>
                             Remove Logo
                         </button>
                     </div>
@@ -846,11 +846,11 @@
             </div>
 
             <div class="action-buttons">
-                <button class="blue" on:click={backupNow}>
+                <button class="blue" onclick={backupNow}>
                     💾 Backup Now
                 </button>
 
-                <button class="orange" on:click={restoreBackup}>
+                <button class="orange" onclick={restoreBackup}>
                     ♻ Restore Backup
                 </button>
             </div>
@@ -861,19 +861,19 @@
             <h2>🗄 Database Maintenance</h2>
 
             <div class="maintenance-grid">
-                <button class="green" on:click={optimizeDatabase}>
+                <button class="green" onclick={optimizeDatabase}>
                     Optimize Database
                 </button>
 
-                <button class="blue" on:click={rebuildIndex}>
+                <button class="blue" onclick={rebuildIndex}>
                     Rebuild Index
                 </button>
 
-                <button class="orange" on:click={clearCache}>
+                <button class="orange" onclick={clearCache}>
                     Clear Cache
                 </button>
 
-                <button class="red" on:click={archiveReports}>
+                <button class="red" onclick={archiveReports}>
                     Archive Reports
                 </button>
             </div>
@@ -960,7 +960,7 @@
                 Reset the form and persist the default enterprise configuration.
             </p>
 
-            <button class="red" on:click={resetSettings} disabled={saving}>
+            <button class="red" onclick={resetSettings} disabled={saving}>
                 Reset to Default Settings
             </button>
         </div>
@@ -1451,3 +1451,4 @@
         }
     }
 </style>
+

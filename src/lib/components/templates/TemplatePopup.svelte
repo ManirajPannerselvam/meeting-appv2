@@ -30,7 +30,7 @@
       expr=expr.replaceAll('×','*').replaceAll('÷','/').replace(/%/g,'/100').trim();
       if(!/^[0-9\.\+\-\*\/\(\)\s]+$/.test(expr)) return null;
       if(/[\(\)]{3,}/.test(expr)) return null;
-      try{ const fn = new Function(`"use strict"; return (${expr})`); const res = fn(); if(typeof res!=='number'||!isFinite(res)) return null; return Math.round(res*100)/100; }catch{ return null; }
+      try{ const fn = new Function(`"use strict"; return (${expr})`); const res = fn(); if(typeof res!=='number'||!isFinite(res)) return null; if(Math.abs(res)>1e12) return null; return Math.round(res*100)/100; }catch{ return null; }
     }
 
     const themes = [
@@ -88,7 +88,6 @@
     function onSearchInput(e:any){ const v=sanitizeStr(e.target.value,MAX_SEARCH); searchInput=v; if(searchTimer) clearTimeout(searchTimer); if(v.length===0){ search=""; visibleCount=30; return; } searchTimer=setTimeout(()=>{ search=v.trim().toLowerCase(); visibleCount=30; },80); }
     function clearSearch(){ searchInput=""; search=""; visibleCount=30; }
 
-    // --- ONLY MY TEMPLATES + SHARED TO ME ---
     $: allTemplates=(()=>{
       if(!loaded) return localTemplates;
       const seen=new Set(); const out:any[]=[];
@@ -99,7 +98,7 @@
         const oname = String(t.owner_name||'').toLowerCase();
         if(oid && myId && oid===myId) return true;
         if(oname && myName && oname===myName) return true;
-        if(!oid && !oname) return true; // old local without owner
+        if(!oid && !oname) return true;
         if(t.allow_all_contacts) return true;
         if(Array.isArray(t.shared_with)){
           return t.shared_with.some((s:any)=>{
@@ -148,28 +147,30 @@
     function getOwner(t:any){ return sanitizeStr(t.owner_name||currentUserName,30); }
     function handleKeydown(e:KeyboardEvent, a:()=>void){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); a(); } }
     function selectTheme(id:string){ if(!themeMap.has(id)) return; selectedTheme=id; try{ localStorage.setItem("template_theme",id); }catch{} showTheme=false; }
+
+    function onOverlayClose(e:MouseEvent, cb:()=>void){ if(e.target===e.currentTarget) cb(); }
 </script>
 
-<div class="overlay" role="presentation" on:click={(e)=>{ if(e.target===e.currentTarget) close(); }}>
+<div class="overlay" role="presentation" onclick={(e)=>onOverlayClose(e, close)}>
     <section class="popup" role="dialog" aria-modal="true">
         <header class="popup-header" style="border-bottom:4px solid {activeTheme.primary}">
             <div class="title-wrap"><span class="title-icon">📋</span><div><h2>Templates</h2><p>{filteredTemplates.length} my • {visibleTemplates.length} shown</p></div></div>
-            <div class="head-actions"><button class="theme-btn" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}; color:{activeTheme.primary}" on:click={()=>showTheme=!showTheme}>🎨 {activeTheme.name}</button><button type="button" class="close-btn" on:click={close}>×</button></div>
+            <div class="head-actions"><button class="theme-btn" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}; color:{activeTheme.primary}" onclick={()=>showTheme=!showTheme}>🎨 {activeTheme.name}</button><button type="button" class="close-btn" onclick={close}>×</button></div>
         </header>
-        {#if showTheme}<div class="theme-picker">{#each themes as th}<button class="theme-opt" class:active={th.id===selectedTheme} style="border-color:{th.primary}; background:{th.card}" on:click={()=>selectTheme(th.id)}><b style="color:{th.primary}">{th.name}</b></button>{/each}</div>{/if}
-        <div class="toolbar"><div class="search-box"><span>🔍</span><input value={searchInput} on:input={onSearchInput} type="search" placeholder="Search my templates..." maxlength={MAX_SEARCH} /><button class="clear-search" style="display:{searchInput?'flex':'none'}" on:click={clearSearch}>×</button></div><button class="new-btn" style="background:{activeTheme.primary}" on:click={handleNew}>+ New</button></div>
+        {#if showTheme}<div class="theme-picker">{#each themes as th}<button class="theme-opt" class:active={th.id===selectedTheme} style="border-color:{th.primary}; background:{th.card}" onclick={()=>selectTheme(th.id)}><b style="color:{th.primary}">{th.name}</b></button>{/each}</div>{/if}
+        <div class="toolbar"><div class="search-box"><span>🔍</span><input value={searchInput} oninput={onSearchInput} type="search" placeholder="Search my templates..." maxlength={MAX_SEARCH} /><button class="clear-search" style="display:{searchInput?'flex':'none'}" onclick={clearSearch}>×</button></div><button class="new-btn" style="background:{activeTheme.primary}" onclick={handleNew}>+ New</button></div>
         <div class="template-list" bind:this={listEl}>
-            {#if filteredTemplates.length===0}<div class="empty-state"><div class="empty-icon">📋</div><h3>No templates</h3><p>You: {currentUserName}</p><button class="new-empty-btn" style="background:{activeTheme.primary}" on:click={handleNew}>+ Create</button></div>
-            {:else}{#each visibleTemplates as template (template.id)}<article class="template-card" style="border-left:5px solid {template._msgColor}; background:{template._th.card};"><div class="card-top"><div class="template-icon" role="button" tabindex="0" style="background:{template._th.card}; border:1px solid {template._th.primary}; color:{template._th.primary}" on:click={()=>handleUse(template)} on:keydown={(e)=>handleKeydown(e,()=>handleUse(template))}>📄</div><div class="template-info"><div class="name-row"><h3>{template.name}</h3><span class="theme-tag" style="background:{template._th.primary}">{template._th.name}</span></div><p class="description">{getDesc(template)}</p><div class="meta">F:{getFields(template).length} • {getDept(template)} • 👤 {getOwner(template)}</div></div></div><div class="actions"><button class="action edit" on:click={()=>handleEdit(template)}>Edit</button><button class="action share" style="background:{template._th.primary}" on:click={()=>openShare(template)}>Share</button><button class="action delete" on:click={()=>handleDelete(template)}>Del</button><button class="action use" style="background:{template._th.primary}" on:click={()=>handleUse(template)}>Use</button></div></article>{/each}{#if visibleCount<filteredTemplates.length}<div class="load-more">Scroll for {filteredTemplates.length-visibleCount} more</div>{/if}{/if}
+            {#if filteredTemplates.length===0}<div class="empty-state"><div class="empty-icon">📋</div><h3>No templates</h3><p>You: {currentUserName}</p><button class="new-empty-btn" style="background:{activeTheme.primary}" onclick={handleNew}>+ Create</button></div>
+            {:else}{#each visibleTemplates as template (template.id)}<article class="template-card" style="border-left:5px solid {template._msgColor}; background:{template._th.card};"><div class="card-top"><div class="template-icon" role="button" tabindex="0" style="background:{template._th.card}; border:1px solid {template._th.primary}; color:{template._th.primary}" onclick={()=>handleUse(template)} onkeydown={(e)=>handleKeydown(e,()=>handleUse(template))}>📄</div><div class="template-info"><div class="name-row"><h3>{template.name}</h3><span class="theme-tag" style="background:{template._th.primary}">{template._th.name}</span></div><p class="description">{getDesc(template)}</p><div class="meta">F:{getFields(template).length} • {getDept(template)} • 👤 {getOwner(template)}</div></div></div><div class="actions"><button class="action edit" onclick={()=>handleEdit(template)}>Edit</button><button class="action share" style="background:{template._th.primary}" onclick={()=>openShare(template)}>Share</button><button class="action delete" onclick={()=>handleDelete(template)}>Del</button><button class="action use" style="background:{template._th.primary}" onclick={()=>handleUse(template)}>Use</button></div></article>{/each}{#if visibleCount<filteredTemplates.length}<div class="load-more">Scroll for {filteredTemplates.length-visibleCount} more</div>{/if}{/if}
         </div>
         {#if toast}<div class="toast-pop">{toast}</div>{/if}
     </section>
 </div>
 
 {#if showShareModal}
-<div class="overlay share-overlay" on:click|self={()=>showShareModal=false}>
+<div class="overlay share-overlay" onclick={(e)=>onOverlayClose(e, ()=>showShareModal=false)}>
     <div class="share-popup">
-        <div class="share-head"><div class="share-head-left"><span class="share-icon">🔒</span><div><h3 class="share-title">Share</h3><small class="share-sub">{shareTemplate?.name} • by {getOwner(shareTemplate)}</small></div></div><button class="close-btn" on:click={()=>showShareModal=false}>×</button></div>
+        <div class="share-head"><div class="share-head-left"><span class="share-icon">🔒</span><div><h3 class="share-title">Share</h3><small class="share-sub">{shareTemplate?.name} • by {getOwner(shareTemplate)}</small></div></div><button class="close-btn" onclick={()=>showShareModal=false}>×</button></div>
         <div class="share-body">
             <label class="check-box check-main"><input type="checkbox" bind:checked={shareAll} /><span class="check-label">All contacts</span></label>
             <div class="perm-box">
@@ -179,18 +180,19 @@
             </div>
             {#if !shareAll}<input bind:value={shareUserId} placeholder="User ID / Email" maxlength={MAX_SHARE_ID} class="share-input" />{/if}
         </div>
-        <div class="share-actions"><button class="secondary-btn" on:click={()=>showShareModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" on:click={confirmShare}>🔒 Share</button></div>
+        <div class="share-actions"><button class="secondary-btn" onclick={()=>showShareModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" onclick={confirmShare}>🔒 Share</button></div>
     </div>
 </div>
 {/if}
 
 {#if showUseModal && useTemplate}
-<div class="overlay use-overlay" on:click|self={()=>showUseModal=false}>
-  <div class="use-popup" style="border-top:5px solid {activeTheme.primary}"><div class="use-popup-head"><div><h3>📥 {useTemplate.name}</h3><small>{useTemplate.template_code||useTemplate.code} • 👤 {getOwner(useTemplate)}</small></div><button class="close-btn" on:click={()=>showUseModal=false}>×</button></div><div class="use-form-list">{#each (useTemplate.fields||useTemplate.data?.fields||[]) as f}{@const key=f.field_name||f.name}<div class="use-field-row" style="border-left:4px solid {activeTheme.primary}"><label class="use-label">{f.label} {#if f.required}<span class="req">*</span>{/if}</label>{#if f.type==='dropdown'}<select class="use-input" bind:value={useFormData[key]} on:change={onUseInput}><option value="">Select</option>{#each (f.options||[]) as opt}<option value={opt}>{opt}</option>{/each}</select>{:else if f.type==='number'}<input class="use-input" type="number" bind:value={useFormData[key]} on:input={onUseInput} />{:else if f.type==='formula'}<div class="formula-box" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}"><b>{useFormData[key]??'0'}</b></div>{:else}<input class="use-input" type="text" bind:value={useFormData[key]} on:input={onUseInput} />{/if}</div>{/each}</div><div class="use-actions"><button class="secondary-btn" on:click={()=>showUseModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" disabled={useSaving} on:click={submitUseData}>{useSaving?'Saving...':'💾 Save'}</button></div></div>
+<div class="overlay use-overlay" onclick={(e)=>onOverlayClose(e, ()=>showUseModal=false)}>
+  <div class="use-popup" style="border-top:5px solid {activeTheme.primary}"><div class="use-popup-head"><div><h3>📥 {useTemplate.name}</h3><small>{useTemplate.template_code||useTemplate.code} • 👤 {getOwner(useTemplate)}</small></div><button class="close-btn" onclick={()=>showUseModal=false}>×</button></div><div class="use-form-list">{#each (useTemplate.fields||useTemplate.data?.fields||[]) as f}{@const key=f.field_name||f.name}<div class="use-field-row" style="border-left:4px solid {activeTheme.primary}"><label class="use-label">{f.label} {#if f.required}<span class="req">*</span>{/if}</label>{#if f.type==='dropdown'}<select class="use-input" bind:value={useFormData[key]} onchange={onUseInput}><option value="">Select</option>{#each (f.options||[]) as opt}<option value={opt}>{opt}</option>{/each}</select>{:else if f.type==='number'}<input class="use-input" type="number" bind:value={useFormData[key]} oninput={onUseInput} />{:else if f.type==='formula'}<div class="formula-box" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}"><b>{useFormData[key]??'0'}</b></div>{:else}<input class="use-input" type="text" bind:value={useFormData[key]} oninput={onUseInput} />{/if}</div>{/each}</div><div class="use-actions"><button class="secondary-btn" onclick={()=>showUseModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" disabled={useSaving} onclick={submitUseData}>{useSaving?'Saving...':'💾 Save'}</button></div></div>
 </div>
 {/if}
 
 <style>
+/* same styles - kept */
 *{box-sizing:border-box;}
 .overlay{ position:fixed; inset:0; z-index:99990!important; display:flex; align-items:center; justify-content:center; padding:12px; background:rgba(15,23,42,0.6); backdrop-filter:blur(3px); }
 .share-overlay{ position:fixed!important; inset:0!important; background:rgba(0,0,0,0.8)!important; backdrop-filter:blur(6px)!important; z-index:100000!important; display:flex!important; align-items:center!important; justify-content:center!important; }

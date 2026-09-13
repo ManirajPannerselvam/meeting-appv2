@@ -123,7 +123,7 @@
             <small>{template?.data?.department}</small>
         </div>
 
-        <button class="close-btn" on:click={cancel}>
+        <button class="close-btn" onclick={cancel}>
             ✕
         </button>
     </div>
@@ -143,11 +143,11 @@
     </div>
 
     <div class="footer">
-        <button class="cancel" on:click={cancel}>
+        <button class="cancel" onclick={cancel}>
             Cancel
         </button>
 
-        <button class="send" on:click={send}>
+        <button class="send" onclick={send}>
             Send Report
         </button>
     </div>

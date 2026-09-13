@@ -30,7 +30,7 @@
     return false;
   }
   function onTouchStart(e: TouchEvent){
-    if(shouldIgnoreSwipe(e.target)) { isSwiping = false; return; }
+    if(shouldIgnoreSwipe(e.target as any)) { isSwiping = false; return; }
     const path = $page.url.pathname;
     if(path.startsWith('/settings') || path.startsWith('/login')) { isSwiping = false; return; }
     startX = e.touches[0].clientX; startY = e.touches[0].clientY; startTime = Date.now(); isSwiping = true;
@@ -41,19 +41,21 @@
     const diffX = endX - startX; const diffY = endY - startY;
     if(Math.abs(diffX) < 100 || Math.abs(diffY) > 80 || Date.now() - startTime > 600) return;
     if($page.url.pathname.startsWith('/chat') && diffX > 100 && startX < 50){
-      goto('/chat', { keepFocus:true, noScroll:true });
+      goto('/chat', { keepFocus:true, noScroll:true } as any);
       return;
     }
     let idx = getModuleIndex($page.url.pathname);
-    if(diffX < -100) goto(modules[(idx + 1) % modules.length], { keepFocus:true });
-    else if(diffX > 100) goto(modules[(idx - 1 + modules.length) % modules.length], { keepFocus:true });
+    if(diffX < -100) goto(modules[(idx + 1) % modules.length], { keepFocus:true } as any);
+    else if(diffX > 100) goto(modules[(idx - 1 + modules.length) % modules.length], { keepFocus:true } as any);
   }
 
   function applyThemeFromStorage(){
     if(!browser) return;
     let saved = 'whatsapp';
     try{ saved = localStorage.getItem('ems_theme') || localStorage.getItem('app-theme') || 'whatsapp'; }catch{}
-    let t = saved.toLowerCase();
+    let t = saved.toLowerCase().trim();
+    const allowed = ['whatsapp','light','dark','discord','twitter','slack','system'];
+    if(!allowed.includes(t)) t = 'whatsapp'; // ✅ SECURE: whitelist
     if(t==='system'){
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       t = isDark? 'dark' : 'light';
@@ -73,7 +75,8 @@
     try{
       const { data } = await supabase.from('settings').select('appearance').eq('id',1).maybeSingle();
       if(data?.appearance?.theme){
-        try{ localStorage.setItem('ems_theme', data.appearance.theme); localStorage.setItem('app-theme', data.appearance.theme); }catch{}
+        const th = String(data.appearance.theme).toLowerCase().slice(0,20);
+        try{ localStorage.setItem('ems_theme', th); localStorage.setItem('app-theme', th); }catch{}
         applyThemeFromStorage();
       }
     }catch{}
@@ -81,12 +84,10 @@
 
   function preloadInBackground(){
     if(!browser) return;
-    // ✅ FAST: light queries only
     Promise.allSettled([
       supabase.from('contacts').select('id').limit(1).then(()=>{}).catch(()=>{}),
       supabase.from('settings').select('id').limit(1).then(()=>{}).catch(()=>{}),
     ]);
-    // ✅ SPEED: prefetch reports + settings so bottom nav instant
     setTimeout(()=>{
       try{
         preloadData('/reports');
@@ -130,8 +131,8 @@
       if(conn && connListener) conn.removeEventListener('change', connListener);
       window.removeEventListener('online', onOnline);
       window.removeEventListener('offline', onOffline);
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchstart', onTouchStart as any);
+      window.removeEventListener('touchend', onTouchEnd as any);
     };
   });
 </script>
@@ -141,7 +142,7 @@
   <span>{online? '● Online' : '○ Offline'}</span>
   {#if rtt!==null}<span>RTT {rtt}ms</span>{/if}
   {#if downlink}<span>{downlink}Mb/s</span>{/if}
-  <button class="net-close" on:click={()=>showNet=false}>✕</button>
+  <button class="net-close" onclick={()=>showNet=false} aria-label="Close network status">✕</button>
 </div>
 {/if}
 

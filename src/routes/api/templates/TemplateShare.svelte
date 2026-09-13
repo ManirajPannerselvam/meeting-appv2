@@ -87,10 +87,10 @@
 
 <div class="share-wrap">
   <div class="tabs">
-    <button class:active={activeTab==='share'} on:click={()=>activeTab='share'}>Share</button>
-    <button class:active={activeTab==='access'} on:click={()=>{activeTab='access'; loadShares();}}>Access ({shares.length})</button>
+    <button class:active={activeTab==='share'} onclick={()=>activeTab='share'}>Share</button>
+    <button class:active={activeTab==='access'} onclick={()=>{activeTab='access'; loadShares();}}>Access ({shares.length})</button>
     {#if isMainOwner}
-      <button class:active={activeTab==='approvals'} on:click={()=>{activeTab='approvals'; loadPending();}}>Approvals {#if pending.length}<span class="badge">{pending.length}</span>{/if}</button>
+      <button class:active={activeTab==='approvals'} onclick={()=>{activeTab='approvals'; loadPending();}}>Approvals {#if pending.length}<span class="badge">{pending.length}</span>{/if}</button>
     {/if}
   </div>
 
@@ -108,7 +108,7 @@
         <option value="editor">Editor - Can edit values</option>
         {#if isMainOwner}<option value="indirect_owner">Owner (Indirect) - Can share + use</option>{/if}
       </select>
-      <button class="btn-primary" on:click={handleShare} disabled={loading}>{loading ? 'Sharing...' : isMainOwner ? 'Add Owner' : 'Request Share'}</button>
+      <button class="btn-primary" onclick={handleShare} disabled={loading}>{loading ? 'Sharing...' : isMainOwner ? 'Add Owner' : 'Request Share'}</button>
     </div>
   {/if}
 
@@ -138,8 +138,8 @@
               <option value="editor">Editor</option>
               <option value="indirect_owner">Indirect Owner</option>
             </select>
-            <button class="btn-approve" on:click={()=>{ const sel = document.getElementById('role-'+p.id); handleApprove(p.id,'approved', sel?.value || p.role); }}>Approve</button>
-            <button class="btn-reject" on:click={()=>handleApprove(p.id,'rejected')}>Reject</button>
+            <button class="btn-approve" onclick={()=>{ const sel = document.getElementById('role-'+p.id); handleApprove(p.id,'approved', sel?.value || p.role); }}>Approve</button>
+            <button class="btn-reject" onclick={()=>handleApprove(p.id,'rejected')}>Reject</button>
           </div>
         </div>
       {:else}<p class="empty">No pending approvals</p>{/each}

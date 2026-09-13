@@ -275,12 +275,12 @@ function togglePermission(permission: string) {
             <p>Enterprise User Administration</p>
         </div>
         <div class="header-actions">
-            <button class="green" on:click={createUser}>➕ Add User</button>
+            <button class="green" onclick={createUser}>➕ Add User</button>
             <label class="blue upload-btn">
-                📥 Import <input type="file" accept=".csv" hidden on:change={importUsers}/>
+                📥 Import <input type="file" accept=".csv" hidden onchange={importUsers}/>
             </label>
-            <button class="orange" on:click={exportUsers} disabled={exporting}>📤 Export</button>
-            <button class="secondary" on:click={downloadTemplate}>Template</button>
+            <button class="orange" onclick={exportUsers} disabled={exporting}>📤 Export</button>
+            <button class="secondary" onclick={downloadTemplate}>Template</button>
         </div>
     </div>
     {#if importing}<div class="progress-box"><div class="progress-fill" style="width:{importProgress}%"/></div>{/if}
@@ -314,9 +314,9 @@ function togglePermission(permission: string) {
     <div class="bulk-toolbar">
         <span>Selected <b>{selectedUsers.length}</b> Users</span>
         <div>
-            <button class="green" on:click={() => bulkUpdate("Active")}>Activate</button>
-            <button class="orange" on:click={() => bulkUpdate("Inactive")}>Deactivate</button>
-            <button class="red" on:click={bulkDelete}>Delete</button>
+            <button class="green" onclick={() => bulkUpdate("Active")}>Activate</button>
+            <button class="orange" onclick={() => bulkUpdate("Inactive")}>Deactivate</button>
+            <button class="red" onclick={bulkDelete}>Delete</button>
         </div>
     </div>
     {/if}
@@ -326,16 +326,16 @@ function togglePermission(permission: string) {
         {#if loading}
             <div class="skeleton">{#each Array(8) as _}<div class="row"></div>{/each}</div>
         {:else if filteredUsers.length === 0}
-            <div class="empty-state"><h2>👤</h2><h3>No Users Found</h3><button class="green" on:click={createUser}>Create User</button></div>
+            <div class="empty-state"><h2>👤</h2><h3>No Users Found</h3><button class="green" onclick={createUser}>Create User</button></div>
         {:else}
         <table>
             <thead>
                 <tr>
-                    <th><input type="checkbox" bind:checked={selectAll} on:change={toggleSelectAll}/></th>
-                    <th on:click={() => sortBy("full_name")}>Employee</th>
-                    <th on:click={() => sortBy("department")}>Department</th>
-                    <th on:click={() => sortBy("role")}>Role</th>
-                    <th on:click={() => sortBy("status")}>Status</th>
+                    <th><input type="checkbox" bind:checked={selectAll} onchange={toggleSelectAll}/></th>
+                    <th onclick={() => sortBy("full_name")}>Employee</th>
+                    <th onclick={() => sortBy("department")}>Department</th>
+                    <th onclick={() => sortBy("role")}>Role</th>
+                    <th onclick={() => sortBy("status")}>Status</th>
                     <th>Last Login</th>
                     <th>Actions</th>
                 </tr>
@@ -343,7 +343,7 @@ function togglePermission(permission: string) {
             <tbody>
             {#each filteredUsers.slice((currentPage-1)*pageSize, currentPage*pageSize) as user}
                 <tr>
-                    <td><input type="checkbox" checked={selectedUsers.includes(user.user_id)} on:change={() => toggleUser(user.user_id)}/></td>
+                    <td><input type="checkbox" checked={selectedUsers.includes(user.user_id)} onchange={() => toggleUser(user.user_id)}/></td>
                     <td>
                         <div class="user-cell">
                             {#if user.avatar}<img src={user.avatar} alt={user.full_name} class="avatar"/>
@@ -357,13 +357,13 @@ function togglePermission(permission: string) {
                     <td>{user.last_login? new Date(user.last_login).toLocaleString() : "-"}</td>
                     <td>
                         <div class="actions">
-                            <button class="small blue" on:click={() => editUser(user)}>Edit</button>
-                            <button class="small orange" on:click={() => resetPassword(user)}>Reset</button>
-                            {#if user.status==="Locked"}<button class="small green" on:click={() => updateStatus(user, "Active")}>Unlock</button>
-                            {:else}<button class="small red" on:click={() => updateStatus(user, "Locked")}>Lock</button>{/if}
-                            {#if user.status==="Inactive"}<button class="small green" on:click={() => updateStatus(user, "Active")}>Activate</button>{/if}
-                            {#if user.status==="Active"}<button class="small orange" on:click={() => updateStatus(user, "Inactive")}>Deactivate</button>{/if}
-                            <button class="small red" on:click={() => confirmDelete(user)}>Delete</button>
+                            <button class="small blue" onclick={() => editUser(user)}>Edit</button>
+                            <button class="small orange" onclick={() => resetPassword(user)}>Reset</button>
+                            {#if user.status==="Locked"}<button class="small green" onclick={() => updateStatus(user, "Active")}>Unlock</button>
+                            {:else}<button class="small red" onclick={() => updateStatus(user, "Locked")}>Lock</button>{/if}
+                            {#if user.status==="Inactive"}<button class="small green" onclick={() => updateStatus(user, "Active")}>Activate</button>{/if}
+                            {#if user.status==="Active"}<button class="small orange" onclick={() => updateStatus(user, "Inactive")}>Deactivate</button>{/if}
+                            <button class="small red" onclick={() => confirmDelete(user)}>Delete</button>
                         </div>
                     </td>
                 </tr>
@@ -375,9 +375,9 @@ function togglePermission(permission: string) {
 
     <!-- PAGINATION -->
     <div class="pagination">
-        <button disabled={currentPage===1} on:click={()=>currentPage--}>◀ Previous</button>
+        <button disabled={currentPage===1} onclick={()=>currentPage--}>◀ Previous</button>
         <span>Page {currentPage} of {totalPages}</span>
-        <button disabled={currentPage===totalPages} on:click={()=>currentPage++}>Next ▶</button>
+        <button disabled={currentPage===totalPages} onclick={()=>currentPage++}>Next ▶</button>
     </div>
 
     <!-- RECENT USERS -->
@@ -406,7 +406,7 @@ function togglePermission(permission: string) {
         <div class="avatar-upload">
             {#if currentUser.avatar}<img src={currentUser.avatar} class="preview" alt="avatar"/>
             {:else}<div class="preview empty">👤</div>{/if}
-            <input type="file" accept="image/*" on:change={uploadAvatar}/>
+            <input type="file" accept="image/*" onchange={uploadAvatar}/>
         </div>
         <div class="form">
             <input placeholder="Employee Number" bind:value={currentUser.employee_no}/>
@@ -421,12 +421,12 @@ function togglePermission(permission: string) {
         <div class="permission-box">
             <h3>Permissions</h3>
             <div class="permission-grid">{#each permissionsList as permission}
-                <label><input type="checkbox" checked={assignedPermissions.includes(permission)} on:change={() => togglePermission(permission)}/>{permission}</label>
+                <label><input type="checkbox" checked={assignedPermissions.includes(permission)} onchange={() => togglePermission(permission)}/>{permission}</label>
             {/each}</div>
         </div>
         <div class="dialog-actions">
-            <button class="green" on:click={saveUser}>💾 Save</button>
-            <button class="red" on:click={() => showUserDialog = false}>Cancel</button>
+            <button class="green" onclick={saveUser}>💾 Save</button>
+            <button class="red" onclick={() => showUserDialog = false}>Cancel</button>
         </div>
     </div>
 </div>
@@ -439,8 +439,8 @@ function togglePermission(permission: string) {
         <h2>Delete User</h2>
         <p>Are you sure to delete <b>{deleteUserRecord?.full_name}</b>?</p>
         <div class="dialog-actions">
-            <button class="red" on:click={deleteUser}>Delete</button>
-            <button on:click={() => showDeleteDialog = false}>Cancel</button>
+            <button class="red" onclick={deleteUser}>Delete</button>
+            <button onclick={() => showDeleteDialog = false}>Cancel</button>
         </div>
     </div>
 </div>

@@ -22,7 +22,7 @@
 	<button
 		type="button"
 		class="blue"
-		on:click={newTransaction}
+		onclick={newTransaction}
 	>
 		+ New Transaction
 	</button>
@@ -32,8 +32,9 @@
 	<button
 		type="button"
 		class="small red"
-		on:click={() => deleteTransaction(id)}
+		onclick={() => deleteTransaction(id)}
 	>
 		Delete
 	</button>
 {/if}
+

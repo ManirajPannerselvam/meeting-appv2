@@ -3,7 +3,7 @@
  * Temple Operations Reporting System
  * File : vite.config.ts
  * ============================================================
- * Vercel + Tauri - FAST + SECURE + NO 500
+ * Vercel + Tauri - FAST + SECURE + NO 500 + NO startTime BUG
  * ============================================================
  */
 
@@ -19,9 +19,15 @@ export default defineConfig(async () => ({
 
   clearScreen: false,
 
+  // ✅ SECURE + SPEED: kill Vercel analytics in dev
+  define: {
+    'process.env.VERCEL_ANALYTICS_DEBUG': JSON.stringify(false),
+    'process.env.NEXT_PUBLIC_VERCEL_ANALYTICS': JSON.stringify(false),
+    '__VERCEL_ANALYTICS__': JSON.stringify(false)
+  },
+
   resolve: {
     alias: {
-      // ✅ VERCEL FIX: Use dummy db on Vercel, real db on Tauri
       ...(isVercel ? {} : {
         '$lib/server/db': path.resolve('./src/lib/server/db.desktop.ts')
       })
@@ -44,10 +50,8 @@ export default defineConfig(async () => ({
     cssMinify: true,
     sourcemap: false,
     chunkSizeWarningLimit: 600,
-    // ✅ FIXED: Removed manualChunks function - it breaks Vercel SSR
     rollupOptions: {
       output: {
-        // Use object form, not function - Vercel safe
         manualChunks: {
           supabase: ['@supabase/supabase-js']
         }
@@ -75,7 +79,10 @@ export default defineConfig(async () => ({
     headers: {
       'X-Content-Type-Options': 'nosniff',
       'X-Frame-Options': 'DENY',
-      'X-XSS-Protection': '1; mode=block'
+      'X-XSS-Protection': '1; mode=block',
+      // ✅ SECURE: extra
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
     }
   },
 

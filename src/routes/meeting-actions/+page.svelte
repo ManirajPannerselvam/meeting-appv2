@@ -194,7 +194,7 @@ placeholder="Search action..."
 
 </select>
 
-<button on:click={reset}>
+<button onclick={reset}>
 
 Reset
 
@@ -284,7 +284,7 @@ No Action Items
 
 class="view"
 
-on:click={()=>goto(`/meeting-action/${item.id}`)}
+onclick={()=>goto(`/meeting-action/${item.id}`)}
 
 >
 
@@ -314,7 +314,7 @@ on:click={()=>goto(`/meeting-action/${item.id}`)}
 
 disabled={currentPage===1}
 
-on:click={()=>currentPage--}
+onclick={()=>currentPage--}
 
 >
 
@@ -332,7 +332,7 @@ Previous
 
 disabled={currentPage===totalPages}
 
-on:click={()=>currentPage++}
+onclick={()=>currentPage++}
 
 >
 

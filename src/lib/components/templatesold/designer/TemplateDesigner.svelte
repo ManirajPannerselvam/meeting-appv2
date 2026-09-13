@@ -978,7 +978,7 @@ async function saveTemplate() {
 
             <button
                 class="btn ghost"
-                on:click={() => dispatch("close")}
+                onclick={() => dispatch("close")}
             >
                 Cancel
             </button>
@@ -986,7 +986,7 @@ async function saveTemplate() {
             <button
                 class="btn primary"
                 disabled={saving}
-                on:click={saveTemplate}
+                onclick={saveTemplate}
             >
 
                 {#if saving}
@@ -1073,14 +1073,14 @@ async function saveTemplate() {
 
                 <button
                     class:active={activeTab === "fields"}
-                    on:click={() => activeTab = "fields"}
+                    onclick={() => activeTab = "fields"}
                 >
                     Fields ({fields.length})
                 </button>
 
                 <button
                     class:active={activeTab === "preview"}
-                    on:click={() => activeTab = "preview"}
+                    onclick={() => activeTab = "preview"}
                 >
                     Preview
                 </button>

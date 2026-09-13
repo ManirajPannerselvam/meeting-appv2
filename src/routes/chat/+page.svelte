@@ -79,19 +79,18 @@
 	let groupToAddMembers = $state<any>(null);
 	let addMemberLoading = $state(false);
 	const roomCache = new Map<string,string>();
+	let realtimeCleaned = $state(false);
 
-	// ✅ SPEED: instant bottom nav + prefetch
 	function goBottom(tab:string){
 	  bottomTab=tab;
 	  const target = tab==='chat'? '/chat' : tab==='report'? '/reports' : '/settings';
-	  // instant UI, no wait
 	  goto(target, { keepFocus:true, noScroll:true, replaceState: tab==='chat' });
 	}
 	function isTemplateMsg(m:any){ return m.content?.includes('__TEMPLATE_DATA__') || m.content?.startsWith('📋'); }
 	function isMeetingMsg(m:any){ return m.content?.includes('__MEETING_DATA__'); }
 	function getMeta(m:any){ try{ let p = m.content?.split('__TEMPLATE_DATA__'); if(p?.length>1) return JSON.parse(p[1]); }catch{} return null; }
 	function sanitize(str:string){ if(!str) return ""; return str.toString().slice(0,4000).trim().replace(/<script.*?>.*?<\/script>/gi,'').replace(/javascript:/gi,'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-	function evalFormulaChat(formulaStr: string, vals: Record<string,any>): string { if(!formulaStr) return "0.00"; try{ let expr = formulaStr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/—/g,'-'); expr = expr.replace(/\{([^}]+)\}/g, (_, k)=>{ let v = vals[k]?? vals[k.toLowerCase()]?? "0"; let num = Number(String(v).replace(/[^0-9.\-]/g,'')); return isNaN(num)? "0" : String(num); }); expr = expr.replace(/%/g,''); if(/[^0-9+\-*/().\s]/.test(expr)) return "0.00"; return Number(Function('"use strict";return ('+expr+')')()).toFixed(2); }catch{ return "0.00"; } }
+	function evalFormulaChat(formulaStr: string, vals: Record<string,any>): string { if(!formulaStr || formulaStr.length>200) return "0.00"; try{ let expr = formulaStr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/—/g,'-'); expr = expr.replace(/\{([^}]+)\}/g, (_, k)=>{ let v = vals[k]?? vals[k.toLowerCase()]?? "0"; let num = Number(String(v).replace(/[^0-9.\-]/g,'')); if(isNaN(num)) return "0"; return String(Math.max(-1e9, Math.min(1e9,num))); }); expr = expr.replace(/%/g,''); if(/[^0-9+\-*/().\s]/.test(expr)) return "0.00"; if(expr.length>120 || expr.includes('**')) return "0.00"; return Number(Function('"use strict";return ('+expr+')')()).toFixed(2); }catch{ return "0.00"; } }
 	function calcAllFormulas(template: any, vals: Record<string,any>){ let out = {...vals}; let fields = template?.fields || template?.data?.fields || selectedTemplate?.data?.fields || []; for(let f of fields){ if(f.type==='formula' && f.formula){ out[f.field_name] = evalFormulaChat(f.formula, out); } } return out; }
 	let filteredMessages = $derived.by(()=>{
 		if(chatMode==='template'){ let list = messages.filter(isTemplateMsg); if(selectedTemplate){ return list.filter((m:any)=>{ let meta = getMeta(m); if(meta?.template_id===selectedTemplate.id) return true; return m.content?.includes(selectedTemplate.template_code); }); } return list; }
@@ -150,22 +149,46 @@
 		if(user){ currentUser = {...(data?.user||{}),...user, avatar_url: user.user_metadata?.avatar_url || data?.user?.avatar_url || null }; } else if(data?.user?.id){ currentUser = data.user; }
 		const uid = getCurrentUserId(); if(!uid) return;
 		await Promise.allSettled([ loadContacts(true), loadGroups() ]);
-		// ✅ SPEED: prefetch reports/settings now
 		setTimeout(()=>{ try{ preloadData('/reports'); preloadData('/settings'); }catch{} }, 600);
-		setTimeout(()=>{ setupPresence(); setupProfileLive(); setupGlobalListener(); setupInvitesListener(); }, 500);
+		await cleanupRealtime();
+		setTimeout(()=>{ if(realtimeCleaned) return; setupPresence(); setupProfileLive(); setupGlobalListener(); setupInvitesListener(); }, 600);
 		if(browser && 'Notification' in window && Notification.permission==='default'){ Notification.requestPermission(); }
 	});
-	onDestroy(async () => { if (browser) window.removeEventListener('resize', checkMobile); await cleanupRealtime(); });
+	onDestroy(async () => { realtimeCleaned = true; if (browser) window.removeEventListener('resize', checkMobile); await cleanupRealtime(); });
 
-	function setupProfileLive(){ if(profileChannel) return; profileChannel = chatDB.channel('profiles-live').on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles'},(payload)=>{ const p = payload.new as any; contacts = contacts.map(c=> (c.actual_user_id===p.id || c.id===p.id)? {...c, avatar_url:p.avatar_url, name: p.name || c.name} : c); if(selectedContact && (selectedContact.actual_user_id===p.id || selectedContact.id===p.id)){ selectedContact = {...selectedContact, avatar_url:p.avatar_url, name: p.name || selectedContact.name}; } if(currentUser?.id===p.id){ currentUser = {...currentUser, avatar_url:p.avatar_url}; } }).subscribe(); }
-	function setupInvitesListener(){ if(invitesChannel) return; const uid = getCurrentUserId(); if(!uid) return; invitesChannel = chatDB.channel('invites-'+uid).on('postgres_changes',{event:'*',schema:'public',table:'contact_invites'},()=>{ loadContacts(true); }).subscribe(); }
-	async function setupGlobalListener(){
-	  if(globalChannel) await chatDB.removeChannel(globalChannel);
+	async function cleanupRealtime(){
+	  realtimeCleaned = false;
+	  const ch = [messagesChannel, presenceChannel, profileChannel, globalChannel, invitesChannel].filter(Boolean);
+	  messagesChannel = null; presenceChannel = null; profileChannel = null; globalChannel = null; invitesChannel=null;
+	  if(ch.length) { try{ await Promise.allSettled(ch.map((c:any) => chatDB.removeChannel(c))); }catch{} }
+	}
+
+	function setupProfileLive(){
+	  if(profileChannel) return;
 	  const uid = getCurrentUserId(); if(!uid) return;
-	  globalChannel = chatDB.channel('global-'+uid)
-		.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'}, async (payload)=>{
-		  const msg:any = payload.new; if(msg.sender_id===uid) return;
-		  if(msg.receiver_id!==uid &&!msg.room_id &&!msg.group_id) return;
+	  profileChannel = chatDB.channel(`profiles-live-${uid}-${Date.now()}-${Math.random().toString(36).slice(2)}`)
+	 .on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles', filter: `id=neq.${uid}`},(payload)=>{
+	      const p = payload.new as any; if(!p?.id) return;
+	      contacts = contacts.map(c=> (c.actual_user_id===p.id || c.id===p.id)? {...c, avatar_url: p.avatar_url?.slice(0,300), name: (p.name||c.name)?.toString().slice(0,50)} : c);
+	      if(selectedContact && (selectedContact.actual_user_id===p.id || selectedContact.id===p.id)){ selectedContact = {...selectedContact, avatar_url: p.avatar_url?.slice(0,300), name: p.name?.slice(0,50) || selectedContact.name}; }
+	      if(currentUser?.id===p.id){ currentUser = {...currentUser, avatar_url: p.avatar_url?.slice(0,300)}; }
+	    }).subscribe();
+	}
+	function setupInvitesListener(){
+	  if(invitesChannel) return;
+	  const uid = getCurrentUserId(); if(!uid) return;
+	  const emailLower = (currentUser?.email || data?.user?.email || '').toLowerCase().slice(0,100);
+	  if(!emailLower) return;
+	  invitesChannel = chatDB.channel(`invites-${uid}-${Date.now()}`)
+	 .on('postgres_changes',{event:'*',schema:'public',table:'contact_invites', filter: `email=eq.${emailLower}`},()=>{ loadContacts(true); })
+	 .subscribe();
+	}
+	async function setupGlobalListener(){
+	  if(globalChannel) return;
+	  const uid = getCurrentUserId(); if(!uid) return;
+	  globalChannel = chatDB.channel(`global-${uid}-${Date.now()}`)
+		.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages', filter: `receiver_id=eq.${uid}`}, async (payload)=>{
+		  const msg:any = payload.new; if(!msg?.id || msg.sender_id===uid) return;
 		  try{ await chatDB.from('messages').update({status:'delivered', delivered_at: new Date().toISOString()}).eq('id', msg.id).eq('status','sent'); }catch{}
 		  const short = sanitize(msg.content).split('__')[0].slice(0,40);
 		  const isOpen = (msg.room_id && msg.room_id===selectedRoomId) || (msg.group_id && msg.group_id===selectedGroupId);
@@ -178,34 +201,17 @@
 		  if(!isOpen && browser && Notification.permission==='granted'){ try{ new Notification('New message', { body: short }); }catch{} }
 		  if(isOpen &&!messages.some(m=>m.id===msg.id)){ messages = [...messages, {...msg, status:'delivered', is_own:false}]; scrollToBottom(); setTimeout(()=> markAsRead(), 300); }
 		})
-		.on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'}, (payload)=>{
-		  const upd:any = payload.new; messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status, delivered_at:upd.delivered_at, read_at:upd.read_at} : m);
+		.on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages', filter: `receiver_id=eq.${uid}`}, (payload)=>{
+		  const upd:any = payload.new; if(!upd?.id) return; messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status, delivered_at:upd.delivered_at, read_at:upd.read_at} : m);
 		}).subscribe();
 	}
-	function resizeTo128(file: File): Promise<Blob> {
-		return new Promise((resolve, reject) => {
-			const img = new Image(); const url = URL.createObjectURL(file);
-			img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128; const ctx = canvas.getContext('2d')!; const scale = Math.max(128 / img.width, 128 / img.height); const w = img.width * scale, h = img.height * scale; ctx.fillStyle='#fff'; ctx.fillRect(0,0,128,128); ctx.drawImage(img, (128-w)/2, (128-h)/2, w, h); canvas.toBlob((b) => b? resolve(b) : reject('blob fail'), 'image/webp', 0.8); URL.revokeObjectURL(url); }; img.onerror = reject; img.src = url;
-		});
+	async function setupPresence() {
+	  if(presenceChannel) return;
+	  const userId = getCurrentUserId(); if(!userId) return;
+	  presenceChannel = chatDB.channel(`online-users-${userId}-${Date.now()}`, { config: { presence: { key: userId } } });
+	  presenceChannel.on("presence", { event: "sync" }, () => { try{ onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); }catch{} }).subscribe(async (s:any) => { if(s==="SUBSCRIBED") await presenceChannel!.track({ user_id: userId }); });
 	}
-	async function onAvatarFileChange(e: any){
-		const file = e.detail?.file || e.target?.files?.[0]; const contact = e.detail?.contact || avatarTarget;
-		if(!file) return; if(file.size > 5*1024*1024){ alert("Max 5MB"); return; } if(!file.type.startsWith('image/')){ alert("Image only"); return; }
-		if(contact &&!contact.isSelf && contact.id!==getCurrentUserId() && avatarType!=='group'){ alert("You can only change your own photo"); return; }
-		avatarPreview = URL.createObjectURL(file);
-		try{ avatarUploading = true; const blob = await resizeTo128(file); const fileName = `${avatarType}_${contact?.id}_${Date.now()}.webp`; const formData = new FormData(); formData.append('file', blob); formData.append('fileName', fileName); const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData }); const json = await res.json(); if(!res.ok) throw new Error(json.error || 'Upload failed'); const publicUrl = json.url; const realId = contact.actual_user_id || contact.id; await chatDB.from('profiles').update({ avatar_url: publicUrl }).eq('id', realId); contacts = contacts.map(c=> c.id===contact.id? {...c, avatar_url: publicUrl} : c); if(selectedContact?.id === contact.id) selectedContact = {...selectedContact, avatar_url: publicUrl}; if(contact?.isSelf) currentUser = {...currentUser, avatar_url: publicUrl}; showAvatarModal = false; }catch(err:any){ alert("Upload failed: "+err.message); } finally{ avatarUploading = false; }
-	}
-	async function loadTemplates(){
-		templateLoading=true; let localList:any[]=[]; try{ if(browser){ const raw = localStorage.getItem("templates"); if(raw) localList = JSON.parse(raw); } }catch{} templates = localList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data }));
-		try{ const uid = getCurrentUserId(); const res = await fetch(`/api/templates?t=${Date.now()}&user_id=${uid}`, { cache:"no-store" }); if(res.ok){ const json = await res.json(); let apiList = json.templates || json.data || json || []; if(Array.isArray(apiList) && apiList.length>0){ apiList = apiList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data })); const map = new Map(); [...localList,...apiList].forEach((t:any)=>{ const k = String(t.id||t.template_code||t.name); if(!map.has(k)) map.set(k, t); }); templates = Array.from(map.values()); } } }catch{} finally{ templateLoading=false; }
-	}
-	function onOpenTemplate(){ showTemplateModal = true; showTemplateForm = false; loadTemplates(); }
-	function handleUseTemplate(e:any){ const t = e.detail?.template || e.detail; if(!t) return; selectedTemplate = {...t, data: typeof t.data==='string'? JSON.parse(t.data) : (t.data||{}) }; showTemplateModal=false; setTimeout(()=>{ showTemplateForm=true; }, 120); }
-	function handleCreateTemplate(){ showTemplateModal=false; showTemplateForm=false; const contactId = selectedContact?.actual_user_id || selectedContact?.id || ''; const groupId = selectedGroupId || ''; if(browser) window.location.href=`/templates/create?contact_id=${contactId}&group_id=${groupId}`; }
-	function handleOpenDetail(tpl: any, msg: any){ let fields = tpl?.fields || tpl?.data?.fields || tpl?.values?.fields || msg?.fields || []; if(fields.length===0){ let meta = getMeta(msg); if(meta?.fields) fields = meta.fields; } detailData = { template_name: tpl.template_name || tpl.template_code || tpl.name || 'Production Report', template_code: tpl.template_code || tpl.t_code, values: tpl.values || tpl.data || {}, fields: fields, t_code: tpl.template_code || tpl.t_code, user_name: msg.sender_name || msg.sender_id || 'User', created_at: msg.created_at, }; showDetailModal = true; }
-	async function sendTemplateReport(e:any){
-		const { template, values } = e.detail; if(!template) return; const calculatedValues = calcAllFormulas(template, values); let realFields = template?.fields || template?.data?.fields || []; let displayLines = [`📋 *${sanitize(template.name)}*`, ``]; realFields.forEach((f:any)=>{ let key = f.field_name || f.name; let label = f.label || key; let val = calculatedValues[key]?? ""; if(val==="") return; displayLines.push(`${sanitize(label)}: ${sanitize(String(val))}`); }); const display = displayLines.join('\n'); const t_code = template.template_code || template.code || template.t_code; const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: t_code, values: calculatedValues, fields: realFields, created_at: new Date().toISOString() }; const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`; try{ const { data: { user: chatUser } } = await chatDB.auth.getUser(); const realUid = chatUser?.id || getCurrentUserId(); const payload:any = { t_code: sanitize(t_code), reference_template_id: template.id, data: {...calculatedValues, template_code: t_code, template_name: template.name, template_id: template.id, owner_id: realUid, user_id: realUid, created_at: new Date().toISOString() }, ts: new Date().toISOString() }; await supabaseTemplates.from("records").insert(payload); }catch(err:any){ alert("Save failed: "+err?.message); return; } showTemplateForm=false; await sendMessage({ detail: { content: fullContent } } as any); selectedTemplate=null;
-	}
+	function isUserOnline(id: string){ return onlineUsers.has(id); }
 	async function loadGroups() { const userId = getCurrentUserId(); if(!userId) return; try{ let { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId).limit(100); let list = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); groups = list; }catch{} }
 	async function loadContacts(force=false) {
 	    const userId = getCurrentUserId(); if(!userId){ contacts = []; return; }
@@ -245,9 +251,30 @@
 	      }
 	    }catch{}
 	}
-	async function setupPresence() { const userId = getCurrentUserId(); if(!userId) return; if(presenceChannel) await chatDB.removeChannel(presenceChannel); presenceChannel = chatDB.channel("online-users", { config: { presence: { key: userId } } }); presenceChannel.on("presence", { event: "sync" }, () => { onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); }).subscribe(async (s) => { if(s==="SUBSCRIBED") await presenceChannel!.track({ user_id: userId }); }); }
-	function isUserOnline(id: string){ return onlineUsers.has(id); }
-	async function cleanupRealtime(){ const ch = [messagesChannel, presenceChannel, profileChannel, globalChannel, invitesChannel].filter(Boolean); messagesChannel = null; presenceChannel = null; profileChannel = null; globalChannel = null; invitesChannel=null; if(ch.length) await Promise.allSettled(ch.map((c:any) => chatDB.removeChannel(c))); }
+	function resizeTo128(file: File): Promise<Blob> {
+		return new Promise((resolve, reject) => {
+			const img = new Image(); const url = URL.createObjectURL(file);
+			img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128; const ctx = canvas.getContext('2d')!; const scale = Math.max(128 / img.width, 128 / img.height); const w = img.width * scale, h = img.height * scale; ctx.fillStyle='#fff'; ctx.fillRect(0,0,128,128); ctx.drawImage(img, (128-w)/2, (128-h)/2, w, h); canvas.toBlob((b) => b? resolve(b) : reject('blob fail'), 'image/webp', 0.8); URL.revokeObjectURL(url); }; img.onerror = reject; img.src = url;
+		});
+	}
+	async function onAvatarFileChange(e: any){
+		const file = e.detail?.file || e.target?.files?.[0]; const contact = e.detail?.contact || avatarTarget;
+		if(!file) return; if(file.size > 5*1024*1024){ alert("Max 5MB"); return; } if(!file.type.startsWith('image/')){ alert("Image only"); return; }
+		if(contact &&!contact.isSelf && contact.id!==getCurrentUserId() && avatarType!=='group'){ alert("You can only change your own photo"); return; }
+		avatarPreview = URL.createObjectURL(file);
+		try{ avatarUploading = true; const blob = await resizeTo128(file); const fileName = `${avatarType}_${contact?.id}_${Date.now()}.webp`; const formData = new FormData(); formData.append('file', blob); formData.append('fileName', fileName); const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData }); const json = await res.json(); if(!res.ok) throw new Error(json.error || 'Upload failed'); const publicUrl = json.url; const realId = contact.actual_user_id || contact.id; await chatDB.from('profiles').update({ avatar_url: publicUrl }).eq('id', realId); contacts = contacts.map(c=> c.id===contact.id? {...c, avatar_url: publicUrl} : c); if(selectedContact?.id === contact.id) selectedContact = {...selectedContact, avatar_url: publicUrl}; if(contact?.isSelf) currentUser = {...currentUser, avatar_url: publicUrl}; showAvatarModal = false; }catch(err:any){ alert("Upload failed: "+err.message); } finally{ avatarUploading = false; }
+	}
+	async function loadTemplates(){
+		templateLoading=true; let localList:any[]=[]; try{ if(browser){ const raw = localStorage.getItem("templates"); if(raw) localList = JSON.parse(raw); } }catch{} templates = localList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data }));
+		try{ const uid = getCurrentUserId(); const res = await fetch(`/api/templates?t=${Date.now()}&user_id=${uid}`, { cache:"no-store" }); if(res.ok){ const json = await res.json(); let apiList = json.templates || json.data || json || []; if(Array.isArray(apiList) && apiList.length>0){ apiList = apiList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data })); const map = new Map(); [...localList,...apiList].forEach((t:any)=>{ const k = String(t.id||t.template_code||t.name); if(!map.has(k)) map.set(k, t); }); templates = Array.from(map.values()); } } }catch{} finally{ templateLoading=false; }
+	}
+	function onOpenTemplate(){ showTemplateModal = true; showTemplateForm = false; loadTemplates(); }
+	function handleUseTemplate(e:any){ const t = e.detail?.template || e.detail; if(!t) return; selectedTemplate = {...t, data: typeof t.data==='string'? JSON.parse(t.data) : (t.data||{}) }; showTemplateModal=false; setTimeout(()=>{ showTemplateForm=true; }, 120); }
+	function handleCreateTemplate(){ showTemplateModal=false; showTemplateForm=false; const contactId = selectedContact?.actual_user_id || selectedContact?.id || ''; const groupId = selectedGroupId || ''; if(browser) window.location.href=`/templates/create?contact_id=${contactId}&group_id=${groupId}`; }
+	function handleOpenDetail(tpl: any, msg: any){ let fields = tpl?.fields || tpl?.data?.fields || tpl?.values?.fields || msg?.fields || []; if(fields.length===0){ let meta = getMeta(msg); if(meta?.fields) fields = meta.fields; } detailData = { template_name: tpl.template_name || tpl.template_code || tpl.name || 'Production Report', template_code: tpl.template_code || tpl.t_code, values: tpl.values || tpl.data || {}, fields: fields, t_code: tpl.template_code || tpl.t_code, user_name: msg.sender_name || msg.sender_id || 'User', created_at: msg.created_at, }; showDetailModal = true; }
+	async function sendTemplateReport(e:any){
+		const { template, values } = e.detail; if(!template) return; const calculatedValues = calcAllFormulas(template, values); let realFields = template?.fields || template?.data?.fields || []; let displayLines = [`📋 *${sanitize(template.name)}*`, ``]; realFields.forEach((f:any)=>{ let key = f.field_name || f.name; let label = f.label || key; let val = calculatedValues[key]?? ""; if(val==="") return; displayLines.push(`${sanitize(label)}: ${sanitize(String(val))}`); }); const display = displayLines.join('\n'); const t_code = template.template_code || template.code || template.t_code; const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: t_code, values: calculatedValues, fields: realFields, created_at: new Date().toISOString() }; const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`; try{ const { data: { user: chatUser } } = await chatDB.auth.getUser(); const realUid = chatUser?.id || getCurrentUserId(); const payload:any = { t_code: sanitize(t_code), reference_template_id: template.id, data: {...calculatedValues, template_code: t_code, template_name: template.name, template_id: template.id, owner_id: realUid, user_id: realUid, created_at: new Date().toISOString() }, ts: new Date().toISOString() }; await supabaseTemplates.from("records").insert(payload); }catch(err:any){ alert("Save failed: "+err?.message); return; } showTemplateForm=false; await sendMessage({ detail: { content: fullContent } } as any); selectedTemplate=null;
+	}
 	async function loadMessages({ roomId, groupId, older=false }: any){
 	  if(older && loadingMore) return; if(!older && isLoadingMessages) return;
 	  if(older) loadingMore = true; else isLoadingMessages=true;
@@ -269,12 +296,13 @@
 	async function markDelivered(){ const uid = getCurrentUserId(); const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status==='sent').slice(0,10); for(const m of toMark){ try{ await chatDB.from("messages").update({ status:'delivered', delivered_at: new Date().toISOString() }).eq('id', m.id); }catch{} } }
 	async function markAsRead(){ const uid = getCurrentUserId(); if(!uid || (!selectedRoomId &&!selectedGroupId)) return; const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status!=='read').slice(0,20); if(!toMark.length) return; for(const m of toMark){ try{ await chatDB.from("messages").update({ status:'read', read_at: new Date().toISOString() }).eq('id', m.id); }catch{} } messages = messages.map((m:any)=> m.sender_id!==uid? {...m, status:'read'} : m); if(selectedRoomId) contacts = contacts.map(c=> c.room_id===selectedRoomId? {...c, unread:0} : c); }
 	async function subscribeToMessages({ roomId, groupId }: any){
-	  if(messagesChannel) await chatDB.removeChannel(messagesChannel); if(!roomId &&!groupId) return;
-	  const realName = groupId? `group-${groupId}` : `room-${roomId}`;
+	  if(messagesChannel){ try{ await chatDB.removeChannel(messagesChannel); }catch{} messagesChannel=null; }
+	  if(!roomId &&!groupId) return;
+	  const realName = groupId? `group-${groupId}-${Date.now()}` : `room-${roomId}-${Date.now()}`;
 	  messagesChannel=chatDB.channel(realName)
 		.on("broadcast", { event: "new_msg" }, (payload:any)=>{ const newMsg = payload.payload as any; if(newMsg.sender_id===getCurrentUserId()) return; if(messages.some(m=>m.id===newMsg.id)) return; messages = [...messages, {...newMsg, is_own:false}]; updateLastMessageInList(newMsg); scrollToBottom(); setTimeout(()=> markAsRead(), 200); })
 		.on("postgres_changes",{event:"INSERT",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : `room_id=eq.${roomId}` },async (payload)=>{ const newMsg = payload.new as any; const uid = getCurrentUserId(); if((newMsg.deleted_by||[]).includes(uid)) return; if(messages.some(m=>m.id===newMsg.id)) return; if(newMsg.sender_id!==uid){ try{ await chatDB.from("messages").update({ status:'delivered' }).eq('id', newMsg.id).eq('status','sent'); }catch{} } messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}]; updateLastMessageInList(newMsg); scrollToBottom(); if(newMsg.sender_id!==uid) setTimeout(()=>markAsRead(),200); })
-		.on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"}, (payload)=>{ const updated = payload.new as any; messages = messages.map((m:any)=> m.id===updated.id? {...m, status: updated.status} : m); }).subscribe();
+		.on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : `room_id=eq.${roomId}`}, (payload)=>{ const updated = payload.new as any; messages = messages.map((m:any)=> m.id===updated.id? {...m, status: updated.status} : m); }).subscribe();
 	}
 	async function handleSendLocation(e:any){ const { latitude, longitude, url } = e.detail || {}; if(!latitude ||!longitude) return; await sendMessage({ detail: { content: `📍 Location: ${url} __LOCATION_DATA__${JSON.stringify({latitude, longitude})}` } } as any); }
 	async function sendMessage(eventOrContent: any = null) {
@@ -312,7 +340,7 @@
 	function handleReply(msg:any){ replyingTo = msg; showMessageOptions = false; }
 	function handleForward(msg:any){ forwardMessage = msg; showForwardModal = true; showMessageOptions = false; }
 	async function handleForwardToContact(contact:any){ if(!forwardMessage) return; const roomId = contact.room_id || await getOrCreateRoom(contact.actual_user_id || contact.id); if(!roomId) return; await chatDB.from("messages").insert({ sender_id: getCurrentUserId(), content: sanitize(`Forwarded: ${forwardMessage.content}`), room_id: roomId, receiver_id: contact.actual_user_id || contact.id, status:'sent' }); showForwardModal = false; forwardMessage = null; }
-	function handleBackToList(){ selectedContact = null; selectedGroup = null; selectedRoomId = null; selectedGroupId = null; messages = []; chatMode='chat'; if(messagesChannel) chatDB.removeChannel(messagesChannel); }
+	function handleBackToList(){ selectedContact = null; selectedGroup = null; selectedRoomId = null; selectedGroupId = null; messages = []; chatMode='chat'; if(messagesChannel) { try{ chatDB.removeChannel(messagesChannel); }catch{} messagesChannel=null; } }
 	async function handleInvite(event: any){ const { inviteId, action }=event.detail; if(!['accepted','rejected'].includes(action)) return; await chatDB.from('contact_invites').update({status:action}).eq('id',inviteId); await loadContacts(true); }
 	async function handleDeleteContact(e:any){
 	  const c = e.detail || e; if(!c) return; const isGroup = groups.some((g:any)=> g.id===c.id);
@@ -360,18 +388,9 @@
 />
 		</div>
 		<nav class="bottom-fixed">
-		  <button class:active={bottomTab==='chat'}
-		    onmouseenter={()=>{ try{ preloadData('/chat'); }catch{} }}
-		    ontouchstart={()=>{ try{ preloadData('/chat'); }catch{} }}
-		    onclick={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button>
-		  <button class:active={bottomTab==='report'}
-		    onmouseenter={()=>{ try{ preloadData('/reports'); }catch{} }}
-		    ontouchstart={()=>{ try{ preloadData('/reports'); }catch{} }}
-		    onclick={()=>goBottom('report')}><span class="b-icon">📋</span><small>Report</small></button>
-		  <button class:active={bottomTab==='user'}
-		    onmouseenter={()=>{ try{ preloadData('/settings'); }catch{} }}
-		    ontouchstart={()=>{ try{ preloadData('/settings'); }catch{} }}
-		    onclick={()=>goBottom('user')}><span class="b-icon">👤</span><small>User</small></button>
+		  <button class:active={bottomTab==='chat'} onclick={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button>
+		  <button class:active={bottomTab==='report'} onclick={()=>goBottom('report')}><span class="b-icon">📋</span><small>Report</small></button>
+		  <button class:active={bottomTab==='user'} onclick={()=>goBottom('user')}><span class="b-icon">👤</span><small>User</small></button>
 		</nav>
 	</div>
 	<section class="chat-area" class:show-mobile={isMobileView && (selectedContact || selectedGroup)}>
@@ -393,6 +412,32 @@
   <div style="display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px 0 14px;">
     <img src={avatarPreview || avatarTarget?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarTarget?.name || 'User')}&background=00a884&color=fff&size=300`} alt="avatar" loading="lazy" decoding="async" style="width:170px;height:170px;border-radius:50%;object-fit:cover;border:4px solid #00a884;" />
     <b style="color:#e9edef; font-size:20px;">{avatarTarget?.name || 'User'}</b><span style="color:#8696a0; font-size:13px;">{avatarTarget?.email || ''}</span>
+    {#if avatarType==='contact' && commonGroups.length>0}
+      <div style="width:100%; margin-top:12px; background:#202c33; border-radius:8px; padding:10px;">
+        <small style="color:#00a884; font-weight:700;">Common Groups ({commonGroups.length})</small>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
+          {#each commonGroups as g}
+            <div style="display:flex; align-items:center; gap:8px; background:#2a3942; padding:6px 10px; border-radius:6px;">
+              <img src={g.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(g.name)}&background=00a884&color=fff`} alt="" style="width:28px;height:28px;border-radius:50%;" />
+              <span style="color:#e9edef; font-size:13px;">{g.name}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
+    {#if avatarType==='group'}
+      <div style="width:100%; margin-top:12px; background:#202c33; border-radius:8px; padding:10px;">
+        <small style="color:#00a884; font-weight:700;">Members ({groupMembers.length})</small>
+        <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height:150px; overflow:auto;">
+          {#each groupMembers as m}
+            <div style="display:flex; align-items:center; gap:8px; background:#2a3942; padding:6px 10px; border-radius:6px;">
+              <img src={m.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name||'U')}&background=00a884&color=fff`} alt="" style="width:28px;height:28px;border-radius:50%;" />
+              <span style="color:#e9edef; font-size:13px;">{m.name}</span>
+            </div>
+          {/each}
+        </div>
+      </div>
+    {/if}
   </div>
   <div class="modal-btns" style="margin-top:14px;"><button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button>{#if avatarTarget?.isSelf || avatarType==='group'}<label class="btn-primary" style="text-align:center;cursor:pointer;">{#if avatarUploading}Uploading...{:else}Change Photo{/if}<input type="file" accept="image/*" hidden disabled={avatarUploading} onchange={onAvatarFileChange} /></label>{:else}<button class="btn-primary" onclick={()=>{ showAvatarModal=false; if(avatarTarget) handleContactLoad(avatarTarget); }}>💬 Message</button>{/if}</div>
 </div></div>{/if}
@@ -400,19 +445,26 @@
 {#if showContactForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showContactForm=false} aria-label="close"></button><div class="modal"><h3>New Contact</h3><input class="modal-input" bind:value={contactEmail} placeholder="Contact Email" autocomplete="email" maxlength="100" /><div class="modal-btns"><button class="btn-primary" onclick={createContact}>{invitingUser?'Inviting...':'Invite'}</button><button class="btn-secondary" onclick={() => showContactForm=false}>Cancel</button></div></div></div>{/if}
 {#if showGroupForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showGroupForm=false} aria-label="close"></button><div class="modal"><h3>👥 Create Group</h3><input class="modal-input" bind:value={groupName} placeholder="Group Name" maxlength="50" /><div class="modal-btns"><button class="btn-secondary" onclick={()=>showGroupForm=false}>Cancel</button><button class="btn-primary" onclick={createGroup}>Create</button></div></div></div>{/if}
 {#if showTemplateModal}<TemplatePopup templates={templates} loading={templateLoading} on:close={()=>showTemplateModal=false} on:use={handleUseTemplate} on:new={handleCreateTemplate} on:create={handleCreateTemplate} on:deleted={(e)=>{ templates=templates.filter(t=>t.id!==e.detail.template.id); }} />{/if}
-{#if showTemplateForm && selectedTemplate}<div style="position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);"><TemplateForm template={selectedTemplate} on:close={()=>{ showTemplateForm=false; selectedTemplate=null; }} on:submit={sendTemplateReport} /></div>{/if}
+{#if showTemplateForm && selectedTemplate}<div style="position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);"><TemplateForm template={selectedTemplate} on:close={()=>{ showTemplateForm=false; selectedTemplate=null; }} onsubmit={sendTemplateReport} /></div>{/if}
+
+{#if showIncomingModal && selectedIncoming}
+<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showIncomingModal=false} aria-label="close"></button><div class="modal"><h3>📩 New Invite</h3><p style="color:#e9edef;">{selectedIncoming.inviterProfile?.name || selectedIncoming.email} invited you</p><div class="modal-btns"><button class="btn-primary" onclick={acceptIncoming}>Accept</button><button class="btn-secondary" onclick={rejectIncoming}>Reject</button></div></div></div>
+{/if}
+{#if showInviteModal && selectedInvite}
+<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showInviteModal=false} aria-label="close"></button><div class="modal"><h3>Invite Status</h3><p style="color:#e9edef;">Invite to {selectedInvite.email} is {selectedInvite.status}</p><div class="modal-btns"><button class="btn-secondary" onclick={()=>showInviteModal=false}>Close</button></div></div></div>
+{/if}
 
 <style>
-	.main-container{display:flex;height:100dvh;max-height:100dvh;width:100vw;background:#111b21;overflow:hidden;font-family:Inter,Segoe UI,sans-serif; contain: layout style;}
-	.sidebar-wrapper{width:30%;min-width:300px;max-width:420px;display:flex;flex-direction:column;border-right:1px solid #222d34;background:#111b21;overflow:hidden;height:100dvh;max-height:100dvh;}
-	.sidebar-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden; -webkit-overflow-scrolling:touch; contain: content;}
-	.bottom-fixed{flex-shrink:0;height:68px;min-height:68px;background:#202c33;border-top:1px solid #2a3942;display:flex;justify-content:space-around;align-items:center;z-index:20;padding-bottom:env(safe-area-inset-bottom);}
-	.bottom-fixed button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#8696a0;cursor:pointer;flex:1;padding:6px; -webkit-tap-highlight-color:transparent;}
+	.main-container{display:flex;height:100dvh;max-height:100dvh;width:100vw;background:#111b21;overflow:hidden;font-family:Inter,Segoe UI,sans-serif;}
+	.sidebar-wrapper{width:30%;min-width:300px;max-width:420px;display:flex;flex-direction:column;border-right:1px solid #222d34;background:#111b21;overflow:hidden;height:100dvh;}
+	.sidebar-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
+	.bottom-fixed{flex-shrink:0;height:68px;min-height:68px;background:#202c33;border-top:1px solid #2a3942;display:flex;justify-content:space-around;align-items:center;z-index:20;}
+	.bottom-fixed button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#8696a0;cursor:pointer;flex:1;padding:6px;}
 	.bottom-fixed button.active{color:#00a884;}.b-icon{font-size:20px;line-height:1;}.bottom-fixed small{font-size:11px;font-weight:600;}
 	.chat-area{flex:1;display:flex;flex-direction:column;background:#0b141a;min-width:0;height:100dvh;max-height:100dvh;overflow:hidden;}
 	.chat-header-fixed{flex-shrink:0;z-index:10;}.filter-fixed{flex-shrink:0;background:#f0f2f5;border-bottom:1px solid #d1d7db;padding:6px 10px;z-index:9;}
 	.mode-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}.dd-wrap{position:relative;}
-	.mode-btn{background:white;border:1px solid #d1d7db;padding:6px 10px;border-radius:6px;display:flex;gap:6px;align-items:center;cursor:pointer;font-size:12px;white-space:nowrap;}
+	.mode-btn{background:white;border:1px solid #d1d7db;padding:6px 10px;border-radius:6px;display:flex;gap:6px;align-items:center;cursor:pointer;font-size:12px;}
 	.list-btn{background:white;border:1px solid #d1d7db;padding:6px 10px;border-radius:6px;display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;font-size:12px;min-width:180px;max-width:260px;}
 	.cut{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;text-align:left;}.second{flex:1;min-width:150px;}.arr{color:#667781;font-size:10px;}
 	.dd{position:absolute;left:0;top:38px;background:white;border:1px solid #d1d7db;border-radius:10px;z-index:300;min-width:220px;max-height:280px;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,0.15);}

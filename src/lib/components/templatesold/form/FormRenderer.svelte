@@ -166,7 +166,7 @@
     bind:value={values[field.field_name]}
     placeholder={field.placeholder}
     readonly={field.readonly}
-    on:input={(e) => update(field, e.currentTarget.value)}
+    oninput={(e) => update(field, e.currentTarget.value)}
 />
 
 {:else if field.field_type === "number"}
@@ -176,7 +176,7 @@
     bind:value={values[field.field_name]}
     placeholder={field.placeholder}
     readonly={field.readonly}
-    on:input={(e) => update(field, e.currentTarget.value)}
+    oninput={(e) => update(field, e.currentTarget.value)}
 />
 
 {:else if field.field_type === "textarea"}
@@ -186,7 +186,7 @@
     bind:value={values[field.field_name]}
     placeholder={field.placeholder}
     readonly={field.readonly}
-    on:input={(e) => update(field, e.currentTarget.value)}
+    oninput={(e) => update(field, e.currentTarget.value)}
 ></textarea>
 
 {:else if field.field_type === "dropdown"}
@@ -194,7 +194,7 @@
 <select
     bind:value={values[field.field_name]}
     disabled={field.readonly}
-    on:change={(e) => update(field, e.currentTarget.value)}
+    onchange={(e) => update(field, e.currentTarget.value)}
 >
 
 <option value="">Select...</option>

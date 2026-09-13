@@ -44,7 +44,7 @@
                 <div 
                     class="chat-item" 
                     class:active={selectedId === group.id}
-                    on:click={() => dispatch('select', { ...group, type: 'group' })}
+                    onclick={() => dispatch('select', { ...group, type: 'group' })}
                 >
                     <div class="avatar group">📁</div>
                     <div class="chat-info">
@@ -57,7 +57,7 @@
                 <div 
                     class="chat-item" 
                     class:active={selectedId === contact.room_id}
-                    on:click={() => dispatch('select', contact)}
+                    onclick={() => dispatch('select', contact)}
                 >
                     <div class="avatar">
                         {#if contact.avatar_url}<img src={contact.avatar_url} alt=""/>{:else}👤{/if}

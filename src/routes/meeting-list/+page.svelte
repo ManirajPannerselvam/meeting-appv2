@@ -56,14 +56,13 @@ function getMeetingStatus(meeting: any): string {
     if (meetingDateTime > now) return "Upcoming"; return "Overdue";
 }
 
-// YOUR FOLDERS: meetings/[id] , meetings/edit/[id] , minutes/[id]
 function viewMeeting(id:number){ goto(`/meetings/${id}`); }
 function editMeeting(id:number){ goto(`/meetings/edit/${id}`); }
 function minutesMeeting(id:number){ goto(`/minutes/${id}`); }
 
 async function handleDeleteMeeting(id:number){
     if(!confirm("Delete this meeting?")) return;
-    await removeMeeting(id); await refreshMeetings();
+    try{ await removeMeeting(id); await refreshMeetings(); }catch(e){ console.error(e); }
 }
 function resetFilters(){ search=""; selectedType="All"; showHistory=false; currentPage=1; }
 function formatTime(t: string | null | undefined) {
@@ -92,7 +91,7 @@ function nextPage(){ if(currentPage<totalPages) currentPage++; }
 <div class="page">
   <div class="page-header">
     <div><h1>📋 Meetings</h1><p>Manage all scheduled meetings</p></div>
-    <button class="new desktop-only" on:click={() => goto("/meetings")}>➕ New Meeting</button>
+    <button class="new desktop-only" onclick={() => goto("/meetings")}>➕ New Meeting</button>
   </div>
 
   <div class="cards">
@@ -103,15 +102,15 @@ function nextPage(){ if(currentPage<totalPages) currentPage++; }
   </div>
 
   <div class="toolbar">
-      <input type="text" bind:value={search} on:input={onFilterChange} placeholder="🔍 Search title, type, location..." />
-      <select bind:value={selectedType} on:change={onFilterChange}>
+      <input type="text" bind:value={search} oninput={onFilterChange} placeholder="🔍 Search title, type, location..." />
+      <select bind:value={selectedType} onchange={onFilterChange}>
           {#each meetingTypes as type}<option value={type}>{type}</option>{/each}
       </select>
       <div class="toolbar-row">
-        <button class:active={!showHistory} on:click={() => { showHistory = false; onFilterChange(); }}>📋 Active</button>
-        <button class:active={showHistory} on:click={() => { showHistory = true; onFilterChange(); }}>📜 History</button>
-        <button class="reset" on:click={resetFilters}>Reset</button>
-        <button class="new mobile-only" on:click={() => goto("/meetings")}>➕ New</button>
+        <button class:active={!showHistory} onclick={() => { showHistory = false; onFilterChange(); }}>📋 Active</button>
+        <button class:active={showHistory} onclick={() => { showHistory = true; onFilterChange(); }}>📜 History</button>
+        <button class="reset" onclick={resetFilters}>Reset</button>
+        <button class="new mobile-only" onclick={() => goto("/meetings")}>➕ New</button>
       </div>
   </div>
 
@@ -146,7 +145,7 @@ function nextPage(){ if(currentPage<totalPages) currentPage++; }
                           {:else if getMeetingStatus(meeting) === "Upcoming"}<span class="badge upcoming">Upcoming</span>
                           {:else}<span class="badge overdue">Overdue</span>{/if}
                       </td>
-                      <td><div class="actions"><button class="view" on:click={() => viewMeeting(meeting.id)}>👁</button><button class="edit" on:click={() => editMeeting(meeting.id)}>✏</button><button class="minutes" on:click={() => minutesMeeting(meeting.id)}>📝</button><button class="delete" on:click={() => handleDeleteMeeting(meeting.id)}>🗑</button></div></td>
+                      <td><div class="actions"><button class="view" onclick={() => viewMeeting(meeting.id)}>👁</button><button class="edit" onclick={() => editMeeting(meeting.id)}>✏</button><button class="minutes" onclick={() => minutesMeeting(meeting.id)}>📝</button><button class="delete" onclick={() => handleDeleteMeeting(meeting.id)}>🗑</button></div></td>
                   </tr>
               {/each}
           {/if}
@@ -158,7 +157,7 @@ function nextPage(){ if(currentPage<totalPages) currentPage++; }
           <div class="empty">📭 No meetings found.</div>
         {:else}
           {#each paginatedMeetings as meeting (meeting.id)}
-            <div class="m-card" on:click={() => viewMeeting(meeting.id)}>
+            <div class="m-card" onclick={() => viewMeeting(meeting.id)} role="button" tabindex="0" onkeydown={(e)=>{ if(e.key==='Enter') viewMeeting(meeting.id); }}>
               <div class="m-head"><strong class="m-title">#{meeting.id} {meeting.title}</strong><span class="type-badge">{meeting.type || "-"}</span></div>
               <div class="m-row"><span>📅 {formatDate(meeting.meeting_date)}</span><span>🕒 {formatTime(meeting.start_time)} - {formatTime(meeting.end_time)}</span></div>
               <div class="m-row"><span>📍 {meeting.location || "-"}</span><span>👤 {meeting.organizer || "-"}</span></div>
@@ -171,10 +170,10 @@ function nextPage(){ if(currentPage<totalPages) currentPage++; }
                 <span class="priority {meeting.priority?.toLowerCase()}">{meeting.priority || "Low"}</span>
               </div>
               <div class="m-actions">
-                <button class="view" on:click|stopPropagation={() => viewMeeting(meeting.id)}>👁</button>
-                <button class="edit" on:click|stopPropagation={() => editMeeting(meeting.id)}>✏</button>
-                <button class="minutes" on:click|stopPropagation={() => minutesMeeting(meeting.id)}>📝</button>
-                <button class="delete" on:click|stopPropagation={() => handleDeleteMeeting(meeting.id)}>🗑</button>
+                <button class="view" onclick={(e) => { e.stopPropagation(); viewMeeting(meeting.id); }}>👁</button>
+                <button class="edit" onclick={(e) => { e.stopPropagation(); editMeeting(meeting.id); }}>✏</button>
+                <button class="minutes" onclick={(e) => { e.stopPropagation(); minutesMeeting(meeting.id); }}>📝</button>
+                <button class="delete" onclick={(e) => { e.stopPropagation(); handleDeleteMeeting(meeting.id); }}>🗑</button>
               </div>
             </div>
           {/each}
@@ -183,7 +182,7 @@ function nextPage(){ if(currentPage<totalPages) currentPage++; }
       {/if}
   </div>
 
-  <div class="pagination"><button on:click={previousPage} disabled={currentPage === 1}>⬅ Prev</button><span>Page <b>{currentPage}</b> of <b>{totalPages}</b> ({filteredMeetings.length})</span><button on:click={nextPage} disabled={currentPage === totalPages}>Next ➜</button></div>
+  <div class="pagination"><button onclick={previousPage} disabled={currentPage === 1}>⬅ Prev</button><span>Page <b>{currentPage}</b> of <b>{totalPages}</b> ({filteredMeetings.length})</span><button onclick={nextPage} disabled={currentPage === totalPages}>Next ➜</button></div>
 </div>
 
 <style>

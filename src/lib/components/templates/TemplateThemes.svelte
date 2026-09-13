@@ -87,7 +87,7 @@
 
 <div class="theme-grid">
   {#each themes as th}
-    <button class="theme-card" class:active={selectedTheme===th.id} on:click={()=>{ selectedTheme=th.id; onSelect(th.id); }}>
+    <button class="theme-card" class:active={selectedTheme===th.id} onclick={()=>{ selectedTheme=th.id; onSelect(th.id); }}>
       <div class="theme-top" style="background:{th.card}; border-top:4px solid {th.primary}">
         <div class="dot" style="background:{th.primary}"></div>
         <b>{th.name}</b>

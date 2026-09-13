@@ -45,7 +45,7 @@ function printReport() {
 
 <div class="toolbar">
 
-    <button on:click={printReport}>
+    <button onclick={printReport}>
 
         🖨 Print Report
 

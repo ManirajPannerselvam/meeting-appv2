@@ -576,7 +576,7 @@
 
         <button
             class="blue refresh-button"
-            on:click={loadWorkflows}
+            onclick={loadWorkflows}
             disabled={loading}
         >
             {loading ? "Refreshing..." : "↻ Refresh"}
@@ -653,7 +653,7 @@
 
             <button
                 class="orange export-button"
-                on:click={exportWorkflowCSV}
+                onclick={exportWorkflowCSV}
                 disabled={filteredWorkflows.length === 0}
             >
                 📤 Export CSV
@@ -762,7 +762,7 @@
                                 <td>
                                     <button
                                         class="small blue"
-                                        on:click={() =>
+                                        onclick={() =>
                                             openWorkflow(workflow)
                                         }
                                     >
@@ -786,7 +786,7 @@
         <div class="pagination">
 
             <button
-                on:click={previousPage}
+                onclick={previousPage}
                 disabled={currentPage === 1}
             >
                 ◀ Previous
@@ -797,7 +797,7 @@
             </span>
 
             <button
-                on:click={nextPage}
+                onclick={nextPage}
                 disabled={currentPage === totalPages}
             >
                 Next ▶
@@ -975,7 +975,7 @@
 
             <button
                 class="blue"
-                on:click={exportWorkflowCSV}
+                onclick={exportWorkflowCSV}
                 disabled={filteredWorkflows.length === 0}
             >
                 Export CSV
@@ -983,7 +983,7 @@
 
             <button
                 class="orange"
-                on:click={() => window.print()}
+                onclick={() => window.print()}
             >
                 Print Report
             </button>
@@ -1061,7 +1061,7 @@
     <div
         class="overlay"
         role="presentation"
-        on:click={(event) => {
+        onclick={(event) => {
             if (event.target === event.currentTarget) {
                 closeDialog();
             }
@@ -1089,7 +1089,7 @@
 
                 <button
                     class="close"
-                    on:click={closeDialog}
+                    onclick={closeDialog}
                     disabled={actionLoading}
                     aria-label="Close"
                 >
@@ -1192,7 +1192,7 @@
 
                         <button
                             class="small blue"
-                            on:click={assignReviewer}
+                            onclick={assignReviewer}
                             disabled={
                                 actionLoading ||
                                 !assignedReviewer
@@ -1285,7 +1285,7 @@
 
                 <button
                     class="secondary"
-                    on:click={closeDialog}
+                    onclick={closeDialog}
                     disabled={actionLoading}
                 >
                     Cancel
@@ -1293,7 +1293,7 @@
 
                 <button
                     class="red"
-                    on:click={rejectWorkflow}
+                    onclick={rejectWorkflow}
                     disabled={actionLoading}
                 >
                     {actionLoading ? "Processing..." : "Reject"}
@@ -1301,7 +1301,7 @@
 
                 <button
                     class="green"
-                    on:click={approveWorkflow}
+                    onclick={approveWorkflow}
                     disabled={actionLoading}
                 >
                     {actionLoading ? "Processing..." : "Approve"}
@@ -2090,3 +2090,4 @@
     }
 </style>
 ```
+

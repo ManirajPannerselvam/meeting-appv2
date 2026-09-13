@@ -20,7 +20,7 @@
 				{:else}ℹ️{/if}
 			</span>
 			<span class="message">{item.message}</span>
-			<button class="close" on:click={() => toast.remove(item.id)}>✕</button>
+			<button class="close" onclick={() => toast.remove(item.id)}>✕</button>
 		</div>
 	{/each}
 </div>

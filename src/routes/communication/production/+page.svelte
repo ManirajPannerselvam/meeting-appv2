@@ -263,11 +263,11 @@
 	<div class="card">
 		<h2>⚡ Actions</h2>
 		<div class="buttonRow">
-			<button class="save" on:click={saveProduction}>💾 Save Draft</button>
-			<button class="post" on:click={postProduction}>📤 Post Update</button>
+			<button class="save" onclick={saveProduction}>💾 Save Draft</button>
+			<button class="post" onclick={postProduction}>📤 Post Update</button>
 			<button
 				class="clear"
-				on:click={() => {
+				onclick={() => {
 					data.majorIssue = "";
 					data.actionTaken = "";
 					data.supportRequired = "";

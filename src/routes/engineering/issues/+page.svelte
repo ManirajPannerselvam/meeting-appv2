@@ -160,7 +160,7 @@ bind:value={issue.remarks}>
 
 <button
 class="save"
-on:click={saveIssue}
+onclick={saveIssue}
 >
 
 💾 Save Engineering Issue

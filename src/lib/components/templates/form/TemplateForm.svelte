@@ -99,27 +99,27 @@
 </script>
 
 <div class="form-overlay">
-  <div class="header"><h3>📋 {template.name}</h3><button on:click={()=>dispatch('close')}>✕</button></div>
+  <div class="header"><h3>📋 {template.name}</h3><button onclick={()=>dispatch('close')}>✕</button></div>
   <div class="body">
     {#each fields as f}
       <div class="fg">
         <label>{f.label}</label>
         {#if f.field_type === 'dropdown' || f.type === 'dropdown'}
-          <select id={f.field_name} value={values[f.field_name]} on:change={(e)=>onInput(e,f)}>
+          <select id={f.field_name} value={values[f.field_name]} onchange={(e)=>onInput(e,f)}>
             <option value="">Select</option>
             {#each parseOptions(f.options) as opt}<option value={opt}>{opt}</option>{/each}
           </select>
         {:else if f.field_type === 'formula' || f.type === 'formula'}
           <input id={f.field_name} type="text" readonly class="formula-input" value={calcFormula(f.formula) + " %"} />
         {:else}
-          <input id={f.field_name} type="text" value={values[f.field_name]??""} placeholder={f.placeholder} on:input={(e)=>onInput(e,f)} />
+          <input id={f.field_name} type="text" value={values[f.field_name]??""} placeholder={f.placeholder} oninput={(e)=>onInput(e,f)} />
         {/if}
       </div>
     {/each}
   </div>
   <div class="footer">
-    <button on:click={()=>dispatch('close')}>Cancel</button>
-    <button on:click={send}>Send Report</button>
+    <button onclick={()=>dispatch('close')}>Cancel</button>
+    <button onclick={send}>Send Report</button>
   </div>
 </div>
 

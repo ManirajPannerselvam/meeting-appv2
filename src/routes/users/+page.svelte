@@ -95,11 +95,11 @@
 		</div>
 
 		<div class="actions">
-			<button on:click={() => goto('/users/create')}>
+			<button onclick={() => goto('/users/create')}>
 				➕ New User
 			</button>
 
-			<button on:click={() => goto('/users/import')}>
+			<button onclick={() => goto('/users/import')}>
 				📥 Import
 			</button>
 
@@ -220,7 +220,7 @@
 
 						<td>
 
-							<button on:click={() => goto(`/users/${user.id}`)}>
+							<button onclick={() => goto(`/users/${user.id}`)}>
 								View
 							</button>
 

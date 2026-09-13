@@ -212,11 +212,11 @@ async function importRoles(event:Event){
             <p>Enterprise User Role Administration</p>
         </div>
         <div class="header-actions">
-            <button class="green" on:click={newRole}>➕ New Role</button>
+            <button class="green" onclick={newRole}>➕ New Role</button>
             <label class="blue upload">
-                📥 Import <input hidden type="file" accept=".csv" on:change={importRoles}/>
+                📥 Import <input hidden type="file" accept=".csv" onchange={importRoles}/>
             </label>
-            <button class="orange" on:click={exportRoles} disabled={exportingRoles}>📤 Export</button>
+            <button class="orange" onclick={exportRoles} disabled={exportingRoles}>📤 Export</button>
         </div>
     </div>
 
@@ -268,10 +268,10 @@ async function importRoles(event:Event){
                     <td><span class="status" class:active={role.status==="Active"} class:inactive={role.status==="Inactive"}>{role.status}</span></td>
                     <td>
                         <div class="actions">
-                            <button class="small blue" on:click={() => editRole(role)}>Edit</button>
-                            <button class="small green" on:click={() => duplicateRole(role)}>Copy</button>
-                            <button class="small orange" on:click={() => exportPermissions(role)}>Export</button>
-                            <button class="small red" on:click={() => confirmDelete(role)}>Delete</button>
+                            <button class="small blue" onclick={() => editRole(role)}>Edit</button>
+                            <button class="small green" onclick={() => duplicateRole(role)}>Copy</button>
+                            <button class="small orange" onclick={() => exportPermissions(role)}>Export</button>
+                            <button class="small red" onclick={() => confirmDelete(role)}>Delete</button>
                         </div>
                     </td>
                 </tr>
@@ -299,7 +299,7 @@ async function importRoles(event:Event){
     <div class="dialog">
         <div class="dialog-header">
             <h2>{editMode? "Edit Role" : "Create Role"}</h2>
-            <button class="close" on:click={() => showRoleDialog = false}>✕</button>
+            <button class="close" onclick={() => showRoleDialog = false}>✕</button>
         </div>
 
         <div class="form-grid">
@@ -320,7 +320,7 @@ async function importRoles(event:Event){
         <div class="permission-grid">
             {#each permissions as permission}
             <label class="permission-item">
-                <input type="checkbox" checked={roleForm.permissions.includes(permission)} on:change={() => togglePermission(permission)}/>
+                <input type="checkbox" checked={roleForm.permissions.includes(permission)} onchange={() => togglePermission(permission)}/>
                 <span>{permission}</span>
             </label>
             {/each}
@@ -336,8 +336,8 @@ async function importRoles(event:Event){
         {/if}
 
         <div class="dialog-footer">
-            <button class="secondary" on:click={() => showRoleDialog = false}>Cancel</button>
-            <button class="green" on:click={saveRole}>💾 Save Role</button>
+            <button class="secondary" onclick={() => showRoleDialog = false}>Cancel</button>
+            <button class="green" onclick={saveRole}>💾 Save Role</button>
         </div>
     </div>
 </div>
@@ -350,8 +350,8 @@ async function importRoles(event:Event){
         <h2>Delete Role</h2>
         <p>Delete <b>{selectedRole?.role_name}</b>?</p>
         <div class="dialog-footer">
-            <button class="secondary" on:click={() => showDeleteDialog = false}>Cancel</button>
-            <button class="red" on:click={deleteRole}>Delete</button>
+            <button class="secondary" onclick={() => showDeleteDialog = false}>Cancel</button>
+            <button class="red" onclick={deleteRole}>Delete</button>
         </div>
     </div>
 </div>

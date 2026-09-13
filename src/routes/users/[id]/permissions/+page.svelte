@@ -103,7 +103,7 @@
 			<p>Configure access rights for this user.</p>
 		</div>
 
-		<button class="save" on:click={savePermissions}>
+		<button class="save" onclick={savePermissions}>
 			Save Changes
 		</button>
 

@@ -182,7 +182,7 @@ function handleShare() {
 
         <button
             class="close-btn"
-            on:click={() => dispatch("close")}
+            onclick={() => dispatch("close")}
         >
             ✕
         </button>
@@ -213,7 +213,7 @@ function handleShare() {
 
                         <select
                             value={formData[field.field_name]}
-                            on:change={(e)=>handleInput(field,e)}
+                            onchange={(e)=>handleInput(field,e)}
                         >
                             <option value="">
                                 Select...
@@ -242,7 +242,7 @@ function handleShare() {
                             type="number"
                             step="any"
                             value={formData[field.field_name]}
-                            on:input={(e)=>handleInput(field,e)}
+                            oninput={(e)=>handleInput(field,e)}
                             placeholder={field.placeholder}
                         />
 
@@ -251,7 +251,7 @@ function handleShare() {
                         <input
                             type="text"
                             value={formData[field.field_name]}
-                            on:input={(e)=>handleInput(field,e)}
+                            oninput={(e)=>handleInput(field,e)}
                             placeholder={field.placeholder}
                         />
 
@@ -277,7 +277,7 @@ function handleShare() {
 
         <button
             class="btn-secondary"
-            on:click={() => dispatch("close")}
+            onclick={() => dispatch("close")}
         >
             Cancel
         </button>
@@ -285,7 +285,7 @@ function handleShare() {
         <button
             class="btn-primary"
             disabled={!fields.length}
-            on:click={handleShare}
+            onclick={handleShare}
         >
             Send Report
         </button>

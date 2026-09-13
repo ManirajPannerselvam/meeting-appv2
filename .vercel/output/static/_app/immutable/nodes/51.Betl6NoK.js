@@ -1,0 +1,1 @@
+import"../chunks/DsnmJJEf.js";import"../chunks/69_IOA4Y.js";import{o as a}from"../chunks/Bpx6c5oK.js";import{p as n,b as i}from"../chunks/CDaHMpGh.js";import{i as s}from"../chunks/DL5Wm0JN.js";function d(e,o){n(o,!1);async function t(){(await(await fetch("/api/meetings")).json()).meetings}a(t),s(),i()}export{d as component};

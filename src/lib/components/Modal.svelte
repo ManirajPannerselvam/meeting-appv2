@@ -20,7 +20,7 @@
 
 	class="modal-overlay"
 
-	on:click={handleBackdrop}
+	onclick={handleBackdrop}
 
 >
 
@@ -44,7 +44,7 @@
 
 				class="close"
 
-				on:click={() => close?.()}
+				onclick={() => close?.()}
 
 			>
 

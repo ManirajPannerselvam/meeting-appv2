@@ -49,42 +49,42 @@
 </script>
 
 <div class="grid">
-	<div class="card blue" role="button" tabindex="0" on:click={() => open("all")} on:keydown={(e) => handleKeydown(e, "all")}>
+	<div class="card blue" role="button" tabindex="0" onclick={() => open("all")} onkeydown={(e) => handleKeydown(e, "all")}>
 	<h2>{stats.total}</h2>
 	<p>Total Meetings</p>
 	</div>
 
-	<div class="card green" role="button" tabindex="0" on:click={() => open("today")} on:keydown={(e) => handleKeydown(e, "today")}>
+	<div class="card green" role="button" tabindex="0" onclick={() => open("today")} onkeydown={(e) => handleKeydown(e, "today")}>
 	<h2>{stats.today}</h2>
 	<p>Today's Meetings</p>
 	</div>
 
-	<div class="card cyan" role="button" tabindex="0" on:click={() => open("upcoming")} on:keydown={(e) => handleKeydown(e, "upcoming")}>
+	<div class="card cyan" role="button" tabindex="0" onclick={() => open("upcoming")} onkeydown={(e) => handleKeydown(e, "upcoming")}>
 		<h2>{stats.upcoming}</h2>
 	<p>Upcoming</p>
 	</div>
 
-	<div class="card teal" role="button" tabindex="0" on:click={() => open("progress")} on:keydown={(e) => handleKeydown(e, "progress")}>
+	<div class="card teal" role="button" tabindex="0" onclick={() => open("progress")} onkeydown={(e) => handleKeydown(e, "progress")}>
 	<h2>{stats.progress}</h2>
 	<p>In Progress</p>
 	</div>
 
-	<div class="card gray" role="button" tabindex="0" on:click={() => open("completed")} on:keydown={(e) => handleKeydown(e, "completed")}>
+	<div class="card gray" role="button" tabindex="0" onclick={() => open("completed")} onkeydown={(e) => handleKeydown(e, "completed")}>
 		<h2>{stats.completed}</h2>
 		<p>Completed</p>
 	</div>
 
-	<div class="card red" role="button" tabindex="0" on:click={() => open("overdue")} on:keydown={(e) => handleKeydown(e, "overdue")}>
+	<div class="card red" role="button" tabindex="0" onclick={() => open("overdue")} onkeydown={(e) => handleKeydown(e, "overdue")}>
 		<h2>{stats.overdue}</h2>
 		<p>Overdue</p>
 	</div>
 
-	<div class="card danger" role="button" tabindex="0" on:click={() => open("critical")} on:keydown={(e) => handleKeydown(e, "critical")}>
+	<div class="card danger" role="button" tabindex="0" onclick={() => open("critical")} onkeydown={(e) => handleKeydown(e, "critical")}>
 	<h2>{stats.critical}</h2>
 	<p>Critical Priority</p>
 	</div>
 
-	<div class="card orange" role="button" tabindex="0" on:click={() => open("high")} on:keydown={(e) => handleKeydown(e, "high")}>
+	<div class="card orange" role="button" tabindex="0" onclick={() => open("high")} onkeydown={(e) => handleKeydown(e, "high")}>
 	<h2>{stats.high}</h2>
 		<p>High Priority</p>
 	</div>

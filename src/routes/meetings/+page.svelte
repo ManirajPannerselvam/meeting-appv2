@@ -36,8 +36,8 @@
 
 <div class="page">
   <div class="topbar">
-    <div class="left"><button class="back" on:click={()=>goto("/meeting-list")}>←</button><div><h1>New Meeting</h1><small>{referenceNo}</small></div></div>
-    <div class="right desktop"><button class="btn ghost" on:click={clearForm}>Reset</button><button class="btn black" on:click={saveMeeting} disabled={loading}>Save</button></div>
+    <div class="left"><button class="back" onclick={()=>goto("/meeting-list")}>←</button><div><h1>New Meeting</h1><small>{referenceNo}</small></div></div>
+    <div class="right desktop"><button class="btn ghost" onclick={clearForm}>Reset</button><button class="btn black" onclick={saveMeeting} disabled={loading}>Save</button></div>
   </div>
 
   <div class="content">
@@ -78,16 +78,16 @@
       <div class="card sticky">
         <h2>Progress {progress}%</h2>
         <div class="bar"><div style="width:{progress}%"></div></div>
-        <button class="btn black full" on:click={saveMeeting} disabled={loading}>💾 Save Meeting</button>
-        <button class="btn ghost full mt" on:click={clearForm}>Reset</button>
+        <button class="btn black full" onclick={saveMeeting} disabled={loading}>💾 Save Meeting</button>
+        <button class="btn ghost full mt" onclick={clearForm}>Reset</button>
       </div>
     </div>
   </div>
 
   <div class="bottombar">
-    <button class="btn ghost" on:click={clearForm}>Reset</button>
-    <button class="btn ghost" on:click={()=>goto("/meeting-list")}>Cancel</button>
-    <button class="btn black" on:click={saveMeeting} disabled={loading}>Save</button>
+    <button class="btn ghost" onclick={clearForm}>Reset</button>
+    <button class="btn ghost" onclick={()=>goto("/meeting-list")}>Cancel</button>
+    <button class="btn black" onclick={saveMeeting} disabled={loading}>Save</button>
   </div>
 </div>
 

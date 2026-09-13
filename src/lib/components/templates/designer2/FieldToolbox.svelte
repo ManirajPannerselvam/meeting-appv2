@@ -313,7 +313,7 @@
                 type="button"
                 class="clear-search"
                 aria-label="Clear search"
-                on:click={() => search = ""}
+                onclick={() => search = ""}
             >
                 ×
             </button>
@@ -351,8 +351,8 @@
                 draggable="true"
                 title={`Add ${tool.name}`}
                 aria-label={`Add ${tool.name} field`}
-                on:click={() => addTool(tool)}
-                on:keydown={(event) =>
+                onclick={() => addTool(tool)}
+                onkeydown={(event) =>
                     handleKeydown(event, tool)
                 }
                 on:dragstart={(event) =>

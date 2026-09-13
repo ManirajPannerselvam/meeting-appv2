@@ -64,7 +64,7 @@
         bind:value={keyword}
         placeholder="Search Machine / Reason...">
 
-    <button on:click={add}>
+    <button onclick={add}>
         + Add Downtime
     </button>
 
@@ -164,13 +164,13 @@ No downtime records found.
 
 <td>
 
-<button class="edit" on:click={() => edit(row.id)}>
+<button class="edit" onclick={() => edit(row.id)}>
 
 Edit
 
 </button>
 
-<button class="delete" on:click={() => remove(row.id)}>
+<button class="delete" onclick={() => remove(row.id)}>
 
 Delete
 

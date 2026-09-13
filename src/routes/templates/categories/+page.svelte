@@ -153,7 +153,7 @@ Loading...
 
 		<button
 			class="primary"
-			on:click={newCategory}
+			onclick={newCategory}
 		>
 			+ New Category
 		</button>
@@ -207,14 +207,14 @@ Loading...
 
 				<button
 					class="edit"
-					on:click={() => edit(category)}
+					onclick={() => edit(category)}
 				>
 					Edit
 				</button>
 
 				<button
 					class="delete"
-					on:click={() => remove(category)}
+					onclick={() => remove(category)}
 				>
 					Delete
 				</button>
@@ -280,14 +280,14 @@ Loading...
 		<div class="footer">
 
 			<button
-				on:click={() => showModal=false}
+				onclick={() => showModal=false}
 			>
 				Cancel
 			</button>
 
 			<button
 				class="primary"
-				on:click={save}
+				onclick={save}
 			>
 				Save
 			</button>

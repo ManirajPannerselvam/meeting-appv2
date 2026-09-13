@@ -37,4 +37,4 @@
 <input placeholder="Reason" bind:value={reason} />
 <input type="number" placeholder="Minutes" bind:value={duration} />
 
-<button on:click={save}>Save</button>
+<button onclick={save}>Save</button>

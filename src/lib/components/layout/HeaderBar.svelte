@@ -44,22 +44,22 @@
 	<div class="right">
 		<span class="online">● {online ? 'Online' : 'Offline'}</span>
 		<div class="user-wrap">
-			<button class="user-pill" on:click={()=> userMenuOpen=!userMenuOpen}>
+			<button class="user-pill" onclick={()=> userMenuOpen=!userMenuOpen}>
 				{displayEmail()} ▾
 			</button>
 			{#if userMenuOpen}
 			<div class="dropdown">
 				<div class="email">{displayEmail()}</div>
 				<div class="line"></div>
-				<button on:click={()=>navigate('/users')}><span>👥</span> Users</button>
-				<button on:click={()=>navigate('/settings')}><span>⚙️</span> Settings</button>
-				<button on:click={()=>navigate('/admin')}><span>🛡️</span> Admin</button>
-				<button on:click={()=>navigate('/templates')}><span>📄</span> Templates</button>
+				<button onclick={()=>navigate('/users')}><span>👥</span> Users</button>
+				<button onclick={()=>navigate('/settings')}><span>⚙️</span> Settings</button>
+				<button onclick={()=>navigate('/admin')}><span>🛡️</span> Admin</button>
+				<button onclick={()=>navigate('/templates')}><span>📄</span> Templates</button>
 				<div class="line"></div>
 				{#if user}
-					<button class="logout-btn" on:click={handleLogout}><span>🚪</span> Logout</button>
+					<button class="logout-btn" onclick={handleLogout}><span>🚪</span> Logout</button>
 				{:else}
-					<button class="login-btn" on:click={handleLogin}><span>🔑</span> Login</button>
+					<button class="login-btn" onclick={handleLogin}><span>🔑</span> Login</button>
 				{/if}
 			</div>
 			{/if}

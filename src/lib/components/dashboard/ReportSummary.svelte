@@ -60,8 +60,8 @@
 		class="card blue"
 	role="button"
 		tabindex="0"
-		on:click={openReports}
-		on:keydown={handleKeydown}
+		onclick={openReports}
+		onkeydown={handleKeydown}
 	>
 	<h2>{stats.count}</h2>
 	<p>Production Reports</p>
@@ -71,8 +71,8 @@
 		class="card green"
 	role="button"
 		tabindex="0"
-		on:click={openReports}
-		on:keydown={handleKeydown}
+		onclick={openReports}
+		onkeydown={handleKeydown}
 	>
 	<h2>{fmt(stats.totalTarget)}</h2>
 	<p>Total Target</p>
@@ -82,8 +82,8 @@
 		class="card teal"
 		role="button"
 		tabindex="0"
-		on:click={openReports}
-		on:keydown={handleKeydown}
+		onclick={openReports}
+		onkeydown={handleKeydown}
 	>
 	<h2>{fmt(stats.totalActual)}</h2>
 	<p>Total Actual</p>
@@ -93,8 +93,8 @@
 		class="card orange"
 	role="button"
 		tabindex="0"
-		on:click={openReports}
-		on:keydown={handleKeydown}
+		onclick={openReports}
+		onkeydown={handleKeydown}
 	>
 	<h2>{stats.avgYield}%</h2>
 	<p>Average Yield</p>
@@ -104,8 +104,8 @@
 		class="card red"
 		role="button"
 		tabindex="0"
-		on:click={openReports}
-		on:keydown={handleKeydown}
+		onclick={openReports}
+		onkeydown={handleKeydown}
 	>
 	<h2>{fmt(stats.totalNG)}</h2>
 	<p>NG Quantity</p>
@@ -115,8 +115,8 @@
 		class="card purple"
 	role="button"
 		tabindex="0"
-		on:click={openReports}
-		on:keydown={handleKeydown}
+		onclick={openReports}
+		onkeydown={handleKeydown}
 	>
 	<h2>{stats.avgOEE}%</h2>
 	<p>Average OEE</p>

@@ -799,7 +799,7 @@
 
             <button
                 class="blue"
-                on:click={newTransaction}
+                onclick={newTransaction}
             >
                 + New Transaction
             </button>
@@ -1012,7 +1012,7 @@
 
                                         <button
                                             class="small blue"
-                                            on:click={() =>
+                                            onclick={() =>
                                                 editTransaction(
                                                     transaction
                                                 )}
@@ -1022,7 +1022,7 @@
 
                                         <button
                                             class="small red"
-                                            on:click={() =>
+                                            onclick={() =>
                                                 deleteTransaction(
                                                     transaction.transaction_id
                                                 )}
@@ -1064,7 +1064,7 @@
         <div class="pagination">
 
             <button
-                on:click={previousPage}
+                onclick={previousPage}
                 disabled={currentPage === 1}
             >
                 ◀ Previous
@@ -1076,7 +1076,7 @@
             </span>
 
             <button
-                on:click={nextPage}
+                onclick={nextPage}
                 disabled={currentPage === totalPages}
             >
                 Next ▶
@@ -1427,14 +1427,14 @@
 
             <button
                 class="blue"
-                on:click={exportLedger}
+                onclick={exportLedger}
             >
                 Export Ledger
             </button>
 
             <button
                 class="orange"
-                on:click={printLedger}
+                onclick={printLedger}
             >
                 Print Ledger
             </button>
@@ -1492,7 +1492,7 @@
     <div
         class="overlay"
         role="presentation"
-        on:click={(event) => {
+        onclick={(event) => {
             if (event.target === event.currentTarget) {
                 showDialog = false;
             }
@@ -1524,7 +1524,7 @@
                 <button
                     class="close"
                     aria-label="Close"
-                    on:click={() =>
+                    onclick={() =>
                         (showDialog = false)}
                 >
                     ✕
@@ -1679,7 +1679,7 @@
                 <button
                     class="secondary"
                     disabled={saving}
-                    on:click={() =>
+                    onclick={() =>
                         (showDialog = false)}
                 >
                     Cancel
@@ -1688,7 +1688,7 @@
                 <button
                     class="green"
                     disabled={saving}
-                    on:click={saveTransaction}
+                    onclick={saveTransaction}
                 >
                     {saving
                         ? "Saving..."
@@ -2388,3 +2388,4 @@
     }
 </style>
 ```
+

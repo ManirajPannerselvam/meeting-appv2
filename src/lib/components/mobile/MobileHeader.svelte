@@ -21,7 +21,7 @@
 
 <header class="mobile-header">
 
-    <button class="back" on:click={goBack}>
+    <button class="back" onclick={goBack}>
         ←
     </button>
 

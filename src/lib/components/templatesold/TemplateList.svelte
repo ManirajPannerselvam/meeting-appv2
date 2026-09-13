@@ -66,7 +66,7 @@
     {#each departments as d}
         <button
             class:selected={department === d}
-            on:click={() => department = d}
+            onclick={() => department = d}
         >
             {d}
         </button>
@@ -96,7 +96,7 @@
                 </div>
                 <button
                     class="use"
-                    on:click={() => dispatch("select", t)}
+                    onclick={() => dispatch("select", t)}
                 >
                     Use
                 </button>

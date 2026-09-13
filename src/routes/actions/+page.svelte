@@ -14,7 +14,7 @@
   </header>
 
   <!-- BUTTON -->
-  <button class="group-btn" on:click={toggleCore}>
+  <button class="group-btn" onclick={toggleCore}>
     {showCore ? 'Hide Core' : 'Show Core'}
   </button>
 

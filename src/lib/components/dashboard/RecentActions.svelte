@@ -45,7 +45,7 @@
 <div class="card">
 	<div class="header">
 	<h2>✅ Meeting Action Follow-ups</h2>
-	<button class="view-all" on:click={viewAll}>
+	<button class="view-all" onclick={viewAll}>
 			View All
 	</button>
 	</div>
@@ -88,7 +88,7 @@
 							<td>
 								<button
 									class="view"
-									on:click={() => openAction(item.id)}
+									onclick={() => openAction(item.id)}
 									aria-label="View action {item.id}"
 								>
 									👁

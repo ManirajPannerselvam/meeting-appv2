@@ -199,9 +199,9 @@
         <section class="section">
             <div class="section-title"><span>📝</span><div><strong>Basic Information</strong><small>Field name and display settings</small></div></div>
             <label>Label</label>
-            <input type="text" bind:value={field.label} on:input={updateLabel} placeholder="Example: Station" />
+            <input type="text" bind:value={field.label} oninput={updateLabel} placeholder="Example: Station" />
             <label>Field Name</label>
-            <input type="text" bind:value={field.field_name} on:input={updateFieldName} placeholder="station" />
+            <input type="text" bind:value={field.field_name} oninput={updateFieldName} placeholder="station" />
             <small class="hint">Internal name used by formulas. Spaces are automatically converted to underscores.</small>
         </section>
 
@@ -209,7 +209,7 @@
         <section class="section">
             <div class="section-title"><span>🧩</span><div><strong>Field Type</strong><small>Choose how users enter data</small></div></div>
             <label>Input Type</label>
-            <select bind:value={field.field_type} on:change={changeFieldType}>
+            <select bind:value={field.field_type} onchange={changeFieldType}>
                 <option value="text">📝 Text</option><option value="number">🔢 Number</option><option value="date">📅 Date</option>
                 <option value="time">⏰ Time</option><option value="dropdown">📋 Dropdown</option><option value="reference">🔗 Reference</option>
                 <option value="formula">🧮 Formula</option>
@@ -220,7 +220,7 @@
         <section class="section">
             <div class="section-title"><span>📊</span><div><strong>Report Metric</strong><small>Used for KPI calculation</small></div></div>
             <label>Metric Type</label>
-            <select bind:value={field.metric} on:change={update}>
+            <select bind:value={field.metric} onchange={update}>
                 <option value="">None</option><option value="input">Input</option><option value="output">Output</option>
                 <option value="retest">Retest</option><option value="ntf">NTF</option><option value="ot">OT</option>
                 <option value="fail">Fail</option><option value="shift">Shift</option><option value="station">Station</option>
@@ -230,12 +230,12 @@
         <!-- DISPLAY -->
         <section class="section">
             <div class="section-title"><span>👁</span><div><strong>Display Settings</strong><small>Control how the field behaves</small></div></div>
-            <label>Placeholder</label><input type="text" bind:value={field.placeholder} on:input={update} placeholder="Example: Select station" />
-            <label>Default Value</label><input type="text" bind:value={field.default_value} on:input={update} placeholder="Optional" />
+            <label>Placeholder</label><input type="text" bind:value={field.placeholder} oninput={update} placeholder="Example: Select station" />
+            <label>Default Value</label><input type="text" bind:value={field.default_value} oninput={update} placeholder="Optional" />
             <div class="checks">
-                <label class="check"><input type="checkbox" bind:checked={field.required} on:change={update} /><span><strong>Required</strong><small>User must provide a value</small></span></label>
-                <label class="check"><input type="checkbox" bind:checked={field.readonly} on:change={update} disabled={field.field_type === "formula"} /><span><strong>Readonly</strong><small>Prevent manual editing</small></span></label>
-                <label class="check"><input type="checkbox" bind:checked={field.hidden} on:change={update} /><span><strong>Hidden</strong><small>Hide from normal report entry</small></span></label>
+                <label class="check"><input type="checkbox" bind:checked={field.required} onchange={update} /><span><strong>Required</strong><small>User must provide a value</small></span></label>
+                <label class="check"><input type="checkbox" bind:checked={field.readonly} onchange={update} disabled={field.field_type === "formula"} /><span><strong>Readonly</strong><small>Prevent manual editing</small></span></label>
+                <label class="check"><input type="checkbox" bind:checked={field.hidden} onchange={update} /><span><strong>Hidden</strong><small>Hide from normal report entry</small></span></label>
             </div>
         </section>
 
@@ -243,8 +243,8 @@
         {#if field.field_type === "number"}
         <section class="section">
             <div class="section-title"><span>🔢</span><div><strong>Number Settings</strong><small>Optional number validation</small></div></div>
-            <label>Minimum Value</label><input type="number" bind:value={field.min_value} on:input={update} />
-            <label>Maximum Value</label><input type="number" bind:value={field.max_value} on:input={update} />
+            <label>Minimum Value</label><input type="number" bind:value={field.min_value} oninput={update} />
+            <label>Maximum Value</label><input type="number" bind:value={field.max_value} oninput={update} />
         </section>
         {/if}
 
@@ -254,7 +254,7 @@
             <div class="section-title"><span>📋</span><div><strong>Dropdown Options</strong><small>Add choices users can select</small></div></div>
 
             <label>Quick Option Set</label>
-            <select bind:value={selectedPreset} on:change={() => applyPreset(selectedPreset)}>
+            <select bind:value={selectedPreset} onchange={() => applyPreset(selectedPreset)}>
                 <option value="">Select predefined options...</option>
                 <option value="Station">🏭 Station List</option><option value="Shift">🕐 Shift A / B / C</option>
                 <option value="Department">🏢 Department</option><option value="Status">📋 Status</option>
@@ -262,11 +262,11 @@
                 <option value="PassFail">✔ Pass / Fail</option><option value="DayNight">☀ Day / Night</option>
                 <option value="Gender">👤 Gender</option>
             </select>
-            <button type="button" class="suggest-button" on:click={suggestPreset}>✨ Auto Detect Options</button>
+            <button type="button" class="suggest-button" onclick={suggestPreset}>✨ Auto Detect Options</button>
 
             <div class="options-header">
                 <div>Current Options <span class="count">{dropdownOptions.length}</span></div>
-                {#if dropdownOptions.length > 0}<button type="button" class="clear-button" on:click={clearOptions}>Clear</button>{/if}
+                {#if dropdownOptions.length > 0}<button type="button" class="clear-button" onclick={clearOptions}>Clear</button>{/if}
             </div>
 
             <div class="options-list">
@@ -276,17 +276,17 @@
                     {#each dropdownOptions as option, index}
                         <div class="option-row">
                             <span class="drag">⋮</span><span class="option-number">{index + 1}</span>
-                            <input value={option} on:input={(e) => { const opts = getDropdownOptions(); opts[index] = (e.currentTarget as HTMLInputElement).value; setDropdownOptions(opts); }} />
-                            <button type="button" class="move" disabled={index === 0} on:click={() => moveOption(index, "up")}>↑</button>
-                            <button type="button" class="move" disabled={index === dropdownOptions.length - 1} on:click={() => moveOption(index, "down")}>↓</button>
-                            <button type="button" class="remove" on:click={() => removeOption(index)}>×</button>
+                            <input value={option} oninput={(e) => { const opts = getDropdownOptions(); opts[index] = (e.currentTarget as HTMLInputElement).value; setDropdownOptions(opts); }} />
+                            <button type="button" class="move" disabled={index === 0} onclick={() => moveOption(index, "up")}>↑</button>
+                            <button type="button" class="move" disabled={index === dropdownOptions.length - 1} onclick={() => moveOption(index, "down")}>↓</button>
+                            <button type="button" class="remove" onclick={() => removeOption(index)}>×</button>
                         </div>
                     {/each}
                 {/if}
             </div>
             <div class="add-option">
-                <input type="text" bind:value={newOption} placeholder="Add new option..." on:keydown={(e) => { if(e.key === "Enter") { e.preventDefault(); addOption(); } }} />
-                <button type="button" on:click={addOption}>+ Add</button>
+                <input type="text" bind:value={newOption} placeholder="Add new option..." onkeydown={(e) => { if(e.key === "Enter") { e.preventDefault(); addOption(); } }} />
+                <button type="button" onclick={addOption}>+ Add</button>
             </div>
         </section>
         {/if}
@@ -296,7 +296,7 @@
         <section class="section">
             <div class="section-title"><span>🔗</span><div><strong>Reference Template</strong><small>Connect this field to another template</small></div></div>
             <label>Select Template</label>
-            <select bind:value={field.reference_template_id} on:change={update}>
+            <select bind:value={field.reference_template_id} onchange={update}>
                 <option value="">-- Select Template --</option>
                 {#each templates as t}<option value={t.id}>{t.name} {#if t.template_code}({t.template_code}){/if}</option>{/each}
             </select>
@@ -308,19 +308,19 @@
         <section class="section formula-section">
             <div class="section-title"><span>🧮</span><div><strong>Formula Builder</strong><small>Build calculations using your fields</small></div></div>
             <label>Formula</label>
-            <textarea rows="5" bind:value={field.formula} on:input={update} placeholder="Select fields and operators below"></textarea>
+            <textarea rows="5" bind:value={field.formula} oninput={update} placeholder="Select fields and operators below"></textarea>
             <div class="formula-toolbar">
-                <button type="button" on:click={() => insertFormula("(")}>(</button><button type="button" on:click={() => insertFormula(")")}>)</button>
-                <button type="button" on:click={() => insertFormula("+")}>＋</button><button type="button" on:click={() => insertFormula("-")}>−</button>
-                <button type="button" on:click={() => insertFormula("*")}>×</button><button type="button" on:click={() => insertFormula("/")}>÷</button>
-                <button type="button" on:click={() => insertFormula("%")}>%</button><button type="button" on:click={() => insertFormula("100")}>100</button>
+                <button type="button" onclick={() => insertFormula("(")}>(</button><button type="button" onclick={() => insertFormula(")")}>)</button>
+                <button type="button" onclick={() => insertFormula("+")}>＋</button><button type="button" onclick={() => insertFormula("-")}>−</button>
+                <button type="button" onclick={() => insertFormula("*")}>×</button><button type="button" onclick={() => insertFormula("/")}>÷</button>
+                <button type="button" onclick={() => insertFormula("%")}>%</button><button type="button" onclick={() => insertFormula("100")}>100</button>
             </div>
             <div class="formula-builder">
                 <div class="builder-title"><span>Available Fields</span><small>Click to insert</small></div>
                 {#if formulaFields.length}
                     <div class="field-buttons">
                         {#each formulaFields as f}
-                            <button type="button" class="field-button" on:click={() => insertFieldName(f.field_name)}>
+                            <button type="button" class="field-button" onclick={() => insertFieldName(f.field_name)}>
                                 <span class="field-icon">{f.field_type === "number"? "🔢" : f.field_type === "date"? "📅" : "▣"}</span>
                                 <span class="field-info"><strong>{f.label || f.field_name}</strong><small>&#123;{f.field_name}&#125;</small></span>
                                 <span class="insert-icon">＋</span>
@@ -331,10 +331,10 @@
             </div>
             <div class="common-formulas">
                 <div class="builder-title"><span>Common Calculations</span><small>One click</small></div>
-                <button type="button" on:click={() => useFormula("({output}/{input})*100")}><span>Yield %</span><code>&#123;output&#125; ÷ &#123;input&#125; × 100</code></button>
-                <button type="button" on:click={() => useFormula("({retest}/{input})*100")}><span>Retest %</span><code>&#123;retest&#125; ÷ &#123;input&#125; × 100</code></button>
+                <button type="button" onclick={() => useFormula("({output}/{input})*100")}><span>Yield %</span><code>&#123;output&#125; ÷ &#123;input&#125; × 100</code></button>
+                <button type="button" onclick={() => useFormula("({retest}/{input})*100")}><span>Retest %</span><code>&#123;retest&#125; ÷ &#123;input&#125; × 100</code></button>
             </div>
-            <button type="button" class="clear-formula" on:click={clearFormula}>🗑 Clear Formula</button>
+            <button type="button" class="clear-formula" onclick={clearFormula}>🗑 Clear Formula</button>
             {#if formulaError}<div class="formula-error">⚠️ {formulaError}</div>
             {:else if field.formula}<div class="formula-valid">✓ Formula looks valid</div>{/if}
         </section>

@@ -131,7 +131,7 @@
 
     <button
         disabled={saving}
-        on:click={save}>
+        onclick={save}>
 
         {saving ? "Saving..." : "Save Downtime"}
 

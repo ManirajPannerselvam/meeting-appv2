@@ -49,21 +49,21 @@
 		<div class="actions">
 			<button
 				type="button"
-				on:click={() => goto(`/users/${user.id}/edit`)}
+				onclick={() => goto(`/users/${user.id}/edit`)}
 			>
 				✏️ Edit
 			</button>
 
 			<button
 				type="button"
-				on:click={() => goto(`/users/${user.id}/permissions`)}
+				onclick={() => goto(`/users/${user.id}/permissions`)}
 			>
 				🔐 Permissions
 			</button>
 
 			<button
 				type="button"
-				on:click={() => goto(`/users/${user.id}/activity`)}
+				onclick={() => goto(`/users/${user.id}/activity`)}
 			>
 				📋 Activity
 			</button>

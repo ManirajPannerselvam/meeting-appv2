@@ -502,7 +502,7 @@
             <p>Enterprise Notification Management</p>
         </div>
 
-        <button class="green" on:click={compose}>
+        <button class="green" onclick={compose}>
             ➕ Compose Notification
         </button>
     </div>
@@ -570,17 +570,17 @@
 
     <div class="action-buttons">
 
-        <button class="blue" on:click={exportCSV}>
+        <button class="blue" onclick={exportCSV}>
             📤 Export CSV
         </button>
 
-        <button class="orange" on:click={printLogs}>
+        <button class="orange" onclick={printLogs}>
             🖨 Print Report
         </button>
 
         <button
             class="secondary-action"
-            on:click={loadNotifications}
+            onclick={loadNotifications}
             disabled={loading}
         >
             🔄 Refresh
@@ -680,7 +680,7 @@
 
                                     <button
                                         class="small blue"
-                                        on:click={() =>
+                                        onclick={() =>
                                             viewNotification(notification)}
                                     >
                                         View
@@ -690,7 +690,7 @@
 
                                         <button
                                             class="small orange"
-                                            on:click={() =>
+                                            onclick={() =>
                                                 retryNotification(notification)}
                                         >
                                             Retry
@@ -702,7 +702,7 @@
 
                                         <button
                                             class="small red"
-                                            on:click={() =>
+                                            onclick={() =>
                                                 cancelNotification(notification)}
                                         >
                                             Cancel
@@ -712,7 +712,7 @@
 
                                     <button
                                         class="small red"
-                                        on:click={() =>
+                                        onclick={() =>
                                             deleteNotification(notification)}
                                     >
                                         Delete
@@ -743,7 +743,7 @@
         <div class="pagination">
 
             <button
-                on:click={previousPage}
+                onclick={previousPage}
                 disabled={currentPage === 1}
             >
                 ◀ Previous
@@ -755,7 +755,7 @@
             </span>
 
             <button
-                on:click={nextPage}
+                onclick={nextPage}
                 disabled={currentPage === totalPages}
             >
                 Next ▶
@@ -1006,7 +1006,7 @@
             Send an announcement to every active user.
         </p>
 
-        <button class="green" on:click={compose}>
+        <button class="green" onclick={compose}>
             Create Broadcast
         </button>
 
@@ -1058,7 +1058,7 @@
 
                 <button
                     class="close"
-                    on:click={closeComposeDialog}
+                    onclick={closeComposeDialog}
                     disabled={saving}
                     aria-label="Close"
                 >
@@ -1196,7 +1196,7 @@
 
                 <button
                     class="secondary"
-                    on:click={closeComposeDialog}
+                    onclick={closeComposeDialog}
                     disabled={saving}
                 >
                     Cancel
@@ -1205,7 +1205,7 @@
                 <button
                     class="orange"
                     disabled={saving}
-                    on:click={() => saveNotification(false)}
+                    onclick={() => saveNotification(false)}
                 >
                     {saving ? "Saving..." : "Schedule"}
                 </button>
@@ -1213,7 +1213,7 @@
                 <button
                     class="green"
                     disabled={saving}
-                    on:click={() => saveNotification(true)}
+                    onclick={() => saveNotification(true)}
                 >
                     {saving ? "Sending..." : "Send Now"}
                 </button>
@@ -1249,7 +1249,7 @@
 
                 <button
                     class="close"
-                    on:click={closeDetailsDialog}
+                    onclick={closeDetailsDialog}
                     aria-label="Close"
                 >
                     ✕
@@ -1354,7 +1354,7 @@
 
                 <button
                     class="secondary"
-                    on:click={closeDetailsDialog}
+                    onclick={closeDetailsDialog}
                 >
                     Close
                 </button>

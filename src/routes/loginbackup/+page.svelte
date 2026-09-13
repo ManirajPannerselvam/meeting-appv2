@@ -8,7 +8,7 @@
     <h2>Temple Operations Reporting System</h2>
     <h3>Sign In</h3>
     
-    <form method="POST" action="?/login" on:submit={() => loading = true}>
+    <form method="POST" action="?/login" onsubmit={() => loading = true}>
       <div class="form-group">
         <label>Email</label>
         <input type="email" name="email" required />

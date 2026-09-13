@@ -74,7 +74,6 @@
 
   let boardEl: HTMLDivElement;
   
-  // FIXED DRAG LOGIC
   function startDrag(e: PointerEvent, p:Placed){
     if((e.target as HTMLElement).closest('.x')) return;
     e.stopPropagation();
@@ -163,23 +162,23 @@
 <div class="top-fixed two-line">
   <div class="top-line line1">
     <div class="tl1">
-      <button class="back" on:click={handleBack}>←</button>
+      <button class="back" onclick={handleBack}>←</button>
       {#if isDirty}<span class="dirty">● Not Saved</span>{:else}<span class="saved">✓ Saved</span>{/if}
     </div>
     <div class="tr1">
       <span class="count-badge">Saved: {savedCount} ▼</span>
       <button class="preview-btn">💬 Chat</button>
-      <button class="save" style="background:{selectedTheme.color}" on:click={saveTemplate}>Save to DB</button>
+      <button class="save" style="background:{selectedTheme.color}" onclick={saveTemplate}>Save to DB</button>
     </div>
   </div>
   <div class="top-line line2">
     <div class="t-inputs-2">
-      <div class="t-field"><label>Template</label><input bind:value={templateName} maxlength="20" placeholder="Daily Tracker" /></div>
-      <div class="t-field small"><label>Code</label><input bind:value={templateCode} maxlength="20" class="code-in" /></div>
+      <div class="t-field"><label>Template</label><input bind:value={templateName} maxlength={20} placeholder="Daily Tracker" /></div>
+      <div class="t-field small"><label>Code</label><input bind:value={templateCode} maxlength={20} class="code-in" /></div>
       <div class="t-field small"><label>Category</label><select bind:value={category}><option>Production</option><option>Quality</option><option>Maintenance</option></select></div>
       <div class="t-field small">
         <label>Theme</label>
-        <select value={selectedTheme.id} on:change={(e)=>{ const v=(e.target as HTMLSelectElement).value; const th=themes.find(t=>t.id===v); if(th) pickTheme(th); }}>
+        <select value={selectedTheme.id} onchange={(e)=>{ const v=(e.target as HTMLSelectElement).value; const th=themes.find(t=>t.id===v); if(th) pickTheme(th); }}>
           {#each themes as th}<option value={th.id}>{th.name}</option>{/each}
         </select>
       </div>
@@ -190,10 +189,10 @@
 
 <div class="layout two-top">
   <div class="left">
-    <div class="search-box"><span>🔍</span><input placeholder="Search" maxlength="30" /></div>
+    <div class="search-box"><span>🔍</span><input placeholder="Search" maxlength={30} /></div>
     <div class="field-grid single-col">
       {#each allFields as f}
-        <button class="field-row vertical" style="border-left:3px solid {f.border};" on:click={()=>quickAdd(f)}>
+        <button class="field-row vertical" style="border-left:3px solid {f.border};" onclick={()=>quickAdd(f)}>
           <span class="f-icon">{f.icon}</span>
           <span class="f-label-down">{f.label}</span>
         </button>
@@ -209,15 +208,15 @@
           {#each placed as p}
             <div class="mod reduced" class:active={selectedId===p.id}
               style="left:{p.x*gap+8}px; top:{p.y*gap+8}px; width:{p.w*gap}px; height:{p.h*gap}px; border-color:{p.border}; color:{p.color};"
-              on:pointerdown={(e)=>startDrag(e,p)}
-              on:pointermove={onPointerMove}
-              on:pointerup={onPointerUp}
-              on:touchstart|nonpassive={(e)=>onTouchStart(e,p)}
-              on:touchmove|nonpassive={onTouchMove}
-              on:touchend={onTouchEnd}
-              on:click={()=>{ if(!isDragging){selectedId=p.id; editFormula=p.formula;}}}>
+              onpointerdown={(e)=>startDrag(e,p)}
+              onpointermove={onPointerMove}
+              onpointerup={onPointerUp}
+              ontouchstart={(e)=>onTouchStart(e,p)}
+              ontouchmove={onTouchMove}
+              ontouchend={onTouchEnd}
+              onclick={()=>{ if(!isDragging){selectedId=p.id; editFormula=p.formula;}}}>
               <span class="mod-label">{p.label}</span>
-              <button class="x" on:click|stopPropagation={()=>deleteField(p.id)}>✕</button>
+              <button class="x" onclick={(e)=>{ e.stopPropagation(); deleteField(p.id); }}>✕</button>
             </div>
           {/each}
         </div>
@@ -232,7 +231,7 @@
           <div class="p-preview-item" style="border-left:3px solid {p.border}">
             <b class="p-l">{p.label}</b>
             {#if p.type!=='formula'}
-              <input class="p-input" placeholder="Enter {p.label}" value={p.type==='number'?'0':''} maxlength="20" />
+              <input class="p-input" placeholder="Enter {p.label}" value={p.type==='number'?'0':''} maxlength={20} />
             {:else}
               <div class="p-formula" style="background:{selectedTheme.light}; border:1px solid {selectedTheme.color};">{p.formula || "⚡ Auto Calculated"}</div>
             {/if}
@@ -245,24 +244,24 @@
   <div class="right">
     {#if selected}
       <div class="edit-box" style="border-color:{selectedTheme.color}"><div class="edit-head"><b>✏️ {selected.label}</b><small>{selected.type}</small></div>
-        <label>Label</label><input class="edit-in" value={selected.label} on:input={(e)=>updateSelectedLabel(e.currentTarget.value)} maxlength="60" />
+        <label>Label</label><input class="edit-in" value={selected.label} oninput={(e)=>updateSelectedLabel(e.currentTarget.value)} maxlength={60} />
       </div>
     {/if}
     <div class="formula-builder" style="border-color:{selectedTheme.color}; background:{selectedTheme.light}">
       <div class="fb-head"><b>Formula - {selectedTheme.name}</b></div>
-      <textarea bind:value={editFormula} on:input={saveFormula} rows="4" class="fb-ta" maxlength="200" placeholder="Select fields"></textarea>
+      <textarea bind:value={editFormula} oninput={saveFormula} rows="4" class="fb-ta" maxlength={200} placeholder="Select fields"></textarea>
       <div class="fb-ops all-sym three-rows">
-  <button on:click={()=>insertOp("(")}>(</button>
-  <button on:click={()=>insertOp(")")}>)</button>
-  <button on:click={()=>insertOp("+")}>+</button>
-  <button on:click={()=>insertOp("-")}>−</button>
-  <button on:click={()=>insertOp("×")}>×</button>
-  <button on:click={()=>insertOp("÷")}>÷</button>
-  <button on:click={()=>insertOp("%")}>%</button>
-  <button class="span-2" on:click={()=>insertOp("100")}>100</button>
+  <button onclick={()=>insertOp("(")}>(</button>
+  <button onclick={()=>insertOp(")")}>)</button>
+  <button onclick={()=>insertOp("+")}>+</button>
+  <button onclick={()=>insertOp("-")}>−</button>
+  <button onclick={()=>insertOp("×")}>×</button>
+  <button onclick={()=>insertOp("÷")}>÷</button>
+  <button onclick={()=>insertOp("%")}>%</button>
+  <button class="span-2" onclick={()=>insertOp("100")}>100</button>
 </div>
-      <div class="fb-sec"><b>Available Fields</b>{#each numberFields as bf}<button class="fb-field" on:click={()=>insertField(bf.field_name)}>📥 {bf.label} → {'{'+bf.field_name+'}'}</button>{/each}</div>
-      <button class="savef" style="background:{selectedTheme.color}" on:click={saveFormula}>💾 Save Formula</button>
+      <div class="fb-sec"><b>Available Fields</b>{#each numberFields as bf}<button class="fb-field" onclick={()=>insertField(bf.field_name)}>📥 {bf.label} → {'{'+bf.field_name+'}'}</button>{/each}</div>
+      <button class="savef" style="background:{selectedTheme.color}" onclick={saveFormula}>💾 Save Formula</button>
     </div>
   </div>
 </div>
@@ -294,13 +293,10 @@
   .field-row.vertical{height:34px !important; min-height:34px !important; width:100% !important; border:1px solid #f1f5f9; border-left-width:3px !important; background:white; border-radius:5px; display:flex; flex-direction:row; align-items:center; gap:6px; padding:0 6px !important;}
   .field-row.vertical .f-icon{font-size:12px !important; width:18px; height:18px; display:flex; align-items:center; justify-content:center; flex-shrink:0;}
   .field-row.vertical .f-label-down{font-size:7px !important; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-
-  /* FIXED BOARD + FIELD + FORMULA */
   .board-wrap{width:100%; background:white; border:1.5px solid #0ea5e9; border-radius:5px; height:52%; min-height:200px; overflow:hidden; display:flex; flex-direction:column;}
   .board-scroll{flex:1; overflow:auto; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;}
   .board{position:relative; touch-action:pan-x pan-y;}
   .dot{position:absolute; width:1.5px; height:1.5px; background:#cbd5e1; border-radius:50%; opacity:.4;}
-
   .mod.reduced{
     position:absolute; background:white; border:1.5px solid; border-radius:6px;
     display:flex; align-items:center; padding:0 22px 0 6px;
@@ -315,7 +311,6 @@
     width:18px !important; height:18px !important; background:#fee2e2; color:#dc2626; border:none; border-radius:4px;
     font-size:11px !important; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:30;
   }
-
   .creating-info{padding:3px 5px; display:flex; justify-content:space-between; font-size:7px; flex-shrink:0;}
   .preview-wrap.linked.onebyone{flex:1; overflow:auto; background:white; border:1.5px solid #0ea5e9; border-radius:5px; padding:3px;}
   .preview-head{font-size:7px; font-weight:700; margin-bottom:3px;}
@@ -326,7 +321,6 @@
   .edit-box{background:white; border:1px solid #e5e7eb; border-radius:5px; padding:3px; display:flex; flex-direction:column; gap:2px;}
   .edit-head{display:flex; justify-content:space-between; font-size:8px;} .edit-box label{font-size:7px; font-weight:700;}
   .edit-in{height:20px; border:1px solid #e2e8f0; border-radius:3px; padding:0 4px; font-size:8px;}
-  
   .formula-builder{
     position:relative !important; left:auto !important; top:auto !important; transform:none !important;
     border:1px solid #bbf7d0; border-radius:5px; padding:4px; display:flex; flex-direction:column; gap:4px;

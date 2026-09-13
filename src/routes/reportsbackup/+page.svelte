@@ -269,7 +269,7 @@
       <option value="A">A</option><option value="B">B</option><option value="C">C</option>
     </select>
 
-    <button on:click={loadRecords} disabled={loading}>{loading? 'Loading...' : 'Load'}</button>
+    <button onclick={loadRecords} disabled={loading}>{loading? 'Loading...' : 'Load'}</button>
   </div>
 
   {#if availableStations.length > 0}
@@ -288,7 +288,7 @@
       <div class="controls">
         <div>
           <label for="xaxis">X-Axis</label>
-          <select id="xaxis" bind:value={xField} on:change={generateChart}>
+          <select id="xaxis" bind:value={xField} onchange={generateChart}>
             <option value="ts">Time</option>
             <option value="station">Station</option>
             <option value="shift">Shift</option>
@@ -299,13 +299,13 @@
         </div>
         <div>
           <label for="yaxis">Y-Axis</label>
-          <select id="yaxis" bind:value={yField} on:change={generateChart}>
+          <select id="yaxis" bind:value={yField} onchange={generateChart}>
             {#each numericFields as field}<option value={field.name}>{getFieldLabel(field.name)}</option>{/each}
           </select>
         </div>
         <div>
           <label for="chart">Chart</label>
-          <select id="chart" bind:value={chartType} on:change={generateChart}>
+          <select id="chart" bind:value={chartType} onchange={generateChart}>
             <option value="line">Line</option><option value="bar">Bar</option><option value="pie">Pie</option><option value="doughnut">Doughnut</option>
           </select>
         </div>
@@ -333,7 +333,7 @@
       </div>
 
       <div class="chart-container"><canvas bind:this={chartCanvas}></canvas></div>
-      <div class="actions"><button class="excel" on:click={exportExcel}>📗 Export Excel</button></div>
+      <div class="actions"><button class="excel" onclick={exportExcel}>📗 Export Excel</button></div>
     </div>
   {/if}
 </div>

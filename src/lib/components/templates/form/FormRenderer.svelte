@@ -87,24 +87,24 @@
 <label>{field.label} {#if field.required}<span class="req">*</span>{/if}</label>
 
 {#if field.field_type === "text"}
-<input type="text" value={values[field.field_name]?? ""} placeholder={field.placeholder || ''} autocomplete="off" on:input={(e)=>update(field, e.currentTarget.value)} />
+<input type="text" value={values[field.field_name]?? ""} placeholder={field.placeholder || ''} autocomplete="off" oninput={(e)=>update(field, e.currentTarget.value)} />
 {:else if field.field_type === "number"}
-<input type="text" inputmode="numeric" pattern="[0-9]*" value={values[field.field_name]?? ""} placeholder={field.placeholder || '0'} autocomplete="off" on:input={(e)=>{
+<input type="text" inputmode="numeric" pattern="[0-9]*" value={values[field.field_name]?? ""} placeholder={field.placeholder || '0'} autocomplete="off" oninput={(e)=>{
     let v = e.currentTarget.value.replace(/[^0-9]/g,'');
     e.currentTarget.value = v;
     update(field, v);
   }} />
 {:else if field.field_type === "textarea"}
-<textarea rows="3" value={values[field.field_name]?? ""} placeholder={field.placeholder || ''} on:input={(e)=>update(field, e.currentTarget.value)}></textarea>
+<textarea rows="3" value={values[field.field_name]?? ""} placeholder={field.placeholder || ''} oninput={(e)=>update(field, e.currentTarget.value)}></textarea>
 {:else if field.field_type === "dropdown"}
-<select value={values[field.field_name]?? ""} on:change={(e)=>update(field, e.currentTarget.value)}>
+<select value={values[field.field_name]?? ""} onchange={(e)=>update(field, e.currentTarget.value)}>
 <option value="">Select...</option>
 {#each parseOptions(field) as opt}<option value={opt}>{opt}</option>{/each}
 </select>
 {:else if field.field_type === "formula"}
 <input class="formula" readonly value={getFormulaValue(field) + " %"} />
 {:else}
-<input type="text" value={values[field.field_name]?? ""} on:input={(e)=>update(field, e.currentTarget.value)} />
+<input type="text" value={values[field.field_name]?? ""} oninput={(e)=>update(field, e.currentTarget.value)} />
 {/if}
 </div>
 {/each}

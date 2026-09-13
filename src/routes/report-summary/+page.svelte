@@ -359,7 +359,7 @@
 
 		<button
 			class="refresh"
-			on:click={load}
+			onclick={load}
 			disabled={loading}
 		>
 			{loading ? "Loading..." : "↻ Refresh"}
@@ -382,7 +382,7 @@
 				<span>{error}</span>
 			</div>
 
-			<button on:click={load}>
+			<button onclick={load}>
 				Try Again
 			</button>
 
@@ -454,7 +454,7 @@
 
 		<button
 			class="reset"
-			on:click={resetFilters}
+			onclick={resetFilters}
 		>
 			Reset
 		</button>
@@ -716,7 +716,7 @@
 
 									<button
 										class="view"
-										on:click={() =>
+										onclick={() =>
 											viewStation(station)
 										}
 									>

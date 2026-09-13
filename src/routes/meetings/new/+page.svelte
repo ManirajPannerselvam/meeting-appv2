@@ -33,6 +33,6 @@
 <input placeholder="Type" bind:value={type} />
 <textarea placeholder="Agenda" bind:value={agenda}></textarea>
 
-<button on:click={saveMeeting}>
+<button onclick={saveMeeting}>
   Save Meeting
 </button>
