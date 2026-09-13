@@ -7,7 +7,7 @@ const config = {
 
 	kit: {
 		adapter: adapter({
-			runtime: 'nodejs20.x'
+			runtime: 'nodejs22.x' // FIXED: was nodejs20.x - Supabase needs 22 for WebSocket
 		}),
 
 		// ✅ FIX: Only prerender public pages - prevents 303 / FUNCTION_INVOCATION_FAILED

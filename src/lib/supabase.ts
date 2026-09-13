@@ -11,10 +11,14 @@ import {
 let _chatClient: SupabaseClient | null = null;
 let _templateClient: SupabaseClient | null = null;
 
-// CHAT CLIENT - Use localStorage, NOT SSR cookies (fixes undefined session)
 function createChatClient(): SupabaseClient {
 	if (!browser) {
-		return createClient(PUBLIC_SUPABASE_CHAT_URL, PUBLIC_SUPABASE_CHAT_ANON_KEY);
+		// ✅ FIX: Server build - disable realtime to prevent WebSocket crash
+		return createClient(PUBLIC_SUPABASE_CHAT_URL, PUBLIC_SUPABASE_CHAT_ANON_KEY, {
+			auth: { persistSession: false, autoRefreshToken: false },
+			realtime: { transport: undefined as any },
+			global: { fetch }
+		});
 	}
 	return createClient(
 		PUBLIC_SUPABASE_CHAT_URL,
@@ -23,8 +27,12 @@ function createChatClient(): SupabaseClient {
 			auth: {
 				persistSession: true,
 				autoRefreshToken: true,
+				detectSessionInUrl: true,
 				storage: window.localStorage,
 				storageKey: 'chat-auth'
+			},
+			realtime: {
+				params: { eventsPerSecond: 10 }
 			}
 		}
 	);
@@ -32,25 +40,24 @@ function createChatClient(): SupabaseClient {
 
 function createTemplateClient(): SupabaseClient {
 	if (!browser) {
-		return createClient(PUBLIC_SUPABASE_TEMPLATES_URL, PUBLIC_SUPABASE_TEMPLATES_ANON_KEY);
+		return createClient(PUBLIC_SUPABASE_TEMPLATES_URL, PUBLIC_SUPABASE_TEMPLATES_ANON_KEY, {
+			auth: { persistSession: false, autoRefreshToken: false },
+			realtime: { transport: undefined as any },
+			global: { fetch }
+		});
 	}
-	// FIXED: Don't use createBrowserClient - it needs cookies and gives 403
-	// Use createClient same as chat, with separate storage key
 	return createClient(
 		PUBLIC_SUPABASE_TEMPLATES_URL,
 		PUBLIC_SUPABASE_TEMPLATES_ANON_KEY,
 		{
 			auth: {
-				persistSession: true,
-				autoRefreshToken: true,
-				storage: window.localStorage,
-				storageKey: 'templates-auth'
+				// ✅ SECURE: Templates DB is public anon - no need to persist auth
+				persistSession: false,
+				autoRefreshToken: false
 			},
-			// FIXED: Add realtime and global fetch options to bypass cache
 			global: {
-				headers: {
-					'x-client-info': 'temple-ops'
-				}
+				fetch,
+				headers: { 'x-client-info': 'temple-ops' }
 			}
 		}
 	);
@@ -59,19 +66,6 @@ function createTemplateClient(): SupabaseClient {
 export function getChatClient(): SupabaseClient {
 	if (_chatClient) return _chatClient;
 	_chatClient = createChatClient();
-	
-	if (browser) {
-		const path = window.location.pathname || '';
-		const isPublic = ['/login', '/register', '/forgot-password', '/logout'].some(p => path.includes(p));
-		if (!isPublic) {
-			_chatClient.auth.getSession().then(({ data }) => {
-				if (data.session) {
-					console.log("CHAT CLIENT SESSION:", data.session.user.id);
-				}
-			});
-		}
-	}
-	
 	return _chatClient;
 }
 

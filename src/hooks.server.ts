@@ -18,12 +18,23 @@ export const handle: Handle = async ({ event, resolve }) => {
                                   event.cookies.set(name,value,{
                                     ...options, 
                                     path:'/',
-                                    // ✅ SECURE HIGH PRIORITY - dynamic for Tauri dev + Vercel prod
                                     httpOnly: true,
                                     secure: isSecure,
                                     sameSite: 'lax' as const,
                                     maxAge: options?.maxAge ?? 60*60*24*30
                                   }))
+                        },
+                        // ✅ FIX: Vercel crash - disable realtime transport on server
+                        global: {
+                            fetch
+                        },
+                        realtime: {
+                            transport: undefined as any
+                        },
+                        auth: {
+                            persistSession: false,
+                            autoRefreshToken: false,
+                            detectSessionInUrl: false
                         }
                 }
         );
