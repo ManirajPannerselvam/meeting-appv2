@@ -12,24 +12,20 @@ const config = {
     kit: {
         adapter: isVercel
             ? adapterVercel({
-                runtime: 'nodejs20.x',
-                // ✅ FIX: Don't use ISR for auth pages - causes 303 cache
-                // isr: { expiration: 3600 }  <-- REMOVE THIS, it caches redirect
+                runtime: 'nodejs20.x'
               })
             : adapterNode({
                 precompress: true
               }),
 
-        // ✅ FIX: Don't prerender auth pages - they need user session
-        // Prerendering /chat causes FUNCTION_INVOCATION_FAILED + 303
         prerender: {
-            entries: ['*'], // only static public pages, not /chat
+            // ✅ FIX: Only prerender truly public pages - not auth pages
+            entries: ['/', '/login', '/register'],
             handleHttpError: 'warn',
-            handleMissingId: 'warn',
-            origin: 'https://your-app.vercel.app' // replace with your domain
+            handleMissingId: 'warn'
         },
 
-        // ✅ SECURITY: high priority - CSP + secure headers - KEPT
+        // ✅ SECURITY: high priority - KEPT, optimized for speed
         csp: {
             mode: 'auto',
             directives: {
