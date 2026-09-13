@@ -9,7 +9,7 @@
 	import ChatInput from "$lib/components/chat/ChatInput.svelte";
 	import TemplatePopup from "$lib/components/templates/TemplatePopup.svelte";
 	import TemplateForm from "$lib/components/templates/form/TemplateForm.svelte";
-	import { goto } from "$app/navigation";
+	import { goto, preloadData } from "$app/navigation";
 
 	let { data } = $props();
 	let currentUser = $state<any>(data?.user?? null);
@@ -80,7 +80,13 @@
 	let addMemberLoading = $state(false);
 	const roomCache = new Map<string,string>();
 
-	function goBottom(tab:string){ bottomTab=tab; if(tab==='chat') goto('/chat'); if(tab==='report') goto('/reports'); if(tab==='user') goto('/settings'); }
+	// ✅ SPEED: instant bottom nav + prefetch
+	function goBottom(tab:string){
+	  bottomTab=tab;
+	  const target = tab==='chat'? '/chat' : tab==='report'? '/reports' : '/settings';
+	  // instant UI, no wait
+	  goto(target, { keepFocus:true, noScroll:true, replaceState: tab==='chat' });
+	}
 	function isTemplateMsg(m:any){ return m.content?.includes('__TEMPLATE_DATA__') || m.content?.startsWith('📋'); }
 	function isMeetingMsg(m:any){ return m.content?.includes('__MEETING_DATA__'); }
 	function getMeta(m:any){ try{ let p = m.content?.split('__TEMPLATE_DATA__'); if(p?.length>1) return JSON.parse(p[1]); }catch{} return null; }
@@ -131,22 +137,28 @@
 
 	onMount(async () => {
 		if (!browser) return;
-		localStorage.removeItem('chat_contacts_cache');
 		checkMobile(); window.addEventListener('resize', checkMobile);
 		try{ mutedRooms = new Set(JSON.parse(localStorage.getItem('mutedRooms') || '[]')); }catch{}
+		try{
+		  const cached = localStorage.getItem('recent_contacts_cache_v2');
+		  if(cached){
+		    const parsed = JSON.parse(cached);
+		    if(Array.isArray(parsed) && parsed.length) contacts = parsed.filter((c:any)=>!c._ts);
+		  }
+		}catch{}
 		const { data: { user } } = await chatDB.auth.getUser();
 		if(user){ currentUser = {...(data?.user||{}),...user, avatar_url: user.user_metadata?.avatar_url || data?.user?.avatar_url || null }; } else if(data?.user?.id){ currentUser = data.user; }
 		const uid = getCurrentUserId(); if(!uid) return;
-		await loadContacts(true); await loadGroups(); await setupPresence();
-		setupProfileLive(); setupGlobalListener(); setupInvitesListener();
+		await Promise.allSettled([ loadContacts(true), loadGroups() ]);
+		// ✅ SPEED: prefetch reports/settings now
+		setTimeout(()=>{ try{ preloadData('/reports'); preloadData('/settings'); }catch{} }, 600);
+		setTimeout(()=>{ setupPresence(); setupProfileLive(); setupGlobalListener(); setupInvitesListener(); }, 500);
 		if(browser && 'Notification' in window && Notification.permission==='default'){ Notification.requestPermission(); }
 	});
 	onDestroy(async () => { if (browser) window.removeEventListener('resize', checkMobile); await cleanupRealtime(); });
 
 	function setupProfileLive(){ if(profileChannel) return; profileChannel = chatDB.channel('profiles-live').on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles'},(payload)=>{ const p = payload.new as any; contacts = contacts.map(c=> (c.actual_user_id===p.id || c.id===p.id)? {...c, avatar_url:p.avatar_url, name: p.name || c.name} : c); if(selectedContact && (selectedContact.actual_user_id===p.id || selectedContact.id===p.id)){ selectedContact = {...selectedContact, avatar_url:p.avatar_url, name: p.name || selectedContact.name}; } if(currentUser?.id===p.id){ currentUser = {...currentUser, avatar_url:p.avatar_url}; } }).subscribe(); }
 	function setupInvitesListener(){ if(invitesChannel) return; const uid = getCurrentUserId(); if(!uid) return; invitesChannel = chatDB.channel('invites-'+uid).on('postgres_changes',{event:'*',schema:'public',table:'contact_invites'},()=>{ loadContacts(true); }).subscribe(); }
-
-	// ✅ FIXED - NOTIFICATION + TICK - SPEED + SECURE
 	async function setupGlobalListener(){
 	  if(globalChannel) await chatDB.removeChannel(globalChannel);
 	  const uid = getCurrentUserId(); if(!uid) return;
@@ -170,7 +182,6 @@
 		  const upd:any = payload.new; messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status, delivered_at:upd.delivered_at, read_at:upd.read_at} : m);
 		}).subscribe();
 	}
-
 	function resizeTo128(file: File): Promise<Blob> {
 		return new Promise((resolve, reject) => {
 			const img = new Image(); const url = URL.createObjectURL(file);
@@ -195,13 +206,13 @@
 	async function sendTemplateReport(e:any){
 		const { template, values } = e.detail; if(!template) return; const calculatedValues = calcAllFormulas(template, values); let realFields = template?.fields || template?.data?.fields || []; let displayLines = [`📋 *${sanitize(template.name)}*`, ``]; realFields.forEach((f:any)=>{ let key = f.field_name || f.name; let label = f.label || key; let val = calculatedValues[key]?? ""; if(val==="") return; displayLines.push(`${sanitize(label)}: ${sanitize(String(val))}`); }); const display = displayLines.join('\n'); const t_code = template.template_code || template.code || template.t_code; const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: t_code, values: calculatedValues, fields: realFields, created_at: new Date().toISOString() }; const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`; try{ const { data: { user: chatUser } } = await chatDB.auth.getUser(); const realUid = chatUser?.id || getCurrentUserId(); const payload:any = { t_code: sanitize(t_code), reference_template_id: template.id, data: {...calculatedValues, template_code: t_code, template_name: template.name, template_id: template.id, owner_id: realUid, user_id: realUid, created_at: new Date().toISOString() }, ts: new Date().toISOString() }; await supabaseTemplates.from("records").insert(payload); }catch(err:any){ alert("Save failed: "+err?.message); return; } showTemplateForm=false; await sendMessage({ detail: { content: fullContent } } as any); selectedTemplate=null;
 	}
-	async function loadGroups() { const userId = getCurrentUserId(); if(!userId) return; try{ let { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId).limit(200); let list = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); groups = list; }catch{} }
+	async function loadGroups() { const userId = getCurrentUserId(); if(!userId) return; try{ let { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId).limit(100); let list = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); groups = list; }catch{} }
 	async function loadContacts(force=false) {
 	    const userId = getCurrentUserId(); if(!userId){ contacts = []; return; }
 	    const myEmail = (currentUser?.email || data?.user?.email || "").toLowerCase();
 	    let mapped: any[] = [{ id: userId, actual_user_id: userId, name: "You (Saved Messages)", email: currentUser?.email || "You", avatar_url: currentUser?.avatar_url || null, room_id: null, status: 'accepted', isSelf: true, last_message: "Message yourself", unread:0, last_message_at: new Date().toISOString() }];
 	    try{
-	        const { data: accepted } = await chatDB.from("contact_invites").select("id,email,status,invited_by").eq("invited_by", userId).in("status", ["accepted","pending"]).limit(200);
+	        const { data: accepted } = await chatDB.from("contact_invites").select("id,email,status,invited_by").eq("invited_by", userId).in("status", ["accepted","pending"]).limit(100);
 	        for(const inv of accepted||[]){
 	            if(mapped.find(m=>m.email?.toLowerCase()===inv.email.toLowerCase())) continue;
 	            const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").ilike("email", inv.email).maybeSingle();
@@ -211,13 +222,13 @@
 	    }catch{}
 	    try{
 	        if(myEmail){
-	            const { data: incoming } = await chatDB.from("contact_invites").select("id,email,status,invited_by").ilike("email", myEmail).eq("status","pending").limit(200);
+	            const { data: incoming } = await chatDB.from("contact_invites").select("id,email,status,invited_by").ilike("email", myEmail).eq("status","pending").limit(50);
 	            for(const inv of incoming||[]){
 	                if(mapped.find(m=>m.actual_user_id===inv.invited_by)) continue;
 	                const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", inv.invited_by).maybeSingle();
 	                mapped.push({ id: `incoming_${inv.id}`, actual_user_id: inv.invited_by, name: prof?.name||"New Invite", email: prof?.email||"", avatar_url: prof?.avatar_url||null, room_id: null, status: 'incoming', isIncomingInvite: true, inviteData: inv, inviterProfile: prof, last_message: `📩 Tap to Accept`, last_message_at: null, unread:0 });
 	            }
-	            const { data: acceptedIn } = await chatDB.from("contact_invites").select("id,email,status,invited_by").ilike("email", myEmail).eq("status","accepted").limit(200);
+	            const { data: acceptedIn } = await chatDB.from("contact_invites").select("id,email,status,invited_by").ilike("email", myEmail).eq("status","accepted").limit(100);
 	            for(const inv of acceptedIn||[]){
 	                if(mapped.find(m=>m.actual_user_id===inv.invited_by)) continue;
 	                const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", inv.invited_by).maybeSingle();
@@ -227,6 +238,12 @@
 	    }catch{}
 	    const self = mapped.find(m=>m.isSelf); const others = mapped.filter(m=>!m.isSelf).sort((a,b)=> new Date(b.last_message_at||0).getTime() - new Date(a.last_message_at||0).getTime());
 	    contacts = self? [self,...others] : others;
+	    try{
+	      if(browser){
+	        const safe = contacts.slice(0,30).map((c:any)=>({id:c.id, actual_user_id:c.actual_user_id, name:String(c.name).slice(0,80), email:c.email, avatar_url:c.avatar_url, room_id:c.room_id, last_message_at:c.last_message_at}));
+	        localStorage.setItem('recent_contacts_cache_v2', JSON.stringify(safe));
+	      }
+	    }catch{}
 	}
 	async function setupPresence() { const userId = getCurrentUserId(); if(!userId) return; if(presenceChannel) await chatDB.removeChannel(presenceChannel); presenceChannel = chatDB.channel("online-users", { config: { presence: { key: userId } } }); presenceChannel.on("presence", { event: "sync" }, () => { onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); }).subscribe(async (s) => { if(s==="SUBSCRIBED") await presenceChannel!.track({ user_id: userId }); }); }
 	function isUserOnline(id: string){ return onlineUsers.has(id); }
@@ -249,7 +266,6 @@
 	    if(!older) await subscribeToMessages({ roomId, groupId });
 	  } finally { isLoadingMessages=false; loadingMore=false; }
 	}
-	// ✅ FIXED QUICK + TICK
 	async function markDelivered(){ const uid = getCurrentUserId(); const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status==='sent').slice(0,10); for(const m of toMark){ try{ await chatDB.from("messages").update({ status:'delivered', delivered_at: new Date().toISOString() }).eq('id', m.id); }catch{} } }
 	async function markAsRead(){ const uid = getCurrentUserId(); if(!uid || (!selectedRoomId &&!selectedGroupId)) return; const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status!=='read').slice(0,20); if(!toMark.length) return; for(const m of toMark){ try{ await chatDB.from("messages").update({ status:'read', read_at: new Date().toISOString() }).eq('id', m.id); }catch{} } messages = messages.map((m:any)=> m.sender_id!==uid? {...m, status:'read'} : m); if(selectedRoomId) contacts = contacts.map(c=> c.room_id===selectedRoomId? {...c, unread:0} : c); }
 	async function subscribeToMessages({ roomId, groupId }: any){
@@ -261,7 +277,6 @@
 		.on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"}, (payload)=>{ const updated = payload.new as any; messages = messages.map((m:any)=> m.id===updated.id? {...m, status: updated.status} : m); }).subscribe();
 	}
 	async function handleSendLocation(e:any){ const { latitude, longitude, url } = e.detail || {}; if(!latitude ||!longitude) return; await sendMessage({ detail: { content: `📍 Location: ${url} __LOCATION_DATA__${JSON.stringify({latitude, longitude})}` } } as any); }
-	// ✅ FIXED QUICK RESPONSE - 150ms + instant UI
 	async function sendMessage(eventOrContent: any = null) {
 	  if(sendingLock) return; if(Date.now() - lastSent < 150) return;
 	  let content = ""; if (typeof eventOrContent === 'string') content = eventOrContent; else if (eventOrContent?.detail?.content!== undefined) content = eventOrContent.detail.content; else if (eventOrContent?.content!== undefined) content = eventOrContent.content; else content = newMessage;
@@ -345,17 +360,26 @@
 />
 		</div>
 		<nav class="bottom-fixed">
-  <button class:active={bottomTab==='chat'} onclick={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button>
-  <button class:active={bottomTab==='report'} onclick={()=>goBottom('report')}><span class="b-icon">📋</span><small>Report</small></button>
-  <button class:active={bottomTab==='user'} onclick={()=>goBottom('user')}><span class="b-icon">👤</span><small>User</small></button>
-</nav>
+		  <button class:active={bottomTab==='chat'}
+		    onmouseenter={()=>{ try{ preloadData('/chat'); }catch{} }}
+		    ontouchstart={()=>{ try{ preloadData('/chat'); }catch{} }}
+		    onclick={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button>
+		  <button class:active={bottomTab==='report'}
+		    onmouseenter={()=>{ try{ preloadData('/reports'); }catch{} }}
+		    ontouchstart={()=>{ try{ preloadData('/reports'); }catch{} }}
+		    onclick={()=>goBottom('report')}><span class="b-icon">📋</span><small>Report</small></button>
+		  <button class:active={bottomTab==='user'}
+		    onmouseenter={()=>{ try{ preloadData('/settings'); }catch{} }}
+		    ontouchstart={()=>{ try{ preloadData('/settings'); }catch{} }}
+		    onclick={()=>goBottom('user')}><span class="b-icon">👤</span><small>User</small></button>
+		</nav>
 	</div>
 	<section class="chat-area" class:show-mobile={isMobileView && (selectedContact || selectedGroup)}>
 		{#if selectedContact || selectedGroup}
 			<div class="chat-header-fixed"><ChatHeader title={selectedContact?.name?? selectedGroup?.name?? ''} subtitle={selectedContact? (isUserOnline(selectedContact?.actual_user_id||selectedContact?.id)? "Online" : "Tap for photo") : `${groupMembers.length} members`} avatarUrl={selectedContact?.avatar_url?? selectedGroup?.avatar_url?? ''} showBack={isMobileView} isGroup={!!selectedGroup} onBack={handleBackToList} onAction={(e)=>handleHeaderAction(e.detail)} /></div>
 			<div class="filter-fixed"><div class="mode-row"><div class="dd-wrap" use:clickOutside={()=>openMode=false}><button class="mode-btn" onclick={(e)=>{e.stopPropagation(); openMode=!openMode}}><span>{chatMode==='chat'?'💬':chatMode==='template'?'📋':'📅'}</span><b>{chatMode==='chat'?'Chat':chatMode==='template'?'Template':'Meeting'}</b><span class="arr">{openMode?'▲':'▼'}</span></button>{#if openMode}<div class="dd"><button class:active={chatMode==='chat'} onclick={()=>{chatMode='chat'; openMode=false; openList=false; selectedTemplate=null; showArchived=false; showStarred=false;}}>💬 Chat</button><button class:active={chatMode==='template'} onclick={()=>{chatMode='template'; openMode=false;}}>📋 Template</button><button class:active={chatMode==='meeting'} onclick={()=>{chatMode='meeting'; openMode=false;}}>📅 Meeting</button></div>{/if}</div>{#if chatMode!=='chat'}<div class="dd-wrap second" use:clickOutside={()=>openList=false}><button class="list-btn" onclick={(e)=>{e.stopPropagation(); openList=!openList}}><span class="cut">{#if chatMode==='template'}{selectedTemplate?.name || 'Select Template'}{:else}{selectedMeeting?.title || 'Select Meeting'}{/if}</span><span class="arr">{openList?'▲':'▼'}</span></button>{#if openList}<div class="dd dd2">{#if chatMode==='template'}{#each templates as t}<button class:active={selectedTemplate?.id===t.id} onclick={()=>{selectedTemplate=t; openList=false;}}><b>{t.name}</b><small>{t.template_code}</small></button>{:else}<div class="empty">No templates</div>{/each}{:else}{#each meetings as m}<button class:active={selectedMeeting?.id===m.id} onclick={()=>{selectedMeeting=m; openList=false;}}><b>{m.title}</b><small>{m.date}</small></button>{:else}<div class="empty">No meetings</div>{/each}{/if}</div>{/if}</div>{#if chatMode==='template' && selectedTemplate}<button class="use-btn" onclick={()=>{handleUseTemplate({detail:{template:selectedTemplate}})}}>Use</button>{/if}{/if}</div></div>
 			<div class="filter-info">Showing: {showArchived? 'Archived' : showStarred? 'Starred' : chatMode}{selectedTemplate? ` - ${selectedTemplate.name}`:''} | {filteredMessages.length}/{messages.length} {#if loadingMore}• Loading...{/if}</div>
-			<div class="messages-scroll"><MessageList messages={filteredMessages} {selectedContact} {selectedGroup} currentUser={currentUser} selectedUser={currentUser} {replyingTo} onReply={handleReply} onForward={handleForward} onLongPress={handleMessageLongPress} onPressEnd={handleMessagePressEnd} onOpenDetail={(e)=>handleOpenDetail(e.detail.template, e.detail.message)} /></div>
+			<div class="messages-scroll" bind:this={scrollEl}><MessageList messages={filteredMessages} {selectedContact} {selectedGroup} currentUser={currentUser} selectedUser={currentUser} {replyingTo} onReply={handleReply} onForward={handleForward} onLongPress={handleMessageLongPress} onPressEnd={handleMessagePressEnd} onOpenDetail={(e)=>handleOpenDetail(e.detail.template, e.detail.message)} /></div>
 			{#if replyingTo}<div class="reply-preview"><span>Replying to: {replyingTo.content?.slice(0,50)}...</span><button onclick={()=>replyingTo=null}>✕</button></div>{/if}
 			<div class="chat-input-fixed"><ChatInput {uploadingFiles} {groupMembers} onSendMessage={sendMessage} onOpenTemplate={onOpenTemplate} onSendLocation={handleSendLocation}/></div>
 		{:else}<div class="empty-area"><div class="empty-icon">💬</div><h2>Chat</h2><p>Select a chat to start messaging</p></div>{/if}
@@ -363,38 +387,28 @@
 </div>
 
 {#if showAvatarModal}
-<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showAvatarModal=false}></button>
+<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showAvatarModal=false} aria-label="close"></button>
 <div class="modal" style="width:380px; max-height:90vh; overflow-y:auto; background:#111b21; border:1px solid #2a3942;">
   <div style="display:flex; justify-content:space-between; align-items:center;"><h3 style="margin:0; color:#e9edef;">{avatarType==='group'? '👥 Group Info' : avatarTarget?.isSelf? '💾 Your Profile' : '👤 Contact Info'}</h3><button style="background:#2a3942; border:none; color:#8696a0; width:32px; height:32px; border-radius:50%; cursor:pointer;" onclick={()=>showAvatarModal=false}>✕</button></div>
   <div style="display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px 0 14px;">
-    <img src={avatarPreview || avatarTarget?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarTarget?.name || 'User')}&background=00a884&color=fff&size=300`} alt="avatar" style="width:170px;height:170px;border-radius:50%;object-fit:cover;border:4px solid #00a884;" />
+    <img src={avatarPreview || avatarTarget?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarTarget?.name || 'User')}&background=00a884&color=fff&size=300`} alt="avatar" loading="lazy" decoding="async" style="width:170px;height:170px;border-radius:50%;object-fit:cover;border:4px solid #00a884;" />
     <b style="color:#e9edef; font-size:20px;">{avatarTarget?.name || 'User'}</b><span style="color:#8696a0; font-size:13px;">{avatarTarget?.email || ''}</span>
-  </div>
-  <div style="background:#1a242c; padding:12px; border-radius:12px; display:flex; flex-direction:column; gap:10px;">
-    <div style="display:flex; justify-content:space-between;"><span style="color:#8696a0; font-size:13px;">Name</span><b style="color:#e9edef; font-size:13px;">{avatarTarget?.name || '-'}</b></div>
-    <div style="display:flex; justify-content:space-between;"><span style="color:#8696a0; font-size:13px;">Email</span><b style="color:#e9edef; font-size:12px; max-width:180px; overflow:hidden; text-overflow:ellipsis;">{avatarTarget?.email || '-'}</b></div>
-  </div>
-  <div style="margin:14px 0 6px;">
-    {#if avatarType==='contact'}<b style="color:#e9edef; font-size:14px;">Groups in common ({commonGroups.length})</b><div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height:150px; overflow-y:auto;">{#each commonGroups as g}<div style="display:flex; align-items:center; gap:10px; background:#202c33; padding:9px 12px; border-radius:10px; cursor:pointer;" onclick={()=>{ showAvatarModal=false; const found = groups.find(x=>x.id===g.id); if(found) onSelectGroup(found); }}><div style="width:36px; height:36px; background:#00a884; border-radius:50%; display:flex; align-items:center; justify-content:center;">👥</div><div><div style="color:#e9edef; font-size:13.5px; font-weight:600;">{g.name}</div><div style="color:#8696a0; font-size:11px;">Tap to open</div></div></div>{:else}<div style="color:#8696a0; font-size:12px; padding:10px; text-align:center; background:#202c33; border-radius:10px;">No groups in common</div>{/each}</div>{:else}<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><b style="color:#e9edef; font-size:14px;">Members ({groupMembers.length})</b><button style="background:#00a884; color:#111b21; border:none; padding:6px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer;" onclick={()=>openAddMembers(avatarTarget)}>+ Add</button></div><div style="display:flex; flex-direction:column; gap:6px; max-height:150px; overflow-y:auto;">{#each groupMembers as m}<div style="display:flex; align-items:center; gap:10px; background:#202c33; padding:8px 12px; border-radius:10px;"><img src={m.avatar_url || `https://ui-avatars.com/api/?name=${m.name}`} style="width:32px;height:32px;border-radius:50%;" alt="" /><div><div style="color:#e9edef; font-size:13px;">{m.name}</div><div style="color:#8696a0; font-size:11px;">{m.email}</div></div></div>{:else}<div style="color:#8696a0; font-size:12px; padding:10px; text-align:center;">No members</div>{/each}</div>{/if}
   </div>
   <div class="modal-btns" style="margin-top:14px;"><button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button>{#if avatarTarget?.isSelf || avatarType==='group'}<label class="btn-primary" style="text-align:center;cursor:pointer;">{#if avatarUploading}Uploading...{:else}Change Photo{/if}<input type="file" accept="image/*" hidden disabled={avatarUploading} onchange={onAvatarFileChange} /></label>{:else}<button class="btn-primary" onclick={()=>{ showAvatarModal=false; if(avatarTarget) handleContactLoad(avatarTarget); }}>💬 Message</button>{/if}</div>
 </div></div>{/if}
-{#if showAddMembersModal}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showAddMembersModal=false}></button><div class="modal large" style="width:400px;"><h3>➕ Add to {groupToAddMembers?.name}</h3><div style="display:flex; flex-direction:column; gap:6px; max-height:50vh; overflow-y:auto;">{#each contacts.filter(c=>!c.isSelf && c.actual_user_id) as c}<button style="display:flex; align-items:center; gap:10px; background:#2a3942; border:none; padding:10px 12px; border-radius:10px; cursor:pointer; text-align:left;" onclick={()=>addMemberToGroup(c)} disabled={addMemberLoading}><img src={c.avatar_url || `https://ui-avatars.com/api/?name=${c.name}`} style="width:36px;height:36px;border-radius:50%;" alt="" /><div style="flex:1;"><div style="color:#e9edef; font-size:13px; font-weight:600;">{c.name}</div><div style="color:#8696a0; font-size:11px;">{c.email}</div></div><span style="color:#00a884; font-weight:700;">+ Add</span></button>{:else}<div style="color:#8696a0; font-size:13px; text-align:center; padding:20px;">No contacts</div>{/each}</div><div class="modal-btns" style="margin-top:12px;"><button class="btn-secondary" onclick={()=>showAddMembersModal=false}>Close</button></div></div></div>{/if}
-{#if showContactForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showContactForm=false}></button><div class="modal"><h3>New Contact</h3><input class="modal-input" bind:value={contactEmail} placeholder="Contact Email" /><div class="modal-btns"><button class="btn-primary" onclick={createContact}>{invitingUser?'Inviting...':'Invite'}</button><button class="btn-secondary" onclick={() => showContactForm=false}>Cancel</button></div></div></div>{/if}
-{#if showGroupForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showGroupForm=false}></button><div class="modal"><h3>👥 Create Group</h3><input class="modal-input" bind:value={groupName} placeholder="Group Name" maxlength="50" /><div class="modal-btns"><button class="btn-secondary" onclick={()=>showGroupForm=false}>Cancel</button><button class="btn-primary" onclick={createGroup}>Create</button></div></div></div>{/if}
+
+{#if showContactForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showContactForm=false} aria-label="close"></button><div class="modal"><h3>New Contact</h3><input class="modal-input" bind:value={contactEmail} placeholder="Contact Email" autocomplete="email" maxlength="100" /><div class="modal-btns"><button class="btn-primary" onclick={createContact}>{invitingUser?'Inviting...':'Invite'}</button><button class="btn-secondary" onclick={() => showContactForm=false}>Cancel</button></div></div></div>{/if}
+{#if showGroupForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showGroupForm=false} aria-label="close"></button><div class="modal"><h3>👥 Create Group</h3><input class="modal-input" bind:value={groupName} placeholder="Group Name" maxlength="50" /><div class="modal-btns"><button class="btn-secondary" onclick={()=>showGroupForm=false}>Cancel</button><button class="btn-primary" onclick={createGroup}>Create</button></div></div></div>{/if}
 {#if showTemplateModal}<TemplatePopup templates={templates} loading={templateLoading} on:close={()=>showTemplateModal=false} on:use={handleUseTemplate} on:new={handleCreateTemplate} on:create={handleCreateTemplate} on:deleted={(e)=>{ templates=templates.filter(t=>t.id!==e.detail.template.id); }} />{/if}
 {#if showTemplateForm && selectedTemplate}<div style="position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);"><TemplateForm template={selectedTemplate} on:close={()=>{ showTemplateForm=false; selectedTemplate=null; }} on:submit={sendTemplateReport} /></div>{/if}
-{#if showDetailModal && detailData}<div class="detail-bg"><button class="modal-bg-btn" onclick={()=>showDetailModal=false}></button><div class="detail-modal"><div class="detail-header"><h3>📋 {detailData.template_name}</h3><button class="detail-close" onclick={()=>showDetailModal=false}>✕</button></div><div class="detail-body">{#each detailData.fields as f}{@const key = f.field_name || f.name}{@const val = detailData.values[key]?? '-'}<div class="detail-row"><span class="d-label">{f.label}</span><b class="d-value">{String(val)}</b></div>{/each}</div></div></div>{/if}
-{#if showInviteModal && selectedInvite}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showInviteModal=false}></button><div class="modal"><h3>📩 Invite</h3><div style="background:#2a3942; padding:14px; border-radius:10px;"><b style="color:#e9edef;">{selectedInvite.email}</b></div><div class="modal-btns"><button class="btn-secondary" onclick={()=>showInviteModal=false}>Close</button><button class="btn-primary" onclick={async ()=>{ await chatDB.from('contact_invites').delete().eq('id', selectedInvite.id); showInviteModal=false; await loadContacts(true); }}>Delete</button></div></div></div>{/if}
-{#if showIncomingModal && selectedIncoming}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showIncomingModal=false}></button><div class="modal"><h3>📩 New Invite</h3><div style="background:#2a3942; padding:14px; border-radius:10px; text-align:center;"><b style="color:#e9edef;">{selectedIncoming.name}</b></div><div class="modal-btns"><button class="btn-secondary" onclick={rejectIncoming}>Reject</button><button class="btn-primary" onclick={acceptIncoming}>Accept</button></div></div></div>{/if}
 
 <style>
-	.main-container{display:flex;height:100dvh;max-height:100dvh;width:100vw;background:#111b21;overflow:hidden;font-family:Inter,Segoe UI,sans-serif;}
+	.main-container{display:flex;height:100dvh;max-height:100dvh;width:100vw;background:#111b21;overflow:hidden;font-family:Inter,Segoe UI,sans-serif; contain: layout style;}
 	.sidebar-wrapper{width:30%;min-width:300px;max-width:420px;display:flex;flex-direction:column;border-right:1px solid #222d34;background:#111b21;overflow:hidden;height:100dvh;max-height:100dvh;}
-	.sidebar-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;}
+	.sidebar-scroll{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden; -webkit-overflow-scrolling:touch; contain: content;}
 	.bottom-fixed{flex-shrink:0;height:68px;min-height:68px;background:#202c33;border-top:1px solid #2a3942;display:flex;justify-content:space-around;align-items:center;z-index:20;padding-bottom:env(safe-area-inset-bottom);}
-	.bottom-fixed button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#8696a0;cursor:pointer;flex:1;padding:6px;}
-	.bottom-fixed button.active{color:#00a884;}.b-icon{font-size:20px;line-height:1;}.b-avatar{width:26px;height:26px;border-radius:50%;object-fit:cover;border:2px solid #00a884;}.bottom-fixed small{font-size:11px;font-weight:600;}
+	.bottom-fixed button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#8696a0;cursor:pointer;flex:1;padding:6px; -webkit-tap-highlight-color:transparent;}
+	.bottom-fixed button.active{color:#00a884;}.b-icon{font-size:20px;line-height:1;}.bottom-fixed small{font-size:11px;font-weight:600;}
 	.chat-area{flex:1;display:flex;flex-direction:column;background:#0b141a;min-width:0;height:100dvh;max-height:100dvh;overflow:hidden;}
 	.chat-header-fixed{flex-shrink:0;z-index:10;}.filter-fixed{flex-shrink:0;background:#f0f2f5;border-bottom:1px solid #d1d7db;padding:6px 10px;z-index:9;}
 	.mode-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}.dd-wrap{position:relative;}
@@ -412,23 +426,12 @@
 	.empty-icon{font-size:64px;opacity:0.5;}.empty-area h2{color:#e9edef;font-size:32px;font-weight:300;margin:10px 0 0;}
 	.reply-preview{display:flex;justify-content:space-between;align-items:center;background:#202c33;padding:8px 12px;border-left:4px solid #00a884;color:#8696a0;font-size:13px;flex-shrink:0;}
 	.reply-preview button{background:none;border:none;color:#8696a0;cursor:pointer;font-size:16px;}
-	.message-options-overlay{position:fixed;inset:0;z-index:1000;background:transparent;border:none;}
-	.message-options{position:fixed;z-index:1001;background:#233138;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,0.5);display:flex;flex-direction:column;overflow:hidden;min-width:160px;}
-	.message-options button{padding:12px 16px;background:none;border:none;color:#e9edef;text-align:left;cursor:pointer;}
-	.modal-bg,.detail-bg{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;}
-	.detail-bg{z-index:10060;}.modal-bg-btn{position:absolute;inset:0;background:transparent;border:none;}
+	.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;}
+	.modal-bg-btn{position:absolute;inset:0;background:transparent;border:none;}
 	.modal{background:#233138;padding:24px;border-radius:12px;width:400px;display:flex;flex-direction:column;gap:16px;position:relative;z-index:1;}
-	.modal.large{width:420px;max-height:80vh;overflow-y:auto;}.modal h3{color:#e9edef;margin:0;font-size:18px;}
+	.modal h3{color:#e9edef;margin:0;font-size:18px;}
 	.modal-input{background:#2a3942;color:#e9edef;border:1px solid #374045;padding:12px;border-radius:8px;width:100%;outline:none;}
 	.modal-btns{display:flex;gap:8px;}.btn-primary{flex:1;background:#00a884;color:#111b21;border:none;padding:11px;border-radius:8px;font-weight:700;cursor:pointer;}.btn-secondary{flex:1;background:#2a3942;color:#e9edef;border:none;padding:11px;border-radius:8px;cursor:pointer;}
-	.forward-list{display:flex;flex-direction:column;gap:4px;max-height:300px;overflow-y:auto;}.forward-item{padding:10px;background:#2a3942;border:none;border-radius:6px;color:#e9edef;text-align:left;cursor:pointer;}
-	.detail-modal{background:white;width:min(500px,92vw);max-height:85vh;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;position:relative;z-index:1;}
-	.detail-header{display:flex;justify-content:space-between;align-items:center;padding:18px 20px;border-bottom:1px solid #e2e8f0;background:#f8fafc;}
-	.detail-close{border:none;background:#e2e8f0;width:32px;height:32px;border-radius:50%;cursor:pointer;}
-	.detail-body{padding:16px 20px;overflow-y:auto;display:flex;flex-direction:column;gap:10px;}
-	.detail-row{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fafc;border-radius:10px;}
-	.d-label{text-transform:capitalize;color:#64748b;font-size:13px;font-weight:600;}.d-value{color:#0f172a;font-size:13px;font-weight:700;}
-	.detail-actions{padding:14px 20px;border-top:1px solid #e2e8f0;display:flex;justify-content:flex-end;}
 	@media (max-width:768px){
 		.sidebar-wrapper{width:100%;max-width:100%;}.sidebar-wrapper.hidden-mobile{display:none;}
 		.chat-area{display:none;}.chat-area.show-mobile{display:flex;position:fixed;inset:0;z-index:50;width:100vw;height:100dvh;max-height:100dvh;}

@@ -1,8 +1,8 @@
 <script lang="ts">
   import '../app.css';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount } from 'svelte';
   import { page } from '$app/stores';
-  import { goto } from '$app/navigation';
+  import { goto, preloadData } from '$app/navigation';
   import { browser } from '$app/environment';
   import { supabase } from '$lib/supabase/client';
 
@@ -26,12 +26,13 @@
     if(!target) return false;
     const tag = target.tagName?.toLowerCase();
     if(['button','input','select','textarea','a','canvas'].includes(tag)) return true;
-    if(target.closest('button, input, select, textarea, a, .table-wrapper, table, canvas, [data-no-swipe], .globe-canvas, .theme-grid')) return true;
+    if(target.closest('button, input, select, textarea, a, .table-wrapper, table, canvas, [data-no-swipe], .globe-canvas, .theme-grid, .chat-input-wrapper, .attach-menu, .emoji-picker')) return true;
     return false;
   }
   function onTouchStart(e: TouchEvent){
     if(shouldIgnoreSwipe(e.target)) { isSwiping = false; return; }
-    if($page.url.pathname.startsWith('/templates') || $page.url.pathname.startsWith('/globe') || $page.url.pathname.startsWith('/dashboard')) { isSwiping = false; return; }
+    const path = $page.url.pathname;
+    if(path.startsWith('/settings') || path.startsWith('/login')) { isSwiping = false; return; }
     startX = e.touches[0].clientX; startY = e.touches[0].clientY; startTime = Date.now(); isSwiping = true;
   }
   function onTouchEnd(e: TouchEvent){
@@ -39,9 +40,13 @@
     const endX = e.changedTouches[0].clientX; const endY = e.changedTouches[0].clientY;
     const diffX = endX - startX; const diffY = endY - startY;
     if(Math.abs(diffX) < 100 || Math.abs(diffY) > 80 || Date.now() - startTime > 600) return;
+    if($page.url.pathname.startsWith('/chat') && diffX > 100 && startX < 50){
+      goto('/chat', { keepFocus:true, noScroll:true });
+      return;
+    }
     let idx = getModuleIndex($page.url.pathname);
-    if(diffX < -100) goto(modules[(idx + 1) % modules.length]);
-    else if(diffX > 100) goto(modules[(idx - 1 + modules.length) % modules.length]);
+    if(diffX < -100) goto(modules[(idx + 1) % modules.length], { keepFocus:true });
+    else if(diffX > 100) goto(modules[(idx - 1 + modules.length) % modules.length], { keepFocus:true });
   }
 
   function applyThemeFromStorage(){
@@ -57,10 +62,7 @@
     } else {
       document.documentElement.setAttribute('data-theme', t);
       document.documentElement.setAttribute('data-social-theme', t);
-      try{
-        localStorage.setItem('ems_theme', t);
-        localStorage.setItem('app-theme', t);
-      }catch{}
+      try{ localStorage.setItem('ems_theme', t); localStorage.setItem('app-theme', t); }catch{}
     }
     const isDarkTheme = ['dark','whatsapp','discord','twitter','slack'].includes(t);
     document.documentElement.style.colorScheme = isDarkTheme ? 'dark' : 'light';
@@ -71,31 +73,35 @@
     try{
       const { data } = await supabase.from('settings').select('appearance').eq('id',1).maybeSingle();
       if(data?.appearance?.theme){
-        try{
-          localStorage.setItem('ems_theme', data.appearance.theme);
-          localStorage.setItem('app-theme', data.appearance.theme);
-        }catch{}
+        try{ localStorage.setItem('ems_theme', data.appearance.theme); localStorage.setItem('app-theme', data.appearance.theme); }catch{}
         applyThemeFromStorage();
       }
     }catch{}
   }
 
+  function preloadInBackground(){
+    if(!browser) return;
+    // ✅ FAST: light queries only
+    Promise.allSettled([
+      supabase.from('contacts').select('id').limit(1).then(()=>{}).catch(()=>{}),
+      supabase.from('settings').select('id').limit(1).then(()=>{}).catch(()=>{}),
+    ]);
+    // ✅ SPEED: prefetch reports + settings so bottom nav instant
+    setTimeout(()=>{
+      try{
+        preloadData('/reports');
+        preloadData('/settings');
+        preloadData('/chat');
+      }catch{}
+    }, 800);
+  }
+
   onMount(() => {
     if(!browser) return;
-    // FAST: theme immediate - no await
     applyThemeFromStorage();
-    
-    // FAST: supabase call background la - blocking illa - 0ms delay
-    setTimeout(()=>{ loadThemeFromSettings(); }, 100);
-
-    // Hide loader ASAP from layout also - double safety
-    setTimeout(()=>{
-      const loader = document.getElementById('app-initial-loader');
-      if(loader && !loader.classList.contains('hide')){
-        loader.classList.add('hide');
-        setTimeout(()=> loader.remove(), 300);
-      }
-    }, 400);
+    setTimeout(()=>{ loadThemeFromSettings(); }, 300);
+    const idle = (window as any).requestIdleCallback || ((cb:any)=> setTimeout(cb, 1200));
+    idle(()=> preloadInBackground());
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleThemeChange = ()=>{
@@ -108,8 +114,7 @@
     const conn: any = (navigator as any).connection;
     let connListener: any = null;
     if(conn){ 
-      rtt = conn.rtt; 
-      downlink = conn.downlink; 
+      rtt = conn.rtt; downlink = conn.downlink; 
       connListener = ()=>{ rtt = conn.rtt; downlink = conn.downlink; };
       conn.addEventListener('change', connListener); 
     }
@@ -142,45 +147,23 @@
 
 <div class="swipe-root"><slot /></div>
 
-<div class="module-dots">
-  {#each modules as m, i}<div class="dot" class:active={getModuleIndex($page.url.pathname)===i}></div>{/each}
-</div>
-
 <style>
 .net-bar{ height:24px; background:#111b21; color:#aebac1; display:flex; gap:12px; align-items:center; padding:0 12px; font-size:11px; font-family:monospace; border-bottom:1px solid #222d34; position:sticky; top:0; z-index:999; }
 .net-bar.offline{ background:#5a1a1a; color:#ffb4b4; }
 .net-close{ margin-left:auto; background:transparent; border:none; color:inherit; cursor:pointer; }
 .swipe-root{ min-height:100vh; touch-action: auto; }
-.module-dots{ position:fixed; bottom:70px; left:50%; transform:translateX(-50%); display:flex; gap:6px; z-index:50; pointer-events:none; }
-.dot{ width:6px; height:6px; border-radius:50%; background:#3a4a54; opacity:0.5; transition:all 0.2s; }
-.dot.active{ background:#00a884; opacity:1; width:18px; border-radius:3px; }
-@media(min-width:769px){.module-dots{ display:none; } }
-
 :global(html){ background:var(--bg)!important; color:var(--text)!important; }
 :global(body){ background:var(--bg)!important; color:var(--text)!important; margin:0; }
-
-/* FIX USER DROPDOWN - WHITE BG WITH DARK TEXT */
 :global(.user-dropdown), :global(.dropdown-menu){
-  background:#ffffff !important;
-  color:#111827 !important;
+  background:#ffffff !important; color:#111827 !important;
   border:1px solid #e5e7eb !important;
   box-shadow:0 10px 25px rgba(0,0,0,0.15) !important;
-  border-radius:10px !important;
-  overflow:hidden !important;
+  border-radius:10px !important; overflow:hidden !important;
 }
 :global(.user-dropdown *){ color:#111827 !important; }
-:global(.user-dropdown a){
-  display:flex !important; align-items:center; gap:8px;
-  padding:12px 14px !important; color:#111827 !important;
-  font-size:14px !important; font-weight:600 !important;
-}
+:global(.user-dropdown a){ display:flex !important; align-items:center; gap:8px; padding:12px 14px !important; color:#111827 !important; font-size:14px !important; font-weight:600 !important; }
 :global(.user-dropdown a:hover){ background:#f3f4f6 !important; }
-
-:global(.globe-canvas), :global(canvas){
-  touch-action: none !important;
-  pointer-events: auto !important;
-}
-
+:global(.globe-canvas), :global(canvas){ touch-action: none !important; pointer-events: auto !important; }
 :global(.preview-area label){ color:#111827 !important; font-weight:800 !important; }
 :global(.preview-area input){ background:#ffffff !important; color:#111827 !important; border:1.5px solid #94a3b8 !important; }
 </style>

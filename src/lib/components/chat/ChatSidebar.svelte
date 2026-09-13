@@ -19,24 +19,43 @@
   } = $props();
 
   let search = $state("");
+  let searchDebounced = $state("");
   let showMainMenu = $state(false);
   let activeFilter = $state("All");
   let longPressTimer: any = $state(null);
   let showDeleteMenu: string | null = $state(null);
   let deleteTarget: any = $state(null);
   let contextPos = $state({x:0, y:0});
+  let debounceT: any = null;
 
   function sanitizeSearch(s:string){ return (s||'').toString().slice(0,100).replace(/[<>]/g,''); }
+  function sanitizeUrl(u:string){ if(!u) return ''; if(u.startsWith('http') || u.startsWith('data:image')) return u.slice(0,500); return ''; }
+  function getInitials(n:string){ return n? n.trim().split(' ').map((x:string)=>x[0]).join('').toUpperCase().slice(0,2) : 'U'; }
+
+  // ✅ SPEED: debounce search 120ms
+  $effect(()=>{
+    const v = search;
+    clearTimeout(debounceT);
+    debounceT = setTimeout(()=>{ searchDebounced = sanitizeSearch(v); }, 120);
+  });
 
   let filteredContacts = $derived.by(()=>{
-    if(!search.trim()) return contacts;
-    const s = sanitizeSearch(search).toLowerCase();
-    return contacts.filter((c:any)=> c.name?.toLowerCase().includes(s) || c.email?.toLowerCase().includes(s) || c.last_message?.toLowerCase().includes(s))
+    if(!searchDebounced.trim()) return contacts;
+    const s = searchDebounced.toLowerCase();
+    const out:any[] = [];
+    for(let c of contacts){
+      if(out.length>=100) break;
+      const name = (c.name||'').toLowerCase();
+      const email = (c.email||'').toLowerCase();
+      const last = (c.last_message||'').toLowerCase();
+      if(name.includes(s) || email.includes(s) || last.includes(s)) out.push(c);
+    }
+    return out;
   });
   let filteredGroups = $derived.by(()=>{
-    if(!search.trim()) return groups;
-    const s = sanitizeSearch(search).toLowerCase();
-    return groups.filter((g:any)=> g.name?.toLowerCase().includes(s));
+    if(!searchDebounced.trim()) return groups;
+    const s = searchDebounced.toLowerCase();
+    return groups.filter((g:any)=> (g.name||'').toLowerCase().includes(s)).slice(0,50);
   });
   let displayContacts = $derived.by(()=>{
     if(activeFilter==='Groups') return [];
@@ -45,7 +64,7 @@
     if(selfIdx>0){ const self=list.splice(selfIdx,1)[0]; list.unshift(self); }
     if(activeFilter==='Unread') list=list.filter((c:any)=> (c.unread||c.unread_count||0)>0);
     if(activeFilter==='Favorites') list=list.filter((c:any)=> c.isFavorite || c.isPinned);
-    if(selfIdx===-1 && activeFilter==='All'){
+    if(selfIdx===-1 && activeFilter==='All' &&!searchDebounced){
       list.sort((a:any,b:any)=>{
         if(a.isSelf) return -1; if(b.isSelf) return 1;
         const at = a.last_message_at? new Date(a.last_message_at).getTime():0;
@@ -53,16 +72,14 @@
         if(bt!==at) return bt-at; return 0;
       });
     }
-    return list;
+    return list.slice(0,80);
   });
   let displayGroups = $derived.by(()=>{
-    if(activeFilter==='All') return filteredGroups;
-    if(activeFilter==='Groups') return filteredGroups;
-    if(activeFilter==='Unread') return filteredGroups.filter((g:any)=> (g.unread||g.unread_count||0)>0);
+    if(activeFilter==='All') return filteredGroups.slice(0,30);
+    if(activeFilter==='Groups') return filteredGroups.slice(0,80);
+    if(activeFilter==='Unread') return filteredGroups.filter((g:any)=> (g.unread||g.unread_count||0)>0).slice(0,50);
     return [];
   });
-
-  function getInitials(n:string){ return n? n.trim().split(' ').map((x:string)=>x[0]).join('').toUpperCase().slice(0,2) : 'U'; }
 
   function clickOutside(node: HTMLElement, cb: () => void) {
     const handle = (e: MouseEvent) => {
@@ -78,7 +95,6 @@
     e.stopPropagation();
     onAvatarClick({detail:{contact:c, type}});
   }
-
   function handleContactClick(c:any, e: MouseEvent){
     e.stopPropagation();
     if(showDeleteMenu){ showDeleteMenu=null; return; }
@@ -98,33 +114,22 @@
     },600);
   }
   function onTouchEnd(){ clearTimeout(longPressTimer); }
-
   function onContextMenu(e: MouseEvent, c:any){
-    e.preventDefault();
-    e.stopPropagation();
-    // FIXED: Clamp to screen so menu always visible
-    let x = e.clientX;
-    let y = e.clientY;
+    e.preventDefault(); e.stopPropagation();
+    let x = e.clientX; let y = e.clientY;
     if(x > window.innerWidth - 170) x = window.innerWidth - 170;
     if(y > window.innerHeight - 100) y = window.innerHeight - 100;
-    contextPos = {x, y};
-    deleteTarget=c;
-    showDeleteMenu=c.id;
+    contextPos = {x, y}; deleteTarget=c; showDeleteMenu=c.id;
   }
-
-  // FIXED: No showContext bug - uses showDeleteMenu
   function confirmDelete(){
     if(!deleteTarget) return;
     const target = {...deleteTarget};
-    showDeleteMenu = null;
-    deleteTarget = null;
-    // Dispatch - page will handle with optimistic delete
+    showDeleteMenu = null; deleteTarget = null;
     onDeleteContact?.({detail: target});
   }
-
   function getLastMessage(c:any){
     if(c.isSelf) return c.last_message || 'Message yourself';
-    if(c.isInvite || c.isOutgoing || c.status==='pending') return '⏳ Invite pending - Tap to view';
+    if(c.isInvite || c.isOutgoing || c.status==='pending') return '⏳ Invite pending';
     if(c.isIncomingInvite || c.status==='invite_received' || c.status==='incoming') return '📩 Tap to Accept';
     if(c.last_message) return c.last_message.slice(0,38);
     if(c.email) return c.email.slice(0,26);
@@ -138,9 +143,9 @@
     <div class="sidebar-header">
       <h1>Chat</h1>
       <div class="header-actions">
-        <button class="icon-btn" onclick={(e)=>{e.stopPropagation(); onNewContact();}}>✎</button>
+        <button class="icon-btn" onclick={(e)=>{e.stopPropagation(); onNewContact();}} aria-label="new contact">✎</button>
         <div class="menu-container" use:clickOutside={()=>showMainMenu=false}>
-          <button class="icon-btn" onclick={(e)=>{e.stopPropagation(); showMainMenu=!showMainMenu}}>⋮</button>
+          <button class="icon-btn" onclick={(e)=>{e.stopPropagation(); showMainMenu=!showMainMenu}} aria-label="menu">⋮</button>
           {#if showMainMenu}
             <div class="dropdown" onclick={(e)=>{e.stopPropagation()}}>
               <button onclick={(e)=>{ e.stopPropagation(); showMainMenu=false; onNewGroup(); }}>New group</button>
@@ -155,7 +160,7 @@
       </div>
     </div>
     <div class="search-wrap">
-      <div class="search-box"><span class="search-icon">🔍</span><input bind:value={search} placeholder="Search or start new chat" maxlength="100" autocomplete="off" /></div>
+      <div class="search-box"><span class="search-icon">🔍</span><input bind:value={search} placeholder="Search or start new chat" maxlength="100" autocomplete="off" spellcheck="false" /></div>
     </div>
     <div class="filters">
       {#each ['All','Unread','Favorites','Groups'] as f}
@@ -172,7 +177,7 @@
         oncontextmenu={(e)=>onContextMenu(e,g)}
         onkeydown={(e)=>{ if(e.key==='Enter') handleGroupClick(g,e)}}>
         <div class="avatar group" onclick={(e)=>handleAvatarClick(g,e,'group')}>
-          {#if g.avatar_url}<img src={g.avatar_url} alt="" />{:else}<span>👥</span>{/if}
+          {#if g.avatar_url}<img src={sanitizeUrl(g.avatar_url)} alt="" loading="lazy" decoding="async" />{:else}<span>👥</span>{/if}
         </div>
         <div class="info">
           <div class="top"><span class="name">{g.name}</span><span class="time">{g.last_time||''}</span></div>
@@ -188,7 +193,7 @@
         oncontextmenu={(e)=>onContextMenu(e,c)}
         onkeydown={(e)=>{ if(e.key==='Enter') handleContactClick(c,e)}}>
         <div class="avatar" class:self-avatar={c.isSelf} onclick={(e)=>handleAvatarClick(c,e,'contact')}>
-          {#if c.avatar_url}<img src={c.avatar_url} alt="" />{:else if c.isSelf}<span>💾</span>{:else}<span>{getInitials(c.name||c.email)}</span>{/if}
+          {#if c.avatar_url}<img src={sanitizeUrl(c.avatar_url)} alt="" loading="lazy" decoding="async" />{:else if c.isSelf}<span>💾</span>{:else}<span>{getInitials(c.name||c.email)}</span>{/if}
         </div>
         <div class="info">
           <div class="top">
@@ -197,7 +202,7 @@
           </div>
           <div class="bottom">
             {#if c.status==='pending' || c.isOutgoing || c.isInvite}
-              <span class="sub pending">⏳ Invite pending - Tap to view</span>
+              <span class="sub pending">⏳ Invite pending</span>
             {:else if c.status==='invite_received' || c.isIncomingInvite || c.status==='incoming'}
               <span class="sub incoming">📩 Tap to Accept</span>
             {:else}<span class="sub">{getLastMessage(c)}</span>{/if}
@@ -237,8 +242,8 @@
 .filters{display:flex;gap:8px;padding:8px 12px;background:#111b21;border-bottom:1px solid #1f2c34;overflow-x:auto;scrollbar-width:none;white-space:nowrap;}
 .filters button{background:#182229;color:#8696a0;border:none;border-radius:18px;padding:6px 12px;font-size:13px;cursor:pointer;}
 .filters button.active{background:#0a332c;color:#53bdeb;font-weight:600;}
-.chat-list{flex:1;min-height:0;overflow-y:auto;background:#111b21; contain: layout style;}
-.chat-row{display:flex;align-items:center;padding:0 12px;cursor:pointer;min-height:72px; position:relative;}
+.chat-list{flex:1;min-height:0;overflow-y:auto;background:#111b21; contain: content; content-visibility:auto;}
+.chat-row{display:flex;align-items:center;padding:0 12px;cursor:pointer;min-height:72px; position:relative; contain: layout style;}
 .chat-row:hover{background:#202c33;}
 .chat-row.selected{background:#2a3942;}
 .avatar{width:49px;height:49px;border-radius:50%;background:#2a3942;color:#fff;display:flex;align-items:center;justify-content:center;margin:8px 12px 8px 0;font-weight:600;flex-shrink:0;overflow:hidden;cursor:pointer;}

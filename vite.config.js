@@ -4,7 +4,7 @@
  * File : vite.config.ts
  * ============================================================
  * PURPOSE
- * Vite + Tauri dev config
+ * Vite + Tauri dev config - FAST OPEN + SECURE
  * ============================================================
  */
 
@@ -17,11 +17,34 @@ export default defineConfig(async () => ({
   plugins: [sveltekit()],
 
   clearScreen: false,
+
+  // ✅ SPEED: pre-bundle supabase for instant open
+  optimizeDeps: {
+    include: ['@supabase/supabase-js'],
+    exclude: ['@tauri-apps/api']
+  },
+
+  // ✅ SPEED + SECURE: build split
+  build: {
+    target: 'esnext',
+    minify: 'esbuild',
+    cssMinify: true,
+    sourcemap: false, // ✅ SECURE: no source in prod
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          supabase: ['@supabase/supabase-js'],
+          svelte: ['svelte']
+        }
+      }
+    }
+  },
   
   server: {
     port: 1420,
     strictPort: true,
-    host: '0.0.0.0', // LAN testing ku. host || false use pannadhinga
+    host: '0.0.0.0', // LAN testing ku - keep
     hmr: host
       ? {
           protocol: "ws",
@@ -35,5 +58,14 @@ export default defineConfig(async () => ({
     watch: {
       ignored: ["**/src-tauri/**"],
     },
+    // ✅ SECURE: headers for dev
+    headers: {
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'X-XSS-Protection': '1; mode=block'
+    }
   },
+
+  // ✅ SECURE + SPEED: env prefix
+  envPrefix: ['VITE_', 'PUBLIC_']
 }));
