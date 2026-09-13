@@ -24,6 +24,11 @@ export default defineConfig(async () => ({
     exclude: ['@tauri-apps/api']
   },
 
+  // ✅ SSR FIX: Prevent external error for manualChunks
+  ssr: {
+    noExternal: ['@supabase/supabase-js']
+  },
+
   // ✅ SPEED + SECURE: build split
   build: {
     target: 'esnext',
@@ -33,9 +38,12 @@ export default defineConfig(async () => ({
     chunkSizeWarningLimit: 600,
     rollupOptions: {
       output: {
-        manualChunks: {
-          supabase: ['@supabase/supabase-js'],
-          svelte: ['svelte']
+        // ✅ FIX: Function form avoids "external module" error
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('@supabase')) return 'supabase';
+            if (id.includes('svelte')) return 'svelte-vendor';
+          }
         }
       }
     }
@@ -44,7 +52,7 @@ export default defineConfig(async () => ({
   server: {
     port: 1420,
     strictPort: true,
-    host: '0.0.0.0', // LAN testing ku - keep
+    host: '0.0.0.0',
     hmr: host
       ? {
           protocol: "ws",
