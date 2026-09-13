@@ -18,10 +18,13 @@
 
 	let { data } = $props();
 	let loading = $state(false);
-	let error = $state<string | null>(null);
-	let meetings = $state<any[]>(data.meetings?? []);
-	let actions = $state<any[]>(data.actions?? []);
-	let downtime = $state<any[]>(data.downtime?? []);
+	// ✅ FIX 1: rename error -> errorMsg (error is reserved in SvelteKit, causes 4x log)
+	let errorMsg = $state<string | null>(null);
+	
+	// ✅ FIX 2: use $derived for props - avoids state_referenced_locally warning
+	let meetings = $derived(data.meetings ?? []);
+	let actions = $derived(data.actions ?? []);
+	let downtime = $derived(data.downtime ?? []);
 
 	let selectedCard = $state<string | null>(null);
 	let detailList = $state<any[]>([]);
@@ -53,9 +56,10 @@
 		}).filter((r) => r.target > 0 || r.actual > 0 || r.ng > 0 || r.yield > 0);
 	}
 
-	const production = $derived(mapProduction(data.production?? []));
+	const production = $derived(mapProduction(data.production ?? []));
 
-	const stats = $derived(() => {
+	// ✅ FIX 3: $derived.by for computed object (was $derived(() => {}) which returns function)
+	const stats = $derived.by(() => {
 		const totalTarget = production.reduce((t, r) => t + Number(r?.target?? 0), 0);
 		const totalActual = production.reduce((t, r) => t + Number(r?.actual?? 0), 0);
 		const totalNG = production.reduce((t, r) => t + Number(r?.ng?? 0), 0);
@@ -79,23 +83,23 @@
 		};
 	});
 
-	const aiSummaryData = $derived(() => ({
+	const aiSummaryData = $derived.by(() => ({
 		loading: false,
-		production: { achievement: stats().totalTarget > 0? (stats().totalActual / stats().totalTarget) * 100 : 0, yield: Number(stats().avgYield), oee: 82.5 },
-		actions: { pending: stats().pendingActions, overdue: stats().overdueList.length },
-		meetings: { today: stats().todayMeetings },
-		issues: stats().totalDowntimeMinutes > 120? ['High downtime today'] : [],
+		production: { achievement: stats.totalTarget > 0? (stats.totalActual / stats.totalTarget) * 100 : 0, yield: Number(stats.avgYield), oee: 82.5 },
+		actions: { pending: stats.pendingActions, overdue: stats.overdueList.length },
+		meetings: { today: stats.todayMeetings },
+		issues: stats.totalDowntimeMinutes > 120? ['High downtime today'] : [],
 		recommendations: ['Reduce changeover time', 'Complete pending actions']
 	}));
 
 	function openDetail(type: string) {
 		selectedCard = type;
-		if (type === 'today') detailList = stats().todayList;
-		if (type === 'upcoming') detailList = stats().upcomingList;
-		if (type === 'pending') detailList = stats().pendingList;
-		if (type === 'overdue') detailList = stats().overdueList;
+		if (type === 'today') detailList = stats.todayList;
+		if (type === 'upcoming') detailList = stats.upcomingList;
+		if (type === 'pending') detailList = stats.pendingList;
+		if (type === 'overdue') detailList = stats.overdueList;
 		if (type === 'reports') detailList = production;
-		if (type === 'downtime') detailList = stats().todayDowntimeList;
+		if (type === 'downtime') detailList = stats.todayDowntimeList;
 		if (type === 'target') detailList = production.slice(0,10);
 	}
 
@@ -114,52 +118,52 @@
   </div>
 
   <div class="scroll-area">
-    {#if loading}<DashboardSkeleton />{:else if error}<ErrorCard title="Error" message={error} onretry={()=>window.location.reload()} />{:else}
+    {#if loading}<DashboardSkeleton />{:else if errorMsg}<ErrorCard title="Error" message={errorMsg} onretry={()=>window.location.reload()} />{:else}
 
-    <AISummary summary={aiSummaryData()} />
+    <AISummary summary={aiSummaryData} />
 
     <div class="kpi-simple">
-      <div class="k" onclick={()=>openDetail('today')}>
-        <span class="n">{stats().todayMeetings}</span>
+      <div class="k" onclick={()=>openDetail('today')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('today')}>
+        <span class="n">{stats.todayMeetings}</span>
         <span class="l">Today Meet</span>
         <small>my meetings • view</small>
       </div>
-      <div class="k" onclick={()=>openDetail('pending')}>
-        <span class="n" style="color:#dc2626">{stats().pendingActions}</span>
+      <div class="k" onclick={()=>openDetail('pending')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('pending')}>
+        <span class="n" style="color:#dc2626">{stats.pendingActions}</span>
         <span class="l">Pending</span>
         <small>my tasks • view</small>
       </div>
-      <div class="k" onclick={()=>openDetail('reports')}>
-        <span class="n" style="color:#16a34a">{stats().totalReports}</span>
+      <div class="k" onclick={()=>openDetail('reports')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('reports')}>
+        <span class="n" style="color:#16a34a">{stats.totalReports}</span>
         <span class="l">My Reports</span>
         <small>click to view</small>
       </div>
-      <div class="k" onclick={()=>openDetail('downtime')}>
-        <span class="n" style="color:#ea580c">{stats().totalDowntimeMinutes}m</span>
+      <div class="k" onclick={()=>openDetail('downtime')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('downtime')}>
+        <span class="n" style="color:#ea580c">{stats.totalDowntimeMinutes}m</span>
         <span class="l">Downtime</span>
         <small>today • view</small>
       </div>
     </div>
 
     <div class="totals">
-      <div onclick={()=>openDetail('target')}><b>{stats().totalTarget.toLocaleString()}</b><p>Target</p></div>
-      <div onclick={()=>openDetail('reports')}><b style="color:#16a34a">{stats().totalActual.toLocaleString()}</b><p>Actual</p></div>
-      <div><b style="color:#dc2626">{stats().totalNG.toLocaleString()}</b><p>NG</p></div>
-      <div><b style="color:#2563eb">{stats().avgYield}%</b><p>Yield</p></div>
+      <div onclick={()=>openDetail('target')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('target')}><b>{stats.totalTarget.toLocaleString()}</b><p>Target</p></div>
+      <div onclick={()=>openDetail('reports')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('reports')}><b style="color:#16a34a">{stats.totalActual.toLocaleString()}</b><p>Actual</p></div>
+      <div><b style="color:#dc2626">{stats.totalNG.toLocaleString()}</b><p>NG</p></div>
+      <div><b style="color:#2563eb">{stats.avgYield}%</b><p>Yield</p></div>
     </div>
 
     <div class="h-scroll">
-      <div onclick={()=>openDetail('reports')}><ProductionSummary production={stats().production} /></div>
-      <div onclick={()=>openDetail('today')}><MeetingSummary meetings={stats().meetings} /></div>
-      <div onclick={()=>openDetail('pending')}><ActionSummary actions={stats().actions} /></div>
-      <div onclick={()=>openDetail('downtime')}><DowntimeSummary downtime={stats().downtime} /></div>
+      <div onclick={()=>openDetail('reports')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('reports')}><ProductionSummary production={stats.production} /></div>
+      <div onclick={()=>openDetail('today')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('today')}><MeetingSummary meetings={stats.meetings} /></div>
+      <div onclick={()=>openDetail('pending')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('pending')}><ActionSummary actions={stats.actions} /></div>
+      <div onclick={()=>openDetail('downtime')} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && openDetail('downtime')}><DowntimeSummary downtime={stats.downtime} /></div>
     </div>
 
-    <ProductionTrend production={stats().production} />
+    <ProductionTrend production={stats.production} />
 
     <div class="grid-2">
-      <RecentMeetings meetings={stats().meetings} />
-      <RecentActions actions={stats().actions} />
+      <RecentMeetings meetings={stats.meetings} />
+      <RecentActions actions={stats.actions} />
     </div>
 
     {/if}
@@ -189,7 +193,7 @@
         </div>
       {:else}
         {#each detailList as item, i}
-          <div class="detail-row" onclick={()=>{ selectedCard=null; if(item.id) navigate(`/meeting-list/${item.id}`); }}>
+          <div class="detail-row" onclick={()=>{ selectedCard=null; if(item.id) navigate(`/meeting-list/${item.id}`); }} role="button" tabindex="0" onkeydown={(e)=>e.key==='Enter' && (selectedCard=null)}>
             <div class="detail-left">
               <b>{item.title?? item.action_title?? item.report_date?? item.meeting_title?? `Item ${i+1}`}</b>
               <span>{item.meeting_date?? item.due_date?? item.report_date?? ''} {item.meeting_time?? ''}</span>
@@ -215,8 +219,8 @@
 .kpi-simple{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
 .k{background:white;border:1px solid #e2e8f0;border-radius:12px;padding:12px 8px;display:flex;flex-direction:column;align-items:center;cursor:pointer;transition:all 0.15s;}
 .k:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.08);border-color:#cbd5e1;}
-.k.n{font-size:20px;font-weight:800;color:#0f172a;display:block;}
-.k.l{font-size:10px;color:#64748b;margin-top:2px;text-transform:uppercase;letter-spacing:0.5px;}
+.k .n{font-size:20px;font-weight:800;color:#0f172a;display:block;}
+.k .l{font-size:10px;color:#64748b;margin-top:2px;text-transform:uppercase;letter-spacing:0.5px;}
 .k small{font-size:8px;color:#94a3b8;margin-top:4px;}
 .totals{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:10px;}
 .totals div{text-align:center;border-right:1px solid #f1f5f9;cursor:pointer;padding:4px;}
