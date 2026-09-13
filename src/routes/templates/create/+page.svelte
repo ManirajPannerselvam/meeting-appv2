@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { get } from "svelte/store";
-  import { authUserName, authUserId, getTemplateOwner } from "$lib/stores/auth";
+  import { browser } from "$app/environment";
+  import { getTemplateOwner } from "$lib/stores/auth";
   import { supabaseTemplates } from "$lib/supabase";
 
   function uuid(){ return Math.random().toString(36).substring(2,9); }
+  function safeUUID(){ try{ return crypto.randomUUID(); }catch{ return Date.now().toString(36)+Math.random().toString(36).slice(2); } }
   function sanitizeText(v:string){ return v.replace(/[<>"'`;]/g,"").trim().slice(0,60); }
   function sanitizeCode(v:string){ return v.toUpperCase().replace(/[^A-Z0-9-_]/g,"").slice(0,20); }
   function sanitizeFieldName(v:string){ return v.toLowerCase().replace(/[^a-z0-9_]+/g,"_").slice(0,40); }
@@ -59,11 +60,18 @@
   let savedCount = 0; let isDirty = true; let toast = ""; let showSavedPopup = false; let savedTemplates: any[] = [];
 
   onMount(async ()=>{
-    creatingTime = new Date(); setInterval(()=> creatingTime = new Date(), 1000);
-    try{ const s=localStorage.getItem("template_theme_id"); if(s && /^[a-z]+$/.test(s)){ const f=themes.find(t=>t.id===s); if(f) selectedTheme=f; } }catch{}
-    loadSaved();
+    creatingTime = new Date(); 
+    const iv = setInterval(()=> creatingTime = new Date(), 1000);
+    if(browser){
+      try{ const s=localStorage.getItem("template_theme_id"); if(s && /^[a-z]+$/.test(s)){ const f=themes.find(t=>t.id===s); if(f) selectedTheme=f; } }catch{}
+      loadSaved();
+    }
+    return ()=> clearInterval(iv);
   });
-  function loadSaved(){ try{ let t=JSON.parse(localStorage.getItem("templates")||"[]"); savedTemplates = Array.isArray(t)? t.slice(0,100):[]; savedCount=t.length; }catch{ savedCount=0; } }
+  function loadSaved(){ 
+    if(!browser) return;
+    try{ let t=JSON.parse(localStorage.getItem("templates")||"[]"); savedTemplates = Array.isArray(t)? t.slice(0,100):[]; savedCount=t.length; }catch{ savedCount=0; } 
+  }
 
   function quickAdd(def:FieldDef){
     const w=4.5; const h=2.2;
@@ -138,12 +146,13 @@
   function deleteField(id:string){ placed=placed.filter(x=>x.id!==id); isDirty=true; }
 
   async function saveTemplate(){
+    if(!browser) return;
     let cleanName=sanitizeText(templateName); if(!cleanName){ toast="Enter valid Name"; setTimeout(()=>toast="",2000); return; }
     let cleanCode=sanitizeCode(templateCode)||`PROD-${Date.now().toString().slice(-4)}`; templateName=cleanName; templateCode=cleanCode;
     let all:any[]=[]; try{ all=JSON.parse(localStorage.getItem("templates")||"[]"); }catch{ all=[]; }
     let owner=getTemplateOwner(); let realIdStr=owner.owner_id; let realEmail=sanitizeText(owner.owner_name||owner.owner_email||"user"); let realUUID:string|null=null;
     try{ const { data:{user} }=await supabaseTemplates.auth.getUser(); if(user){ realEmail=sanitizeText(user.email||user.id); realIdStr=user.email||user.id; if(isValidUUID(user.id)) realUUID=user.id; } }catch{}
-    const newId=crypto.randomUUID();
+    const newId=safeUUID();
     const normalized=placed.map(p=>({ ...p, label:sanitizeText(p.label), field_name:sanitizeFieldName(p.field_name||p.label), name:sanitizeFieldName(p.field_name||p.label), formula:(p.formula||"").slice(0,200) }));
     let obj={ id:newId, name:cleanName, code:cleanCode, template_code:cleanCode, t_code:cleanCode, category:sanitizeText(category), theme:selectedTheme.id, theme_color:selectedTheme.color, fields:normalized, data:{fields:normalized}, owner_id:realIdStr, owner_name:realEmail, createdAt:new Date().toISOString() };
     all=[obj,...all].slice(0,100); localStorage.setItem("templates",JSON.stringify(all)); localStorage.setItem("template_theme_id",selectedTheme.id);
@@ -156,9 +165,10 @@
     setTimeout(()=>toast="",2500); showSavedPopup=true;
   }
   function handleBack(){ if(isDirty && !confirm("Not Saved! Leave?")) return; history.back(); }
-  function pickTheme(t:any){ if(!t||!/^[a-z]+$/.test(t.id)) return; selectedTheme=t; localStorage.setItem("template_theme_id",t.id); isDirty=true; }
+  function pickTheme(t:any){ if(!t||!/^[a-z]+$/.test(t.id)) return; selectedTheme=t; if(browser) localStorage.setItem("template_theme_id",t.id); isDirty=true; }
 </script>
 
+<!-- SAME MARKUP BUT WITH FIXED EVENTS -->
 <div class="top-fixed two-line">
   <div class="top-line line1">
     <div class="tl1">
@@ -251,22 +261,22 @@
       <div class="fb-head"><b>Formula - {selectedTheme.name}</b></div>
       <textarea bind:value={editFormula} oninput={saveFormula} rows="4" class="fb-ta" maxlength={200} placeholder="Select fields"></textarea>
       <div class="fb-ops all-sym three-rows">
-  <button onclick={()=>insertOp("(")}>(</button>
-  <button onclick={()=>insertOp(")")}>)</button>
-  <button onclick={()=>insertOp("+")}>+</button>
-  <button onclick={()=>insertOp("-")}>−</button>
-  <button onclick={()=>insertOp("×")}>×</button>
-  <button onclick={()=>insertOp("÷")}>÷</button>
-  <button onclick={()=>insertOp("%")}>%</button>
-  <button class="span-2" onclick={()=>insertOp("100")}>100</button>
-</div>
+        <button onclick={()=>insertOp("(")}>(</button>
+        <button onclick={()=>insertOp(")")}>)</button>
+        <button onclick={()=>insertOp("+")}>+</button>
+        <button onclick={()=>insertOp("-")}>−</button>
+        <button onclick={()=>insertOp("×")}>×</button>
+        <button onclick={()=>insertOp("÷")}>÷</button>
+        <button onclick={()=>insertOp("%")}>%</button>
+        <button class="span-2" onclick={()=>insertOp("100")}>100</button>
+      </div>
       <div class="fb-sec"><b>Available Fields</b>{#each numberFields as bf}<button class="fb-field" onclick={()=>insertField(bf.field_name)}>📥 {bf.label} → {'{'+bf.field_name+'}'}</button>{/each}</div>
       <button class="savef" style="background:{selectedTheme.color}" onclick={saveFormula}>💾 Save Formula</button>
     </div>
   </div>
 </div>
 
-<style>
+<style> /* same style as yours - unchanged */ 
   :global(body){margin:0; font-family:system-ui; background:#f8fafc;}
   .top-fixed.two-line{position:fixed; top:0; left:0; right:0; z-index:1000; background:white; border-bottom:1px solid #e5e7eb; display:flex; flex-direction:column; gap:0;}
   .top-line{display:flex; justify-content:space-between; align-items:center; padding:4px 6px;}
@@ -297,20 +307,10 @@
   .board-scroll{flex:1; overflow:auto; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overscroll-behavior:contain;}
   .board{position:relative; touch-action:pan-x pan-y;}
   .dot{position:absolute; width:1.5px; height:1.5px; background:#cbd5e1; border-radius:50%; opacity:.4;}
-  .mod.reduced{
-    position:absolute; background:white; border:1.5px solid; border-radius:6px;
-    display:flex; align-items:center; padding:0 22px 0 6px;
-    font-weight:700; box-shadow:0 1px 3px rgba(0,0,0,.15);
-    touch-action:none; user-select:none; cursor:grab; box-sizing:border-box;
-    min-width:72px; overflow:hidden;
-  }
+  .mod.reduced{position:absolute; background:white; border:1.5px solid; border-radius:6px; display:flex; align-items:center; padding:0 22px 0 6px; font-weight:700; box-shadow:0 1px 3px rgba(0,0,0,.15); touch-action:none; user-select:none; cursor:grab; box-sizing:border-box; min-width:72px; overflow:hidden;}
   .mod.reduced.active{border-width:2.2px; z-index:20; box-shadow:0 4px 12px rgba(0,0,0,.2);}
   .mod-label{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:8px !important; line-height:1.1;}
-  .x{
-    position:absolute !important; right:3px !important; top:50% !important; transform:translateY(-50%);
-    width:18px !important; height:18px !important; background:#fee2e2; color:#dc2626; border:none; border-radius:4px;
-    font-size:11px !important; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:30;
-  }
+  .x{position:absolute !important; right:3px !important; top:50% !important; transform:translateY(-50%); width:18px !important; height:18px !important; background:#fee2e2; color:#dc2626; border:none; border-radius:4px; font-size:11px !important; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:30;}
   .creating-info{padding:3px 5px; display:flex; justify-content:space-between; font-size:7px; flex-shrink:0;}
   .preview-wrap.linked.onebyone{flex:1; overflow:auto; background:white; border:1.5px solid #0ea5e9; border-radius:5px; padding:3px;}
   .preview-head{font-size:7px; font-weight:700; margin-bottom:3px;}
@@ -321,21 +321,11 @@
   .edit-box{background:white; border:1px solid #e5e7eb; border-radius:5px; padding:3px; display:flex; flex-direction:column; gap:2px;}
   .edit-head{display:flex; justify-content:space-between; font-size:8px;} .edit-box label{font-size:7px; font-weight:700;}
   .edit-in{height:20px; border:1px solid #e2e8f0; border-radius:3px; padding:0 4px; font-size:8px;}
-  .formula-builder{
-    position:relative !important; left:auto !important; top:auto !important; transform:none !important;
-    border:1px solid #bbf7d0; border-radius:5px; padding:4px; display:flex; flex-direction:column; gap:4px;
-    background:#f0fdf4; width:100%; box-sizing:border-box;
-  }
+  .formula-builder{position:relative !important; left:auto !important; top:auto !important; transform:none !important; border:1px solid #bbf7d0; border-radius:5px; padding:4px; display:flex; flex-direction:column; gap:4px; background:#f0fdf4; width:100%; box-sizing:border-box;}
   .fb-head{font-size:8px; font-weight:700;} 
   .fb-ta{width:100%; border:1px solid #bbf7d0; border-radius:3px; padding:3px; font-size:8px; resize:none; box-sizing:border-box;}
-  .fb-ops.all-sym{
-    position:static !important; display:grid !important; grid-template-columns:repeat(3,1fr); gap:6px;
-    width:100% !important; background:transparent !important; border:none !important; box-shadow:none !important;
-  }
-  .fb-ops.all-sym button{
-    position:static !important; height:34px !important; background:white; border:1px solid #cbd5e1;
-    border-radius:8px; font-weight:700; font-size:13px !important; cursor:pointer; touch-action:manipulation;
-  }
+  .fb-ops.all-sym{position:static !important; display:grid !important; grid-template-columns:repeat(3,1fr); gap:6px; width:100% !important; background:transparent !important; border:none !important; box-shadow:none !important;}
+  .fb-ops.all-sym button{position:static !important; height:34px !important; background:white; border:1px solid #cbd5e1; border-radius:8px; font-weight:700; font-size:13px !important; cursor:pointer; touch-action:manipulation;}
   .fb-sec{display:flex; flex-direction:column; gap:2px; font-size:7px;} 
   .fb-field{width:100%; min-height:22px; border:1px solid #e5e7eb; border-radius:10px; font-size:7px; background:white; padding:3px 5px; text-align:left;}
   .savef{height:26px; border:none; border-radius:5px; color:white; font-weight:700; font-size:8px;}
