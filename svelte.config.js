@@ -12,22 +12,24 @@ const config = {
     kit: {
         adapter: isVercel
             ? adapterVercel({
-                // ✅ SPEED: edge caching for static
-                isr: { expiration: 3600 }
+                runtime: 'nodejs20.x',
+                // ✅ FIX: Don't use ISR for auth pages - causes 303 cache
+                // isr: { expiration: 3600 }  <-- REMOVE THIS, it caches redirect
               })
             : adapterNode({
-                // ✅ SPEED: keep alive
                 precompress: true
               }),
 
-        // ✅ SPEED: only chat prerender for instant open, others background
+        // ✅ FIX: Don't prerender auth pages - they need user session
+        // Prerendering /chat causes FUNCTION_INVOCATION_FAILED + 303
         prerender: {
-            entries: ['/chat', '/'],
+            entries: ['*'], // only static public pages, not /chat
             handleHttpError: 'warn',
-            handleMissingId: 'warn'
+            handleMissingId: 'warn',
+            origin: 'https://your-app.vercel.app' // replace with your domain
         },
 
-        // ✅ SECURITY: high priority - CSP + secure headers
+        // ✅ SECURITY: high priority - CSP + secure headers - KEPT
         csp: {
             mode: 'auto',
             directives: {
@@ -38,17 +40,16 @@ const config = {
                 'media-src': ['self', 'data:', 'https:', 'blob:'],
                 'connect-src': ['self', 'https://*.supabase.co', 'wss://*.supabase.co', 'https:'],
                 'font-src': ['self', 'https://fonts.gstatic.com', 'data:'],
-                'frame-ancestors': ['none']
+                'frame-ancestors': ['none'],
+                'form-action': ['self']
             }
         },
 
-        // ✅ SPEED: alias + version polling
         version: {
-            pollInterval: 1000 * 60 * 5 // check new version every 5min background
+            pollInterval: 1000 * 60 * 5
         }
     },
 
-    // ✅ SPEED: vite build split + compress
     vitePlugin: {
         experimental: {
             inspector: false
