@@ -19,7 +19,7 @@
 	onMount(async () => {
 		const { data: { session } } = await supabase.auth.getSession();
 		if (session) {
-			const next = $page.url.searchParams.get('next') || '/dashboard';
+			const next = $page.url.searchParams.get('next') || '/chat';
 			window.location.href = next;
 		}
 	});
@@ -36,7 +36,7 @@
 	async function closeLogin(){
 		const { data: { session } } = await supabase.auth.getSession();
 		if (session) {
-			const next = $page.url.searchParams.get('next') || '/dashboard';
+			const next = $page.url.searchParams.get('next') || '/chat';
 			await goto(next);
 		}
 		// if not logged in, do nothing - secure

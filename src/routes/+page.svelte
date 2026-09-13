@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { goto } from '$app/navigation';
+  import { goto } from '$app/navigation';goto('/chat');
   import { supabase } from '$lib/supabase';
   import type { Template, TemplateField } from '$lib/types';
 

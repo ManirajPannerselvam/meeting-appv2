@@ -9,7 +9,7 @@
 	import ChatInput from "$lib/components/chat/ChatInput.svelte";
 	import TemplatePopup from "$lib/components/templates/TemplatePopup.svelte";
 	import TemplateForm from "$lib/components/templates/form/TemplateForm.svelte";
-import { goto } from "$app/navigation";
+	import { goto } from "$app/navigation";
 
 	let { data } = $props();
 	let currentUser = $state<any>(data?.user?? null);
@@ -80,42 +80,29 @@ import { goto } from "$app/navigation";
 	let addMemberLoading = $state(false);
 	const roomCache = new Map<string,string>();
 
-	function goBottom(tab:string){
-  bottomTab=tab;
-  if(tab==='chat') goto('/chat');
-  if(tab==='report') goto('/reports');
-  if(tab==='user') goto('/settings');
-}
+	function goBottom(tab:string){ bottomTab=tab; if(tab==='chat') goto('/chat'); if(tab==='report') goto('/reports'); if(tab==='user') goto('/settings'); }
 	function isTemplateMsg(m:any){ return m.content?.includes('__TEMPLATE_DATA__') || m.content?.startsWith('📋'); }
 	function isMeetingMsg(m:any){ return m.content?.includes('__MEETING_DATA__'); }
 	function getMeta(m:any){ try{ let p = m.content?.split('__TEMPLATE_DATA__'); if(p?.length>1) return JSON.parse(p[1]); }catch{} return null; }
-	function sanitize(str:string){ if(!str) return ""; let s = str.toString().slice(0,4000).trim(); s = s.replace(/<script.*?>.*?<\/script>/gi,'').replace(/javascript:/gi,'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); return s; }
-	function evalFormulaChat(formulaStr: string, vals: Record<string,any>): string {
-		if(!formulaStr) return "0.00"; try{ let expr = formulaStr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/—/g,'-'); expr = expr.replace(/\{([^}]+)\}/g, (_, k)=>{ let v = vals[k]?? vals[k.toLowerCase()]?? vals[k.toLowerCase().replace(/\s+/g,"_")]?? "0"; let num = Number(String(v).replace(/[^0-9.\-]/g,'')); return isNaN(num)? "0" : String(num); }); expr = expr.replace(/%/g,''); if(/[^0-9+\-*/().\s]/.test(expr)) return "0.00"; if(expr.includes('constructor') || expr.includes('__proto__')) return "0.00"; let r = Function('"use strict";return ('+expr+')')() as number; if(r===undefined || isNaN(r) ||!isFinite(r)) return "0.00"; return Number(r).toFixed(2); }catch{ return "0.00"; }
-	}
+	function sanitize(str:string){ if(!str) return ""; return str.toString().slice(0,4000).trim().replace(/<script.*?>.*?<\/script>/gi,'').replace(/javascript:/gi,'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+	function evalFormulaChat(formulaStr: string, vals: Record<string,any>): string { if(!formulaStr) return "0.00"; try{ let expr = formulaStr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/—/g,'-'); expr = expr.replace(/\{([^}]+)\}/g, (_, k)=>{ let v = vals[k]?? vals[k.toLowerCase()]?? "0"; let num = Number(String(v).replace(/[^0-9.\-]/g,'')); return isNaN(num)? "0" : String(num); }); expr = expr.replace(/%/g,''); if(/[^0-9+\-*/().\s]/.test(expr)) return "0.00"; return Number(Function('"use strict";return ('+expr+')')()).toFixed(2); }catch{ return "0.00"; } }
 	function calcAllFormulas(template: any, vals: Record<string,any>){ let out = {...vals}; let fields = template?.fields || template?.data?.fields || selectedTemplate?.data?.fields || []; for(let f of fields){ if(f.type==='formula' && f.formula){ out[f.field_name] = evalFormulaChat(f.formula, out); } } return out; }
 	let filteredMessages = $derived.by(()=>{
-		if(chatMode==='template'){ let list = messages.filter(isTemplateMsg); if(selectedTemplate){ return list.filter((m:any)=>{ let meta = getMeta(m); if(meta){ if(meta.template_id===selectedTemplate.id) return true; if(meta.template_code===selectedTemplate.template_code) return true; } return m.content?.includes(selectedTemplate.template_code) || m.content?.includes(selectedTemplate.name); }); } return list; }
-		if(chatMode==='meeting'){ let list = messages.filter(isMeetingMsg); if(selectedMeeting) return list.filter((m:any)=> m.content?.includes(selectedMeeting.id) || m.content?.includes(selectedMeeting.title)); return list; }
-		if(showStarred) return messages.filter((m:any)=> m.is_starred || m.starred);
-		if(showArchived) return []; return messages.filter((m:any)=>!isTemplateMsg(m) &&!isMeetingMsg(m));
+		if(chatMode==='template'){ let list = messages.filter(isTemplateMsg); if(selectedTemplate){ return list.filter((m:any)=>{ let meta = getMeta(m); if(meta?.template_id===selectedTemplate.id) return true; return m.content?.includes(selectedTemplate.template_code); }); } return list; }
+		if(chatMode==='meeting'){ return messages.filter(isMeetingMsg); }
+		if(showStarred) return messages.filter((m:any)=> m.is_starred); if(showArchived) return []; return messages.filter((m:any)=>!isTemplateMsg(m) &&!isMeetingMsg(m));
 	});
 	function getCurrentUserId(){ return currentUser?.id || data?.user?.id || ''; }
-	function clickOutside(node: HTMLElement, callback: () => void) {
-		if (!browser) return { destroy() {} };
-		const handleClick = (e: MouseEvent) => { const t = e.target as HTMLElement; if(t.closest('.context-menu-fixed')||t.closest('.dd')) return; if (!node.contains(e.target as Node)) setTimeout(callback, 10); }
-		document.addEventListener('mousedown', handleClick, true)
-		return { destroy() { document.removeEventListener('mousedown', handleClick, true) } }
-	}
+	function clickOutside(node: HTMLElement, callback: () => void) { if (!browser) return { destroy() {} }; const handleClick = (e: MouseEvent) => { const t = e.target as HTMLElement; if(t.closest('.context-menu-fixed')||t.closest('.dd')) return; if (!node.contains(e.target as Node)) setTimeout(callback, 10); }; document.addEventListener('mousedown', handleClick, true); return { destroy() { document.removeEventListener('mousedown', handleClick, true) } } }
 	function checkMobile(){ if (!browser) return; isMobileView = window.innerWidth < 768; }
-	function scrollToBottom(force=false){ if(!browser) return; requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ const el = scrollEl || document.querySelector('.messages-scroll') as HTMLElement; if(el) el.scrollTo({ top: el.scrollHeight, behavior: force? 'auto':'smooth' }); });}); }
-	function setupScrollListener(){ if(!browser) return; scrollEl = document.querySelector('.messages-scroll') as HTMLElement; if(!scrollEl) return; let ticking=false; scrollEl.addEventListener('scroll', ()=>{ if(ticking) return; ticking=true; requestAnimationFrame(()=>{ if(scrollEl && scrollEl.scrollTop < 80 &&!loadingMore &&!isLoadingMessages && hasMore && messages.length>=1){ loadMessages({ roomId: selectedRoomId, groupId: selectedGroupId, older:true }); } ticking=false; }); }, { passive:true }); }
-	function updateLastMessageInList(msg:any){ if(!msg) return; const short = msg.content?.split('__')[0]?.slice(0,45) || msg.content?.slice(0,45); if(msg.group_id){ groups = groups.map(g=> g.id===msg.group_id? {...g, last_message: short, last_message_at: msg.created_at} : g); } else if(msg.room_id){ contacts = contacts.map(c=> c.room_id===msg.room_id? {...c, last_message: short, last_message_at: msg.created_at } : c); } }
+	function scrollToBottom(force=false){ if(!browser) return; requestAnimationFrame(()=>{ const el = scrollEl || document.querySelector('.messages-scroll') as HTMLElement; if(el) el.scrollTo({ top: el.scrollHeight, behavior: force? 'auto':'smooth' }); }); }
+	function setupScrollListener(){ if(!browser) return; scrollEl = document.querySelector('.messages-scroll') as HTMLElement; if(!scrollEl) return; let ticking=false; scrollEl.addEventListener('scroll', ()=>{ if(ticking) return; ticking=true; requestAnimationFrame(()=>{ if(scrollEl && scrollEl.scrollTop < 80 &&!loadingMore &&!isLoadingMessages && hasMore){ loadMessages({ roomId: selectedRoomId, groupId: selectedGroupId, older:true }); } ticking=false; }); }, { passive:true }); }
+	function updateLastMessageInList(msg:any){ if(!msg) return; const short = msg.content?.split('__')[0]?.slice(0,45); if(msg.group_id){ groups = groups.map(g=> g.id===msg.group_id? {...g, last_message: short, last_message_at: msg.created_at} : g); } else if(msg.room_id){ contacts = contacts.map(c=> c.room_id===msg.room_id? {...c, last_message: short, last_message_at: msg.created_at } : c); } }
 	async function handleHeaderAction(action: string){
 		const uid = getCurrentUserId(); if(!uid) return;
 		if(action === 'info'){ if(selectedGroup) openAvatarModal(selectedGroup,'group'); else if(selectedContact) openAvatarModal(selectedContact,'contact'); return; }
 		if(action === 'mute'){ const id = selectedRoomId || selectedGroupId || selectedContact?.id; if(!id) return; if(mutedRooms.has(id)) mutedRooms.delete(id); else mutedRooms.add(id); mutedRooms = new Set(mutedRooms); if(browser) localStorage.setItem('mutedRooms', JSON.stringify([...mutedRooms])); return; }
-		if(action === 'clear'){ if(!confirm("Clear chat only for you?")) return; if(selectedGroup){ const { data: all } = await chatDB.from("messages").select("id,deleted_by").eq("group_id", selectedGroupId).limit(200); for(const m of all||[]){ const del = [...(m.deleted_by||[]), uid]; await chatDB.from("messages").update({ deleted_by: del }).eq("id", m.id); } messages = []; } else if(selectedRoomId){ const { data: all } = await chatDB.from("messages").select("id,deleted_by").eq("room_id", selectedRoomId).limit(200); for(const m of all||[]){ const del = [...(m.deleted_by||[]), uid]; await chatDB.from("messages").update({ deleted_by: del }).eq("id", m.id); } messages = []; } return; }
+		if(action === 'clear'){ if(!confirm("Clear chat only for you?")) return; const list = selectedGroupId? await chatDB.from("messages").select("id,deleted_by").eq("group_id", selectedGroupId).limit(200) : await chatDB.from("messages").select("id,deleted_by").eq("room_id", selectedRoomId).limit(200); for(const m of list.data||[]){ await chatDB.from("messages").update({ deleted_by: [...(m.deleted_by||[]), uid] }).eq("id", m.id); } messages = []; return; }
 		if(action === 'exit'){ if(!selectedGroup) return; if(!confirm(`Exit group "${selectedGroup.name}"?`)) return; await chatDB.from("chat_group_members").delete().eq("group_id", selectedGroupId).eq("user_id", uid); groups = groups.filter(g=> g.id!== selectedGroupId); messages = []; selectedGroup = null; selectedGroupId = null; return; }
 		if(action === 'block'){ if(!selectedContact || selectedContact.isSelf) return; if(!confirm(`Block ${selectedContact.name}?`)) return; contacts = contacts.filter(c=> c.id!== selectedContact.id); messages = []; selectedContact = null; selectedRoomId = null; return; }
 	}
@@ -138,125 +125,103 @@ import { goto } from "$app/navigation";
 	          commonGroups = gData||[];
 	        }
 	      }
-	    }catch(e){ console.log("common groups", e); }
+	    }catch{}
 	  }
 	}
 
 	onMount(async () => {
 		if (!browser) return;
-		if(browser) localStorage.removeItem('chat_contacts_cache');
+		localStorage.removeItem('chat_contacts_cache');
 		checkMobile(); window.addEventListener('resize', checkMobile);
 		try{ mutedRooms = new Set(JSON.parse(localStorage.getItem('mutedRooms') || '[]')); }catch{}
 		const { data: { user } } = await chatDB.auth.getUser();
 		if(user){ currentUser = {...(data?.user||{}),...user, avatar_url: user.user_metadata?.avatar_url || data?.user?.avatar_url || null }; } else if(data?.user?.id){ currentUser = data.user; }
 		const uid = getCurrentUserId(); if(!uid) return;
-		await loadContacts(true);
-		await loadGroups();
-		await setupPresence();
+		await loadContacts(true); await loadGroups(); await setupPresence();
 		setupProfileLive(); setupGlobalListener(); setupInvitesListener();
+		if(browser && 'Notification' in window && Notification.permission==='default'){ Notification.requestPermission(); }
 	});
 	onDestroy(async () => { if (browser) window.removeEventListener('resize', checkMobile); await cleanupRealtime(); });
 
 	function setupProfileLive(){ if(profileChannel) return; profileChannel = chatDB.channel('profiles-live').on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles'},(payload)=>{ const p = payload.new as any; contacts = contacts.map(c=> (c.actual_user_id===p.id || c.id===p.id)? {...c, avatar_url:p.avatar_url, name: p.name || c.name} : c); if(selectedContact && (selectedContact.actual_user_id===p.id || selectedContact.id===p.id)){ selectedContact = {...selectedContact, avatar_url:p.avatar_url, name: p.name || selectedContact.name}; } if(currentUser?.id===p.id){ currentUser = {...currentUser, avatar_url:p.avatar_url}; } }).subscribe(); }
 	function setupInvitesListener(){ if(invitesChannel) return; const uid = getCurrentUserId(); if(!uid) return; invitesChannel = chatDB.channel('invites-'+uid).on('postgres_changes',{event:'*',schema:'public',table:'contact_invites'},()=>{ loadContacts(true); }).subscribe(); }
+
+	// ✅ FIXED - NOTIFICATION + TICK - SPEED + SECURE
 	async function setupGlobalListener(){
-	  if(globalChannel) await chatDB.removeChannel(globalChannel); const uid = getCurrentUserId(); if(!uid) return;
-	  globalChannel = chatDB.channel('global-'+uid+'-'+Date.now())
-	.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'}, async (payload)=>{ const msg:any = payload.new; if(msg.sender_id===uid) return; const myRoom = contacts.some(c=> c.room_id===msg.room_id); const isForMe = msg.receiver_id===uid || myRoom || msg.group_id; if(!isForMe) return; if(msg.room_id &&!myRoom && msg.receiver_id!==uid) return; try{ await chatDB.from('messages').update({status:'delivered', delivered_at: new Date().toISOString()}).eq('id', msg.id).eq('status','sent'); }catch{} const short = msg.content?.split('__')[0]?.slice(0,35) || msg.content?.slice(0,35); const isOpen = (msg.room_id && msg.room_id===selectedRoomId) || (msg.group_id && msg.group_id===selectedGroupId); contacts = contacts.map(c=>{ if(c.room_id===msg.room_id || c.id===msg.group_id){ return {...c, last_message: short, last_message_at: msg.created_at, unread: isOpen? 0 : (c.unread||0)+1}; } return c; }); if(isOpen){ if(!messages.some(m=>m.id===msg.id)){ messages = [...messages, {...msg, status:'delivered', is_own:false}]; scrollToBottom(); setTimeout(()=> markAsRead(), 400); } } })
-	.on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'}, (payload)=>{ const upd:any = payload.new; messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status, delivered_at:upd.delivered_at, read_at:upd.read_at} : m); }).subscribe();
+	  if(globalChannel) await chatDB.removeChannel(globalChannel);
+	  const uid = getCurrentUserId(); if(!uid) return;
+	  globalChannel = chatDB.channel('global-'+uid)
+		.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'}, async (payload)=>{
+		  const msg:any = payload.new; if(msg.sender_id===uid) return;
+		  if(msg.receiver_id!==uid &&!msg.room_id &&!msg.group_id) return;
+		  try{ await chatDB.from('messages').update({status:'delivered', delivered_at: new Date().toISOString()}).eq('id', msg.id).eq('status','sent'); }catch{}
+		  const short = sanitize(msg.content).split('__')[0].slice(0,40);
+		  const isOpen = (msg.room_id && msg.room_id===selectedRoomId) || (msg.group_id && msg.group_id===selectedGroupId);
+		  contacts = contacts.map(c=>{
+		    if(c.room_id===msg.room_id || (msg.group_id && c.id===msg.group_id) || c.actual_user_id===msg.sender_id){
+		      return {...c, last_message: short, last_message_at: msg.created_at, unread: isOpen? 0 : (c.unread||0)+1};
+		    }
+		    return c;
+		  });
+		  if(!isOpen && browser && Notification.permission==='granted'){ try{ new Notification('New message', { body: short }); }catch{} }
+		  if(isOpen &&!messages.some(m=>m.id===msg.id)){ messages = [...messages, {...msg, status:'delivered', is_own:false}]; scrollToBottom(); setTimeout(()=> markAsRead(), 300); }
+		})
+		.on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages'}, (payload)=>{
+		  const upd:any = payload.new; messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status, delivered_at:upd.delivered_at, read_at:upd.read_at} : m);
+		}).subscribe();
 	}
+
 	function resizeTo128(file: File): Promise<Blob> {
 		return new Promise((resolve, reject) => {
 			const img = new Image(); const url = URL.createObjectURL(file);
-			img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128; const ctx = canvas.getContext('2d')!; const scale = Math.max(128 / img.width, 128 / img.height); const w = img.width * scale, h = img.height * scale; const x = (128 - w) / 2, y = (128 - h) / 2; ctx.fillStyle = '#fff'; ctx.fillRect(0,0,128,128); ctx.drawImage(img, x, y, w, h); canvas.toBlob((b) => b? resolve(b) : reject('blob fail'), 'image/webp', 0.8); URL.revokeObjectURL(url); }; img.onerror = reject; img.src = url;
+			img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128; const ctx = canvas.getContext('2d')!; const scale = Math.max(128 / img.width, 128 / img.height); const w = img.width * scale, h = img.height * scale; ctx.fillStyle='#fff'; ctx.fillRect(0,0,128,128); ctx.drawImage(img, (128-w)/2, (128-h)/2, w, h); canvas.toBlob((b) => b? resolve(b) : reject('blob fail'), 'image/webp', 0.8); URL.revokeObjectURL(url); }; img.onerror = reject; img.src = url;
 		});
 	}
 	async function onAvatarFileChange(e: any){
-		const file = e.detail?.file || e.target?.files?.[0] || e.target?.files?.[0]; const contact = e.detail?.contact || avatarTarget;
+		const file = e.detail?.file || e.target?.files?.[0]; const contact = e.detail?.contact || avatarTarget;
 		if(!file) return; if(file.size > 5*1024*1024){ alert("Max 5MB"); return; } if(!file.type.startsWith('image/')){ alert("Image only"); return; }
 		if(contact &&!contact.isSelf && contact.id!==getCurrentUserId() && avatarType!=='group'){ alert("You can only change your own photo"); return; }
 		avatarPreview = URL.createObjectURL(file);
 		try{ avatarUploading = true; const blob = await resizeTo128(file); const fileName = `${avatarType}_${contact?.id}_${Date.now()}.webp`; const formData = new FormData(); formData.append('file', blob); formData.append('fileName', fileName); const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData }); const json = await res.json(); if(!res.ok) throw new Error(json.error || 'Upload failed'); const publicUrl = json.url; const realId = contact.actual_user_id || contact.id; await chatDB.from('profiles').update({ avatar_url: publicUrl }).eq('id', realId); contacts = contacts.map(c=> c.id===contact.id? {...c, avatar_url: publicUrl} : c); if(selectedContact?.id === contact.id) selectedContact = {...selectedContact, avatar_url: publicUrl}; if(contact?.isSelf) currentUser = {...currentUser, avatar_url: publicUrl}; showAvatarModal = false; }catch(err:any){ alert("Upload failed: "+err.message); } finally{ avatarUploading = false; }
 	}
-
-	// --- FIXED V40 - INSTANT TEMPLATE OPEN ---
 	async function loadTemplates(){
-		templateLoading=true;
-		let localList:any[]=[];
-		try{
-			if(browser){
-				const raw = localStorage.getItem("templates");
-				if(raw) localList = JSON.parse(raw);
-			}
-		}catch{ localList=[]; }
-		// instant show local
-		templates = localList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data }));
-		try{
-			const uid = getCurrentUserId();
-			const res = await fetch(`/api/templates?t=${Date.now()}&user_id=${uid}`, { cache:"no-store" });
-			if(res.ok){
-				const json = await res.json();
-				let apiList = json.templates || json.data || json || [];
-				if(Array.isArray(apiList) && apiList.length>0){
-					apiList = apiList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data }));
-					const map = new Map();
-					[...localList,...apiList].forEach((t:any)=>{
-						const k = String(t.id||t.template_code||t.name);
-						if(!map.has(k)) map.set(k, t);
-					});
-					templates = Array.from(map.values());
-				}
-			}
-		}catch(e){ console.warn("API templates fallback local", e); }
-		finally{ templateLoading=false; }
+		templateLoading=true; let localList:any[]=[]; try{ if(browser){ const raw = localStorage.getItem("templates"); if(raw) localList = JSON.parse(raw); } }catch{} templates = localList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data }));
+		try{ const uid = getCurrentUserId(); const res = await fetch(`/api/templates?t=${Date.now()}&user_id=${uid}`, { cache:"no-store" }); if(res.ok){ const json = await res.json(); let apiList = json.templates || json.data || json || []; if(Array.isArray(apiList) && apiList.length>0){ apiList = apiList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data })); const map = new Map(); [...localList,...apiList].forEach((t:any)=>{ const k = String(t.id||t.template_code||t.name); if(!map.has(k)) map.set(k, t); }); templates = Array.from(map.values()); } } }catch{} finally{ templateLoading=false; }
 	}
-
-	function onOpenTemplate(){
-		console.log("Parent onOpenTemplate - OPEN NOW V40");
-		showTemplateModal = true;
-		showTemplateForm = false;
-		loadTemplates();
-	}
-
+	function onOpenTemplate(){ showTemplateModal = true; showTemplateForm = false; loadTemplates(); }
 	function handleUseTemplate(e:any){ const t = e.detail?.template || e.detail; if(!t) return; selectedTemplate = {...t, data: typeof t.data==='string'? JSON.parse(t.data) : (t.data||{}) }; showTemplateModal=false; setTimeout(()=>{ showTemplateForm=true; }, 120); }
 	function handleCreateTemplate(){ showTemplateModal=false; showTemplateForm=false; const contactId = selectedContact?.actual_user_id || selectedContact?.id || ''; const groupId = selectedGroupId || ''; if(browser) window.location.href=`/templates/create?contact_id=${contactId}&group_id=${groupId}`; }
 	function handleOpenDetail(tpl: any, msg: any){ let fields = tpl?.fields || tpl?.data?.fields || tpl?.values?.fields || msg?.fields || []; if(fields.length===0){ let meta = getMeta(msg); if(meta?.fields) fields = meta.fields; } detailData = { template_name: tpl.template_name || tpl.template_code || tpl.name || 'Production Report', template_code: tpl.template_code || tpl.t_code, values: tpl.values || tpl.data || {}, fields: fields, t_code: tpl.template_code || tpl.t_code, user_name: msg.sender_name || msg.sender_id || 'User', created_at: msg.created_at, }; showDetailModal = true; }
 	async function sendTemplateReport(e:any){
-		const { template, values } = e.detail; if(!template) return; const calculatedValues = calcAllFormulas(template, values); let realFields = template?.fields || template?.data?.fields || template?.data?.data?.fields || []; let displayLines = [`📋 *${sanitize(template.name)}*`, ``]; realFields.forEach((f:any)=>{ let key = f.field_name || f.name; let label = f.label || key; let val = calculatedValues[key]?? calculatedValues[key?.toLowerCase()]?? ""; if(val==="" && f.type!=='formula') return; displayLines.push(`${sanitize(label)}: ${sanitize(String(val))}`); }); if(displayLines.length<=2){ Object.entries(calculatedValues).forEach(([k,v])=>{ if(['t_code','template_code','template_name','template_id','owner_id','user_id','owner_email','created_at','fields'].includes(k)) return; displayLines.push(`${sanitize(k)}: ${sanitize(String(v))}`); }); } const display = displayLines.join('\n'); const t_code = template.template_code || template.code || template.t_code; const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: t_code, values: calculatedValues, fields: realFields, created_at: new Date().toISOString() }; const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`; try{ const { data: { user: chatUser } } = await chatDB.auth.getUser(); const realUid = chatUser?.id || getCurrentUserId(); const email = chatUser?.email || currentUser?.email || ''; const nowIso = new Date().toISOString(); const payload:any = { t_code: sanitize(t_code), reference_template_id: template.id, data: {...calculatedValues, fields: realFields, t_code, template_code: t_code, template_name: template.name, template_id: template.id, owner_id: realUid, user_id: realUid, owner_email: email, created_at: nowIso }, ts: nowIso }; await supabaseTemplates.from("records").insert(payload); }catch(err:any){ alert("Save failed: "+err?.message); return; } showTemplateForm=false; await sendMessage({ detail: { content: fullContent } } as any); selectedTemplate=null;
+		const { template, values } = e.detail; if(!template) return; const calculatedValues = calcAllFormulas(template, values); let realFields = template?.fields || template?.data?.fields || []; let displayLines = [`📋 *${sanitize(template.name)}*`, ``]; realFields.forEach((f:any)=>{ let key = f.field_name || f.name; let label = f.label || key; let val = calculatedValues[key]?? ""; if(val==="") return; displayLines.push(`${sanitize(label)}: ${sanitize(String(val))}`); }); const display = displayLines.join('\n'); const t_code = template.template_code || template.code || template.t_code; const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: t_code, values: calculatedValues, fields: realFields, created_at: new Date().toISOString() }; const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`; try{ const { data: { user: chatUser } } = await chatDB.auth.getUser(); const realUid = chatUser?.id || getCurrentUserId(); const payload:any = { t_code: sanitize(t_code), reference_template_id: template.id, data: {...calculatedValues, template_code: t_code, template_name: template.name, template_id: template.id, owner_id: realUid, user_id: realUid, created_at: new Date().toISOString() }, ts: new Date().toISOString() }; await supabaseTemplates.from("records").insert(payload); }catch(err:any){ alert("Save failed: "+err?.message); return; } showTemplateForm=false; await sendMessage({ detail: { content: fullContent } } as any); selectedTemplate=null;
 	}
-	async function loadGroups() {
-	  const userId = getCurrentUserId(); if(!userId) return;
-	  try{ let { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId).limit(500); let list = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); groups = list; }catch{}
-	}
+	async function loadGroups() { const userId = getCurrentUserId(); if(!userId) return; try{ let { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId).limit(200); let list = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); groups = list; }catch{} }
 	async function loadContacts(force=false) {
 	    const userId = getCurrentUserId(); if(!userId){ contacts = []; return; }
 	    const myEmail = (currentUser?.email || data?.user?.email || "").toLowerCase();
 	    let mapped: any[] = [{ id: userId, actual_user_id: userId, name: "You (Saved Messages)", email: currentUser?.email || "You", avatar_url: currentUser?.avatar_url || null, room_id: null, status: 'accepted', isSelf: true, last_message: "Message yourself", unread:0, last_message_at: new Date().toISOString() }];
 	    try{
-	        const { data: accepted } = await chatDB.from("contact_invites").select("*").eq("invited_by", userId).in("status", ["accepted","pending"]).limit(500);
+	        const { data: accepted } = await chatDB.from("contact_invites").select("id,email,status,invited_by").eq("invited_by", userId).in("status", ["accepted","pending"]).limit(200);
 	        for(const inv of accepted||[]){
 	            if(mapped.find(m=>m.email?.toLowerCase()===inv.email.toLowerCase())) continue;
 	            const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").ilike("email", inv.email).maybeSingle();
-	            if(prof){
-	                mapped.push({ id: prof.id, actual_user_id: prof.id, name: prof.name||prof.email.split('@')[0], email: prof.email, avatar_url: prof.avatar_url, room_id: roomCache.get(prof.id)||null, status: inv.status, isInvite: inv.status==='pending', isOutgoing: inv.status==='pending', inviteData: inv, last_message: inv.status==='pending'?'⏳ Invite pending':'Tap to chat', last_message_at: new Date().toISOString(), unread:0 });
-	            } else {
-	                mapped.push({ id: inv.id, actual_user_id: null, name: inv.email.split('@')[0]+(inv.status==='pending'?' (invite)':''), email: inv.email, avatar_url: null, room_id: null, status: inv.status, isInvite: inv.status==='pending', isOutgoing: true, inviteData: inv, last_message: inv.status==='pending'?'⏳ Invite pending':'Accepted - no profile', last_message_at: null, unread:0 });
-	            }
+	            if(prof){ mapped.push({ id: prof.id, actual_user_id: prof.id, name: prof.name||prof.email.split('@')[0], email: prof.email, avatar_url: prof.avatar_url, room_id: roomCache.get(prof.id)||null, status: inv.status, isInvite: inv.status==='pending', isOutgoing: true, inviteData: inv, last_message: inv.status==='pending'?'⏳ Invite pending':'Tap to chat', last_message_at: new Date().toISOString(), unread:0 }); }
+	            else { mapped.push({ id: inv.id, actual_user_id: null, name: inv.email.split('@')[0]+' (invite)', email: inv.email, avatar_url: null, room_id: null, status: inv.status, isInvite: true, isOutgoing: true, inviteData: inv, last_message: '⏳ Invite pending', last_message_at: null, unread:0 }); }
 	        }
 	    }catch{}
 	    try{
 	        if(myEmail){
-	            const { data: incoming } = await chatDB.from("contact_invites").select("*").ilike("email", myEmail).eq("status","pending").limit(500);
+	            const { data: incoming } = await chatDB.from("contact_invites").select("id,email,status,invited_by").ilike("email", myEmail).eq("status","pending").limit(200);
 	            for(const inv of incoming||[]){
 	                if(mapped.find(m=>m.actual_user_id===inv.invited_by)) continue;
 	                const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", inv.invited_by).maybeSingle();
-	                mapped.push({ id: `incoming_${inv.id}`, actual_user_id: inv.invited_by, name: prof?.name||prof?.email?.split('@')[0]||"New Invite", email: prof?.email||"", avatar_url: prof?.avatar_url||null, room_id: null, status: 'incoming', isIncomingInvite: true, inviteData: inv, inviterProfile: prof, last_message: `📩 Tap to Accept`, last_message_at: null, unread:0 });
+	                mapped.push({ id: `incoming_${inv.id}`, actual_user_id: inv.invited_by, name: prof?.name||"New Invite", email: prof?.email||"", avatar_url: prof?.avatar_url||null, room_id: null, status: 'incoming', isIncomingInvite: true, inviteData: inv, inviterProfile: prof, last_message: `📩 Tap to Accept`, last_message_at: null, unread:0 });
 	            }
-	            const { data: acceptedIn } = await chatDB.from("contact_invites").select("*").ilike("email", myEmail).eq("status","accepted").limit(500);
+	            const { data: acceptedIn } = await chatDB.from("contact_invites").select("id,email,status,invited_by").ilike("email", myEmail).eq("status","accepted").limit(200);
 	            for(const inv of acceptedIn||[]){
 	                if(mapped.find(m=>m.actual_user_id===inv.invited_by)) continue;
 	                const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", inv.invited_by).maybeSingle();
-	                mapped.push({ id: inv.invited_by, actual_user_id: inv.invited_by, name: prof?.name||"Contact", email: prof?.email||inv.email, avatar_url: prof?.avatar_url||null, room_id: roomCache.get(inv.invited_by)||null, status: 'accepted', isSelf: false, last_message: "Tap to chat", last_message_at: new Date().toISOString(), unread:0 });
+	                if(prof) mapped.push({ id: prof.id, actual_user_id: prof.id, name: prof.name||"Contact", email: prof.email, avatar_url: prof.avatar_url, room_id: roomCache.get(inv.invited_by)||null, status: 'accepted', last_message: "Tap to chat", last_message_at: new Date().toISOString(), unread:0 });
 	            }
 	        }
 	    }catch{}
@@ -271,7 +236,7 @@ import { goto } from "$app/navigation";
 	  if(older) loadingMore = true; else isLoadingMessages=true;
 	  try{
 	    const uid = getCurrentUserId();
-	    let query = chatDB.from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status,delivered_at,read_at,deleted_by").order("created_at", {ascending:false}).limit(20);
+	    let query = chatDB.from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status,deleted_by").order("created_at", {ascending:false}).limit(20);
 	    if(older && messages.length){ const oldest = messages[0]?.created_at; if(oldest) query = query.lt("created_at", oldest); }
 	    if(groupId) query = query.eq("group_id", groupId); else if(roomId) query = query.eq("room_id", roomId); else query = query.eq("sender_id", uid).eq("receiver_id", uid);
 	    const { data, error } = await query;
@@ -280,111 +245,84 @@ import { goto } from "$app/navigation";
 	    const seen = new Set(messages.map((m:any)=>m.id));
 	    const filtered = data.reverse().filter((m:any)=>!(m.deleted_by||[]).includes(uid)).filter((m:any)=>!seen.has(m.id)).map((m:any)=>({...m, is_own:m.sender_id===uid}));
 	    if(older){ if(!filtered.length) return; const el = scrollEl || document.querySelector('.messages-scroll') as HTMLElement; const oldH = el?.scrollHeight || 0; messages = [...filtered,...messages]; requestAnimationFrame(()=>{ if(el) el.scrollTop = el.scrollHeight - oldH + 20; }); }
-	    else { messages = filtered; setTimeout(()=>{ scrollToBottom(true); setupScrollListener(); }, 100); await markDelivered(); setTimeout(()=> markAsRead(), 400); }
+	    else { messages = filtered; setTimeout(()=>{ scrollToBottom(true); setupScrollListener(); }, 80); await markDelivered(); setTimeout(()=> markAsRead(), 300); }
 	    if(!older) await subscribeToMessages({ roomId, groupId });
 	  } finally { isLoadingMessages=false; loadingMore=false; }
 	}
-	async function markDelivered(){ const uid = getCurrentUserId(); const toMark = messages.filter((m:any)=> m.sender_id!== uid && m.status === 'sent'); for(const m of toMark){ try{ await chatDB.from("messages").update({ status: 'delivered', delivered_at: new Date().toISOString() }).eq('id', m.id).eq('status','sent'); messages = messages.map((x:any)=> x.id===m.id? {...x, status:'delivered'} : x); }catch{} } }
-	async function markAsRead(){ const uid = getCurrentUserId(); if(!uid) return; if(!selectedRoomId &&!selectedGroupId) return; const toMark = messages.filter((m:any)=> m.sender_id!== uid && m.status!== 'read'); if(!toMark.length) return; for(const m of toMark){ try{ await chatDB.from("messages").update({ status: 'read', read_at: new Date().toISOString() }).eq('id', m.id).neq('status','read'); }catch{} } messages = messages.map((m:any)=> m.sender_id!== uid? {...m, status:'read', read_at: new Date().toISOString()} : m); if(selectedRoomId) contacts = contacts.map(c=> c.room_id===selectedRoomId? {...c, unread:0} : c); }
+	// ✅ FIXED QUICK + TICK
+	async function markDelivered(){ const uid = getCurrentUserId(); const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status==='sent').slice(0,10); for(const m of toMark){ try{ await chatDB.from("messages").update({ status:'delivered', delivered_at: new Date().toISOString() }).eq('id', m.id); }catch{} } }
+	async function markAsRead(){ const uid = getCurrentUserId(); if(!uid || (!selectedRoomId &&!selectedGroupId)) return; const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status!=='read').slice(0,20); if(!toMark.length) return; for(const m of toMark){ try{ await chatDB.from("messages").update({ status:'read', read_at: new Date().toISOString() }).eq('id', m.id); }catch{} } messages = messages.map((m:any)=> m.sender_id!==uid? {...m, status:'read'} : m); if(selectedRoomId) contacts = contacts.map(c=> c.room_id===selectedRoomId? {...c, unread:0} : c); }
 	async function subscribeToMessages({ roomId, groupId }: any){
-	  if(messagesChannel) await chatDB.removeChannel(messagesChannel); const channelName = groupId? `group-${groupId}` : roomId? `room-${groupId}` : `self-${getCurrentUserId()}-${Date.now()}`; const realName = groupId? `group-${groupId}` : roomId? `room-${roomId}` : channelName;
+	  if(messagesChannel) await chatDB.removeChannel(messagesChannel); if(!roomId &&!groupId) return;
+	  const realName = groupId? `group-${groupId}` : `room-${roomId}`;
 	  messagesChannel=chatDB.channel(realName)
-	.on("broadcast", { event: "new_msg" }, (payload:any)=>{ const newMsg = payload.payload as any; const uid = getCurrentUserId(); if(newMsg.sender_id===uid) return; if(messages.some(m=>m.id===newMsg.id)) return; messages = [...messages, {...newMsg, is_own:false}]; updateLastMessageInList(newMsg); scrollToBottom(); setTimeout(()=> markAsRead(), 300); })
-	.on("postgres_changes",{event:"INSERT",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : roomId? `room_id=eq.${roomId}` : undefined },async (payload)=>{ const newMsg = payload.new as any; const uid = getCurrentUserId(); if((newMsg.deleted_by||[]).includes(uid)) return; if(messages.some(m=>m.id===newMsg.id || (m.content===newMsg.content && Math.abs(new Date(m.created_at).getTime() - new Date(newMsg.created_at).getTime()) < 2000))) return; if(newMsg.sender_id===uid){ messages = messages.filter((m:any) =>!(m.id.startsWith('temp_') && m.content===newMsg.content)); } else { setTimeout(async ()=>{ try{ await chatDB.from("messages").update({ status: 'delivered' }).eq('id', newMsg.id).eq('status','sent'); }catch{} markAsRead(); }, 200); } messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}]; updateLastMessageInList(newMsg); scrollToBottom(); })
-	.on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : roomId? `room_id=eq.${roomId}` : undefined }, (payload)=>{ const updated = payload.new as any; messages = messages.map((m:any)=> m.id===updated.id? {...m, status: updated.status, delivered_at: updated.delivered_at, read_at: updated.read_at, is_own: m.sender_id===getCurrentUserId()} : m); }).subscribe();
+		.on("broadcast", { event: "new_msg" }, (payload:any)=>{ const newMsg = payload.payload as any; if(newMsg.sender_id===getCurrentUserId()) return; if(messages.some(m=>m.id===newMsg.id)) return; messages = [...messages, {...newMsg, is_own:false}]; updateLastMessageInList(newMsg); scrollToBottom(); setTimeout(()=> markAsRead(), 200); })
+		.on("postgres_changes",{event:"INSERT",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : `room_id=eq.${roomId}` },async (payload)=>{ const newMsg = payload.new as any; const uid = getCurrentUserId(); if((newMsg.deleted_by||[]).includes(uid)) return; if(messages.some(m=>m.id===newMsg.id)) return; if(newMsg.sender_id!==uid){ try{ await chatDB.from("messages").update({ status:'delivered' }).eq('id', newMsg.id).eq('status','sent'); }catch{} } messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}]; updateLastMessageInList(newMsg); scrollToBottom(); if(newMsg.sender_id!==uid) setTimeout(()=>markAsRead(),200); })
+		.on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages"}, (payload)=>{ const updated = payload.new as any; messages = messages.map((m:any)=> m.id===updated.id? {...m, status: updated.status} : m); }).subscribe();
 	}
 	async function handleSendLocation(e:any){ const { latitude, longitude, url } = e.detail || {}; if(!latitude ||!longitude) return; await sendMessage({ detail: { content: `📍 Location: ${url} __LOCATION_DATA__${JSON.stringify({latitude, longitude})}` } } as any); }
+	// ✅ FIXED QUICK RESPONSE - 150ms + instant UI
 	async function sendMessage(eventOrContent: any = null) {
-	  if(sendingLock) return; if(Date.now() - lastSent < 300) return; let content = ""; let files: File[] = [];
-	  if (typeof eventOrContent === 'string') content = eventOrContent; else if (eventOrContent?.detail?.content!== undefined) { content = eventOrContent.detail.content; files = eventOrContent.detail.files || []; } else if (eventOrContent?.content!== undefined) { content = eventOrContent.content; files = eventOrContent.files || []; } else content = newMessage;
-	  content = sanitize(content); if (!content && files.length===0) return; const text = content; if(!text && files.length===0) return; newMessage = ""; const myId = getCurrentUserId(); if (!myId) return; sendingLock = true; lastSent = Date.now(); const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2,6)}`; const optimistic = { id: tempId, content: text, sender_id: myId, room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId, created_at: new Date().toISOString(), status: 'sent', is_own: true }; messages = [...messages, optimistic]; updateLastMessageInList(optimistic); scrollToBottom(); try{ if(messagesChannel) messagesChannel.send({ type: 'broadcast', event: 'new_msg', payload: optimistic }); }catch{} try{ const payload: any = { content: text, sender_id: myId, status: 'sent', room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId }; if(selectedGroupId) payload.room_id = null; if(selectedRoomId) payload.group_id = null; if(!selectedRoomId &&!selectedGroupId){ payload.room_id = null; payload.group_id = null; } const { data: inserted, error } = await chatDB.from('messages').insert(payload).select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status,delivered_at,read_at").single(); if (error) throw error; messages = messages.map((m:any) => m.id === tempId? {...inserted, is_own: true } : m); updateLastMessageInList(inserted); }catch(err:any){ messages = messages.filter((m:any) => m.id!== tempId); newMessage = text; alert("Send failed: " + (err.message||'unknown')); } finally { sendingLock = false; scrollToBottom(); }
+	  if(sendingLock) return; if(Date.now() - lastSent < 150) return;
+	  let content = ""; if (typeof eventOrContent === 'string') content = eventOrContent; else if (eventOrContent?.detail?.content!== undefined) content = eventOrContent.detail.content; else if (eventOrContent?.content!== undefined) content = eventOrContent.content; else content = newMessage;
+	  content = sanitize(content); if (!content) return; newMessage = ""; const myId = getCurrentUserId(); if (!myId) return;
+	  sendingLock = true; lastSent = Date.now();
+	  const tempId = `temp_${Date.now()}`; const optimistic = { id: tempId, content, sender_id: myId, room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId, created_at: new Date().toISOString(), status: 'sent', is_own: true };
+	  messages = [...messages, optimistic]; updateLastMessageInList(optimistic); scrollToBottom(true);
+	  try{ if(messagesChannel) messagesChannel.send({ type: 'broadcast', event: 'new_msg', payload: optimistic }); }catch{}
+	  try{
+	    const payload: any = { content, sender_id: myId, status: 'sent', room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId };
+	    if(selectedGroupId) payload.room_id = null; if(selectedRoomId) payload.group_id = null; if(!selectedRoomId &&!selectedGroupId){ payload.room_id = null; payload.group_id = null; }
+	    const { data: inserted, error } = await chatDB.from('messages').insert(payload).select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status").single();
+	    if (error) throw error; messages = messages.map((m:any) => m.id === tempId? {...inserted, is_own: true } : m); updateLastMessageInList(inserted);
+	  }catch(err:any){ messages = messages.filter((m:any) => m.id!== tempId); newMessage = content; } finally { sendingLock = false; }
 	}
 	async function getOrCreateRoom(otherId: string){
 		if(!otherId) return null; const uid = getCurrentUserId(); if(!uid || otherId===uid) return null; if(roomCache.has(otherId)) return roomCache.get(otherId)!;
 		try{ const { data } = await chatDB.from("rooms").select("id").eq("user1_id", uid).eq("user2_id", otherId).maybeSingle(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{}
 		try{ const { data } = await chatDB.from("rooms").select("id").eq("user1_id", otherId).eq("user2_id", uid).maybeSingle(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{}
-		try{ const { data } = await chatDB.from("rooms").insert({user1_id:uid, user2_id:otherId}).select("id").single(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{
-			try{ const { data: d1 } = await chatDB.from("rooms").select("id").eq("user1_id", uid).eq("user2_id", otherId).maybeSingle(); if(d1?.id){ roomCache.set(otherId, d1.id); return d1.id; } }catch{}
-			try{ const { data: d2 } = await chatDB.from("rooms").select("id").eq("user1_id", otherId).eq("user2_id", uid).maybeSingle(); if(d2?.id){ roomCache.set(otherId, d2.id); return d2.id; } }catch{}
-		}
+		try{ const { data } = await chatDB.from("rooms").insert({user1_id:uid, user2_id:otherId}).select("id").single(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{}
 		return null;
 	}
 	async function handleContactLoad(contact:any){
 	  if(!contact) return; if(contact.isOutgoing || contact.isInvite){ selectedInvite = contact.inviteData || contact; showInviteModal = true; return; } if(contact.isIncomingInvite){ selectedIncoming = contact; showIncomingModal = true; return; }
-	  const currentUserId = getCurrentUserId(); const contactUserId = contact.actual_user_id || contact.id; if(!contactUserId) return;
-	  if(contactUserId === currentUserId){ selectedRoomId = null; selectedGroupId = null; selectedGroup = null; selectedContact = contact; hasMore=true; await loadMessages({roomId:null, groupId:null}); return; }
+	  const contactUserId = contact.actual_user_id || contact.id; if(!contactUserId) return; if(contactUserId === getCurrentUserId()){ selectedRoomId = null; selectedGroupId = null; selectedGroup = null; selectedContact = contact; hasMore=true; await loadMessages({roomId:null, groupId:null}); return; }
 	  let roomId = contact.room_id || roomCache.get(contactUserId) || null; if(!roomId){ roomId = await getOrCreateRoom(contact.actual_user_id||contact.id); if(roomId){ contacts = contacts.map(c=> c.id===contact.id? {...c, room_id: roomId} : c); } }
 	  if(roomId){ contacts = contacts.map(c=> c.room_id===roomId? {...c, unread:0} : c); selectedRoomId = roomId; selectedGroupId = null; selectedGroup = null; selectedContact = contact; hasMore=true; await loadMessages({roomId, groupId:null}); } else { selectedRoomId = null; selectedGroupId = null; selectedGroup = null; selectedContact = contact; hasMore=true; messages=[]; }
 	}
-	function onSelectGroup(group:any){ selectedContact=null; selectedRoomId=null; selectedGroup={...group}; selectedGroupId=group.id; hasMore=true; loadGroupDetails(group.id); }
-	async function loadGroupDetails(groupId:string){ try{ const { data }=await chatDB.from("chat_group_members").select(`users:user_id(id,name,email,avatar_url)`).eq("group_id",groupId).limit(500); let list=(data?? []).map((m:any)=>m.users).filter(Boolean); groupMembers=list; }catch{} await loadMessages({roomId:null, groupId}); }
-	function handleMessageLongPress(msg:any, event:any){ if(loadingMore) return; longPressTimer = setTimeout(()=>{ selectedMessageForOptions = msg; if(event.touches){ messageOptionsPos = { x: event.touches[0].clientX, y: event.touches[0].clientY }; } else { messageOptionsPos = { x: event.clientX, y: event.clientY }; } showMessageOptions = true; }, 500); }
+	function onSelectGroup(group:any){ if(!group?.id) return; selectedContact=null; selectedRoomId=null; selectedGroup={...group}; selectedGroupId=group.id; hasMore=true; loadGroupDetails(group.id); }
+	async function loadGroupDetails(groupId:string){ if(!groupId) return; try{ const { data }=await chatDB.from("chat_group_members").select(`users:user_id(id,name,email,avatar_url)`).eq("group_id",groupId).limit(200); groupMembers=(data?? []).map((m:any)=>m.users).filter(Boolean); }catch{} await loadMessages({roomId:null, groupId}); }
+	function handleMessageLongPress(msg:any, event:any){ longPressTimer = setTimeout(()=>{ selectedMessageForOptions = msg; messageOptionsPos = { x: event.clientX||0, y: event.clientY||0 }; showMessageOptions = true; }, 500); }
 	function handleMessagePressEnd(){ if(longPressTimer) clearTimeout(longPressTimer); }
 	function handleReply(msg:any){ replyingTo = msg; showMessageOptions = false; }
 	function handleForward(msg:any){ forwardMessage = msg; showForwardModal = true; showMessageOptions = false; }
-	async function handleForwardToContact(contact:any){ if(!forwardMessage) return; if(Date.now() - lastSent < 300) return; const roomId = contact.room_id || await getOrCreateRoom(contact.actual_user_id || contact.id); if(!roomId) return; await chatDB.from("messages").insert({ sender_id: getCurrentUserId(), content: sanitize(`Forwarded: ${forwardMessage.content}`), room_id: roomId, receiver_id: contact.actual_user_id || contact.id, status:'sent' }); showForwardModal = false; forwardMessage = null; }
+	async function handleForwardToContact(contact:any){ if(!forwardMessage) return; const roomId = contact.room_id || await getOrCreateRoom(contact.actual_user_id || contact.id); if(!roomId) return; await chatDB.from("messages").insert({ sender_id: getCurrentUserId(), content: sanitize(`Forwarded: ${forwardMessage.content}`), room_id: roomId, receiver_id: contact.actual_user_id || contact.id, status:'sent' }); showForwardModal = false; forwardMessage = null; }
 	function handleBackToList(){ selectedContact = null; selectedGroup = null; selectedRoomId = null; selectedGroupId = null; messages = []; chatMode='chat'; if(messagesChannel) chatDB.removeChannel(messagesChannel); }
-	async function handleInvite(event: any){ const { inviteId, action }=event.detail; if(!['accepted','rejected'].includes(action)) return; const { error } = await chatDB.from('contact_invites').update({status:action}).eq('id',inviteId); if(error){ alert("Invite update failed: "+error.message); return; } await loadContacts(true); }
+	async function handleInvite(event: any){ const { inviteId, action }=event.detail; if(!['accepted','rejected'].includes(action)) return; await chatDB.from('contact_invites').update({status:action}).eq('id',inviteId); await loadContacts(true); }
 	async function handleDeleteContact(e:any){
-  const c = e.detail || e; if(!c) return;
-  const isGroup = groups.some((g:any)=> g.id===c.id);
-  if(!confirm(isGroup? `Delete group "${c.name}"?` : `Delete "${c.name}"?`)) return;
-  if(isGroup){
-    await chatDB.from("chat_group_members").delete().eq("group_id", c.id);
-    await chatDB.from("messages").delete().eq("group_id", c.id);
-    await chatDB.from("chat_groups").delete().eq("id", c.id);
-    groups = groups.filter((x:any)=> x.id!== c.id);
-    if(selectedGroup?.id===c.id){ selectedGroup=null; selectedGroupId=null; messages=[]; }
-    return;
-  }
-  const realId = c.actual_user_id || c.id;
-  const rId = c.room_id || roomCache.get(realId);
-  if(rId){
-    await chatDB.from("messages").delete().eq("room_id", rId);
-    await chatDB.from("rooms").delete().eq("id", rId);
-  }
-  if(c.inviteData?.id){ await chatDB.from("contact_invites").delete().eq("id", c.inviteData.id); }
-  roomCache.delete(realId);
-  contacts = contacts.filter((x:any)=> x.id!== c.id && x.actual_user_id!==realId);
-  if(selectedContact?.id===c.id){ selectedContact=null; selectedRoomId=null; messages=[]; }
-  showAvatarModal=false;
-  await loadContacts(true);
-}
-
-   	async function acceptIncoming(){ if(!selectedIncoming) return; const inv = selectedIncoming.inviteData; const { error } = await chatDB.from('contact_invites').update({status:'accepted'}).eq('id', inv.id); if(error){ alert("Accept failed: "+error.message); return; } const roomId = await getOrCreateRoom(inv.invited_by); showIncomingModal = false; await loadContacts(true); const c = contacts.find(x=>x.actual_user_id===inv.invited_by); if(c) await handleContactLoad({...c, room_id: roomId}); else { selectedRoomId = roomId; selectedGroupId = null; selectedGroup = null; selectedContact = { id: inv.invited_by, actual_user_id: inv.invited_by, name: selectedIncoming.name, avatar_url: selectedIncoming.avatar_url, room_id: roomId }; hasMore=true; await loadMessages({roomId, groupId:null}); } }
+	  const c = e.detail || e; if(!c) return; const isGroup = groups.some((g:any)=> g.id===c.id);
+	  if(!confirm(isGroup? `Delete group "${c.name}"?` : `Delete "${c.name}"?`)) return;
+	  if(isGroup){ await chatDB.from("chat_group_members").delete().eq("group_id", c.id); await chatDB.from("messages").delete().eq("group_id", c.id); await chatDB.from("chat_groups").delete().eq("id", c.id); groups = groups.filter((x:any)=> x.id!== c.id); if(selectedGroup?.id===c.id){ selectedGroup=null; selectedGroupId=null; messages=[]; } return; }
+	  const realId = c.actual_user_id || c.id; const rId = c.room_id || roomCache.get(realId);
+	  if(rId){ await chatDB.from("messages").delete().eq("room_id", rId); await chatDB.from("rooms").delete().eq("id", rId); }
+	  if(c.inviteData?.id){ await chatDB.from("contact_invites").delete().eq("id", c.inviteData.id); }
+	  roomCache.delete(realId); contacts = contacts.filter((x:any)=> x.id!== c.id && x.actual_user_id!==realId);
+	  if(selectedContact?.id===c.id){ selectedContact=null; selectedRoomId=null; messages=[]; } showAvatarModal=false; await loadContacts(true);
+	}
+   	async function acceptIncoming(){ if(!selectedIncoming) return; const inv = selectedIncoming.inviteData; await chatDB.from('contact_invites').update({status:'accepted'}).eq('id', inv.id); const roomId = await getOrCreateRoom(inv.invited_by); showIncomingModal = false; await loadContacts(true); const c = contacts.find(x=>x.actual_user_id===inv.invited_by); if(c) await handleContactLoad({...c, room_id: roomId}); }
 	async function rejectIncoming(){ if(!selectedIncoming) return; await chatDB.from('contact_invites').update({status:'rejected'}).eq('id', selectedIncoming.inviteData.id); showIncomingModal = false; await loadContacts(true); }
 	async function createContact(){
-	    const raw = contactEmail.trim().toLowerCase(); if(!raw){ alert("Enter email"); return; } const emailRegex=/^[^\s@]+@[^\s@]+\.[^\s@]+$/; if(!emailRegex.test(raw)){ alert("Invalid email"); return; } const myEmail = (currentUser?.email || data?.user?.email || "").toLowerCase(); if(raw === myEmail){ alert("Cannot add yourself"); return; } if(contacts.some(c=> c.email?.toLowerCase() === raw &&!c.isInvite &&!c.isOutgoing)){ alert("Already in contacts"); return; } invitingUser=true;
-	    try{ const uid = getCurrentUserId(); if(!uid){ alert("Not logged in"); return; } const { data: inserted, error } = await chatDB.from('contact_invites').insert({email: raw, invited_by: uid, status: 'pending', token: crypto.randomUUID()}).select().single(); if(error) throw error; showContactForm=false; contactEmail=""; await loadContacts(true); }catch(e:any){ alert("Invite failed: "+(e.message||JSON.stringify(e))); }finally{ invitingUser=false; }
+	    const raw = contactEmail.trim().toLowerCase(); if(!raw) return; if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)){ alert("Invalid email"); return; } if((currentUser?.email||"").toLowerCase()===raw){ alert("Cannot add yourself"); return; } invitingUser=true;
+	    try{ const uid = getCurrentUserId(); const { error } = await chatDB.from('contact_invites').insert({email: raw, invited_by: uid, status: 'pending', token: crypto.randomUUID()}).select().single(); if(error) throw error; showContactForm=false; contactEmail=""; await loadContacts(true); }catch(e:any){ alert("Invite failed: "+(e.message||'').slice(0,80)); }finally{ invitingUser=false; }
 	}
 	async function createGroup(){
-	  const clean = sanitize(groupName); if(clean.length<3){ alert("Min 3 chars"); return; } const uid = getCurrentUserId(); if(!uid){ alert("Not logged in"); return; }
-	  try{
-	    const { data: g1, error: e1 } = await chatDB.from("chat_groups").insert({name: clean}).select("id,name").single();
-	    if(e1) throw e1;
-	    try{ await chatDB.from("chat_group_members").insert({group_id: g1.id, user_id: uid}); }catch{}
-	    groupName=""; showGroupForm=false; await loadGroups();
-	    const ng = groups.find((gr:any)=>gr.id===g1.id); if(ng) onSelectGroup(ng);
-	  }catch(err:any){ alert("Create failed: "+(err.message||'')); console.error(err); }
+	  const clean = sanitize(groupName).slice(0,50); if(clean.length<3){ alert("Min 3 chars"); return; } const uid = getCurrentUserId(); if(!uid) return;
+	  try{ const { data: g1 } = await chatDB.from("chat_groups").insert({name: clean}).select("id,name").single(); await chatDB.from("chat_group_members").insert({group_id: g1.id, user_id: uid}); groupName=""; showGroupForm=false; await loadGroups(); const ng = groups.find((gr:any)=>gr.id===g1.id); if(ng) onSelectGroup(ng); }catch(err:any){ alert("Create failed: "+(err.message||'')); }
 	}
-	async function openAddMembers(group:any){
-	  groupToAddMembers = group; showAddMembersModal = true;
-	}
+	async function openAddMembers(group:any){ groupToAddMembers = group; showAddMembersModal = true; }
 	async function addMemberToGroup(contact:any){
-	  if(!groupToAddMembers ||!contact?.actual_user_id) return;
-	  if(contact.isSelf) return;
-	  if(addMemberLoading) return;
-	  addMemberLoading = true;
-	  try{
-	    const { error } = await chatDB.from("chat_group_members").insert({ group_id: groupToAddMembers.id, user_id: contact.actual_user_id });
-	    if(error) throw error;
-	    alert(`${contact.name} added`);
-	    if(selectedGroupId===groupToAddMembers.id) await loadGroupDetails(groupToAddMembers.id);
-	    showAddMembersModal = false;
-	  }catch(e:any){
-	    if(e.message?.includes('duplicate') || e.code==='23505') alert("Already in group");
-	    else alert("Add failed: "+(e.message||'error'));
-	  } finally { addMemberLoading = false; }
+	  if(!groupToAddMembers ||!contact?.actual_user_id) return; if(contact.isSelf || addMemberLoading) return; addMemberLoading = true;
+	  try{ await chatDB.from("chat_group_members").insert({ group_id: groupToAddMembers.id, user_id: contact.actual_user_id }); if(selectedGroupId===groupToAddMembers.id) await loadGroupDetails(groupToAddMembers.id); showAddMembersModal = false; }catch(e:any){ if(e.code==='23505') alert("Already in group"); else alert("Add failed"); } finally { addMemberLoading = false; }
 	}
 </script>
 
@@ -414,36 +352,12 @@ import { goto } from "$app/navigation";
 	</div>
 	<section class="chat-area" class:show-mobile={isMobileView && (selectedContact || selectedGroup)}>
 		{#if selectedContact || selectedGroup}
-			<div class="chat-header-fixed">
-				<ChatHeader title={selectedContact?.name?? selectedGroup?.name?? ''} subtitle={selectedContact? (isUserOnline(selectedContact?.actual_user_id||selectedContact?.id)? "Online" : "Tap for photo") : `${groupMembers.length} members`} avatarUrl={selectedContact?.avatar_url?? selectedGroup?.avatar_url?? ''} showBack={isMobileView} isGroup={!!selectedGroup} onBack={handleBackToList} onAction={(e)=>handleHeaderAction(e.detail)} />
-			</div>
-			<div class="filter-fixed">
-			  <div class="mode-row">
-			    <div class="dd-wrap" use:clickOutside={()=>openMode=false}>
-			      <button class="mode-btn" onclick={(e)=>{e.stopPropagation(); openMode=!openMode}}><span>{chatMode==='chat'?'💬':chatMode==='template'?'📋':'📅'}</span><b>{chatMode==='chat'?'Chat':chatMode==='template'?'Template':'Meeting'}</b><span class="arr">{openMode?'▲':'▼'}</span></button>
-			      {#if openMode}<div class="dd"><button class:active={chatMode==='chat'} onclick={()=>{chatMode='chat'; openMode=false; openList=false; selectedTemplate=null; showArchived=false; showStarred=false;}}>💬 Chat</button><button class:active={chatMode==='template'} onclick={()=>{chatMode='template'; openMode=false;}}>📋 Template</button><button class:active={chatMode==='meeting'} onclick={()=>{chatMode='meeting'; openMode=false;}}>📅 Meeting</button></div>{/if}
-			    </div>
-			    {#if chatMode!=='chat'}
-			      <div class="dd-wrap second" use:clickOutside={()=>openList=false}>
-			        <button class="list-btn" onclick={(e)=>{e.stopPropagation(); openList=!openList}}><span class="cut">{#if chatMode==='template'}{selectedTemplate?.name || 'Select Template'}{:else}{selectedMeeting?.title || 'Select Meeting'}{/if}</span><span class="arr">{openList?'▲':'▼'}</span></button>
-			        {#if openList}<div class="dd dd2">{#if chatMode==='template'}{#each templates as t}<button class:active={selectedTemplate?.id===t.id} onclick={()=>{selectedTemplate=t; openList=false;}}><b>{t.name}</b><small>{t.template_code}</small></button>{:else}<div class="empty">No templates</div>{/each}{:else}{#each meetings as m}<button class:active={selectedMeeting?.id===m.id} onclick={()=>{selectedMeeting=m; openList=false;}}><b>{m.title}</b><small>{m.date}</small></button>{:else}<div class="empty">No meetings</div>{/each}{/if}</div>{/if}
-			      </div>
-			      {#if chatMode==='template' && selectedTemplate}<button class="use-btn" onclick={()=>{handleUseTemplate({detail:{template:selectedTemplate}})}}>Use</button>{/if}
-			    {/if}
-			  </div>
-			</div>
-			<div class="filter-info">Showing: {showArchived? 'Archived' : showStarred? 'Starred' : chatMode}{selectedTemplate? ` - ${selectedTemplate.name}`:''} | {filteredMessages.length}/{messages.length} msgs {#if loadingMore}• Loading older...{/if} {#if !hasMore && messages.length>0}• Start{/if}</div>
-			<div class="messages-scroll">
-				<MessageList messages={filteredMessages} {selectedContact} {selectedGroup} currentUser={currentUser} selectedUser={currentUser} {replyingTo} onReply={handleReply} onForward={handleForward} onLongPress={handleMessageLongPress} onPressEnd={handleMessagePressEnd} onOpenDetail={(e)=>handleOpenDetail(e.detail.template, e.detail.message)} />
-			</div>
+			<div class="chat-header-fixed"><ChatHeader title={selectedContact?.name?? selectedGroup?.name?? ''} subtitle={selectedContact? (isUserOnline(selectedContact?.actual_user_id||selectedContact?.id)? "Online" : "Tap for photo") : `${groupMembers.length} members`} avatarUrl={selectedContact?.avatar_url?? selectedGroup?.avatar_url?? ''} showBack={isMobileView} isGroup={!!selectedGroup} onBack={handleBackToList} onAction={(e)=>handleHeaderAction(e.detail)} /></div>
+			<div class="filter-fixed"><div class="mode-row"><div class="dd-wrap" use:clickOutside={()=>openMode=false}><button class="mode-btn" onclick={(e)=>{e.stopPropagation(); openMode=!openMode}}><span>{chatMode==='chat'?'💬':chatMode==='template'?'📋':'📅'}</span><b>{chatMode==='chat'?'Chat':chatMode==='template'?'Template':'Meeting'}</b><span class="arr">{openMode?'▲':'▼'}</span></button>{#if openMode}<div class="dd"><button class:active={chatMode==='chat'} onclick={()=>{chatMode='chat'; openMode=false; openList=false; selectedTemplate=null; showArchived=false; showStarred=false;}}>💬 Chat</button><button class:active={chatMode==='template'} onclick={()=>{chatMode='template'; openMode=false;}}>📋 Template</button><button class:active={chatMode==='meeting'} onclick={()=>{chatMode='meeting'; openMode=false;}}>📅 Meeting</button></div>{/if}</div>{#if chatMode!=='chat'}<div class="dd-wrap second" use:clickOutside={()=>openList=false}><button class="list-btn" onclick={(e)=>{e.stopPropagation(); openList=!openList}}><span class="cut">{#if chatMode==='template'}{selectedTemplate?.name || 'Select Template'}{:else}{selectedMeeting?.title || 'Select Meeting'}{/if}</span><span class="arr">{openList?'▲':'▼'}</span></button>{#if openList}<div class="dd dd2">{#if chatMode==='template'}{#each templates as t}<button class:active={selectedTemplate?.id===t.id} onclick={()=>{selectedTemplate=t; openList=false;}}><b>{t.name}</b><small>{t.template_code}</small></button>{:else}<div class="empty">No templates</div>{/each}{:else}{#each meetings as m}<button class:active={selectedMeeting?.id===m.id} onclick={()=>{selectedMeeting=m; openList=false;}}><b>{m.title}</b><small>{m.date}</small></button>{:else}<div class="empty">No meetings</div>{/each}{/if}</div>{/if}</div>{#if chatMode==='template' && selectedTemplate}<button class="use-btn" onclick={()=>{handleUseTemplate({detail:{template:selectedTemplate}})}}>Use</button>{/if}{/if}</div></div>
+			<div class="filter-info">Showing: {showArchived? 'Archived' : showStarred? 'Starred' : chatMode}{selectedTemplate? ` - ${selectedTemplate.name}`:''} | {filteredMessages.length}/{messages.length} {#if loadingMore}• Loading...{/if}</div>
+			<div class="messages-scroll"><MessageList messages={filteredMessages} {selectedContact} {selectedGroup} currentUser={currentUser} selectedUser={currentUser} {replyingTo} onReply={handleReply} onForward={handleForward} onLongPress={handleMessageLongPress} onPressEnd={handleMessagePressEnd} onOpenDetail={(e)=>handleOpenDetail(e.detail.template, e.detail.message)} /></div>
 			{#if replyingTo}<div class="reply-preview"><span>Replying to: {replyingTo.content?.slice(0,50)}...</span><button onclick={()=>replyingTo=null}>✕</button></div>{/if}
-			<div class="chat-input-fixed"><ChatInput
-  {uploadingFiles}
-  {groupMembers}
-  onSendMessage={sendMessage}
-  onOpenTemplate={onOpenTemplate}
-  onSendLocation={handleSendLocation}
-/></div>
+			<div class="chat-input-fixed"><ChatInput {uploadingFiles} {groupMembers} onSendMessage={sendMessage} onOpenTemplate={onOpenTemplate} onSendLocation={handleSendLocation}/></div>
 		{:else}<div class="empty-area"><div class="empty-icon">💬</div><h2>Chat</h2><p>Select a chat to start messaging</p></div>{/if}
 	</section>
 </div>
@@ -451,103 +365,28 @@ import { goto } from "$app/navigation";
 {#if showAvatarModal}
 <div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showAvatarModal=false}></button>
 <div class="modal" style="width:380px; max-height:90vh; overflow-y:auto; background:#111b21; border:1px solid #2a3942;">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-    <h3 style="margin:0; color:#e9edef;">{avatarType==='group'? '👥 Group Info' : avatarTarget?.isSelf? '💾 Your Profile' : '👤 Contact Info'}</h3>
-    <button style="background:#2a3942; border:none; color:#8696a0; width:32px; height:32px; border-radius:50%; cursor:pointer;" onclick={()=>showAvatarModal=false}>✕</button>
-  </div>
+  <div style="display:flex; justify-content:space-between; align-items:center;"><h3 style="margin:0; color:#e9edef;">{avatarType==='group'? '👥 Group Info' : avatarTarget?.isSelf? '💾 Your Profile' : '👤 Contact Info'}</h3><button style="background:#2a3942; border:none; color:#8696a0; width:32px; height:32px; border-radius:50%; cursor:pointer;" onclick={()=>showAvatarModal=false}>✕</button></div>
   <div style="display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px 0 14px;">
-    <img src={avatarPreview || avatarTarget?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarTarget?.name || avatarTarget?.email || 'User')}&background=00a884&color=fff&size=300`} alt="avatar" style="width:170px;height:170px;border-radius:50%;object-fit:cover;border:4px solid #00a884;" />
-    <b style="color:#e9edef; font-size:20px; text-align:center;">{avatarTarget?.name || avatarTarget?.email || 'User'}</b>
-    <span style="color:#8696a0; font-size:13px; text-align:center;">{avatarTarget?.email || ''}</span>
+    <img src={avatarPreview || avatarTarget?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarTarget?.name || 'User')}&background=00a884&color=fff&size=300`} alt="avatar" style="width:170px;height:170px;border-radius:50%;object-fit:cover;border:4px solid #00a884;" />
+    <b style="color:#e9edef; font-size:20px;">{avatarTarget?.name || 'User'}</b><span style="color:#8696a0; font-size:13px;">{avatarTarget?.email || ''}</span>
   </div>
-  <div style="background:#1a242c; padding:12px; border-radius:12px; display:flex; flex-direction:column; gap:10px; border:1px solid #222d34;">
+  <div style="background:#1a242c; padding:12px; border-radius:12px; display:flex; flex-direction:column; gap:10px;">
     <div style="display:flex; justify-content:space-between;"><span style="color:#8696a0; font-size:13px;">Name</span><b style="color:#e9edef; font-size:13px;">{avatarTarget?.name || '-'}</b></div>
     <div style="display:flex; justify-content:space-between;"><span style="color:#8696a0; font-size:13px;">Email</span><b style="color:#e9edef; font-size:12px; max-width:180px; overflow:hidden; text-overflow:ellipsis;">{avatarTarget?.email || '-'}</b></div>
   </div>
   <div style="margin:14px 0 6px;">
-    {#if avatarType==='contact'}
-      <b style="color:#e9edef; font-size:14px;">Groups in common ({commonGroups.length})</b>
-      <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height:150px; overflow-y:auto;">
-        {#each commonGroups as g}
-          <div style="display:flex; align-items:center; gap:10px; background:#202c33; padding:9px 12px; border-radius:10px; border:1px solid #222d34; cursor:pointer;" onclick={()=>{ showAvatarModal=false; const found = groups.find(x=>x.id===g.id); if(found) onSelectGroup(found); }}>
-            <div style="width:36px; height:36px; background:#00a884; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0;">👥</div>
-            <div style="flex:1; min-width:0;"><div style="color:#e9edef; font-size:13.5px; font-weight:600;">{g.name}</div><div style="color:#8696a0; font-size:11px;">Tap to open</div></div>
-          </div>
-        {:else}
-          <div style="color:#8696a0; font-size:12px; padding:10px; text-align:center; background:#202c33; border-radius:10px;">No groups in common - add to group</div>
-        {/each}
-      </div>
-    {:else}
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-        <b style="color:#e9edef; font-size:14px;">Members ({groupMembers.length})</b>
-        <button style="background:#00a884; color:#111b21; border:none; padding:6px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer;" onclick={()=>openAddMembers(avatarTarget)}>+ Add Contact</button>
-      </div>
-      <div style="display:flex; flex-direction:column; gap:6px; max-height:150px; overflow-y:auto;">
-        {#each groupMembers as m}
-          <div style="display:flex; align-items:center; gap:10px; background:#202c33; padding:8px 12px; border-radius:10px;">
-            <img src={m.avatar_url || `https://ui-avatars.com/api/?name=${m.name}`} style="width:32px;height:32px;border-radius:50%;" alt="" />
-            <div style="flex:1;"><div style="color:#e9edef; font-size:13px;">{m.name}</div><div style="color:#8696a0; font-size:11px;">{m.email}</div></div>
-          </div>
-        {:else}
-          <div style="color:#8696a0; font-size:12px; padding:10px; text-align:center;">No members - Click + Add Contact</div>
-        {/each}
-      </div>
-    {/if}
+    {#if avatarType==='contact'}<b style="color:#e9edef; font-size:14px;">Groups in common ({commonGroups.length})</b><div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height:150px; overflow-y:auto;">{#each commonGroups as g}<div style="display:flex; align-items:center; gap:10px; background:#202c33; padding:9px 12px; border-radius:10px; cursor:pointer;" onclick={()=>{ showAvatarModal=false; const found = groups.find(x=>x.id===g.id); if(found) onSelectGroup(found); }}><div style="width:36px; height:36px; background:#00a884; border-radius:50%; display:flex; align-items:center; justify-content:center;">👥</div><div><div style="color:#e9edef; font-size:13.5px; font-weight:600;">{g.name}</div><div style="color:#8696a0; font-size:11px;">Tap to open</div></div></div>{:else}<div style="color:#8696a0; font-size:12px; padding:10px; text-align:center; background:#202c33; border-radius:10px;">No groups in common</div>{/each}</div>{:else}<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;"><b style="color:#e9edef; font-size:14px;">Members ({groupMembers.length})</b><button style="background:#00a884; color:#111b21; border:none; padding:6px 12px; border-radius:6px; font-size:12px; font-weight:700; cursor:pointer;" onclick={()=>openAddMembers(avatarTarget)}>+ Add</button></div><div style="display:flex; flex-direction:column; gap:6px; max-height:150px; overflow-y:auto;">{#each groupMembers as m}<div style="display:flex; align-items:center; gap:10px; background:#202c33; padding:8px 12px; border-radius:10px;"><img src={m.avatar_url || `https://ui-avatars.com/api/?name=${m.name}`} style="width:32px;height:32px;border-radius:50%;" alt="" /><div><div style="color:#e9edef; font-size:13px;">{m.name}</div><div style="color:#8696a0; font-size:11px;">{m.email}</div></div></div>{:else}<div style="color:#8696a0; font-size:12px; padding:10px; text-align:center;">No members</div>{/each}</div>{/if}
   </div>
-  <div class="modal-btns" style="margin-top:14px;">
-    <button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button>
-    {#if avatarTarget?.isSelf || avatarType==='group'}
-      <label class="btn-primary" style="text-align:center;cursor:pointer;">{#if avatarUploading}Uploading...{:else}Change Photo{/if}<input type="file" accept="image/*" hidden disabled={avatarUploading} onchange={onAvatarFileChange} /></label>
-    {:else}
-      <button class="btn-primary" onclick={()=>{ showAvatarModal=false; if(avatarTarget) handleContactLoad(avatarTarget); }}>💬 Message</button>
-    {/if}
-  </div>
-</div>
-</div>
-{/if}
-
-{#if showAddMembersModal}
-<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showAddMembersModal=false}></button>
-<div class="modal large" style="width:400px;">
-  <h3>➕ Add to {groupToAddMembers?.name}</h3>
-  <div style="display:flex; flex-direction:column; gap:6px; max-height:50vh; overflow-y:auto;">
-    {#each contacts.filter(c=>!c.isSelf && c.actual_user_id) as c}
-      <button style="display:flex; align-items:center; gap:10px; background:#2a3942; border:none; padding:10px 12px; border-radius:10px; cursor:pointer; text-align:left;" onclick={()=>addMemberToGroup(c)} disabled={addMemberLoading}>
-        <img src={c.avatar_url || `https://ui-avatars.com/api/?name=${c.name}`} style="width:36px;height:36px;border-radius:50%;" alt="" />
-        <div style="flex:1;"><div style="color:#e9edef; font-size:13px; font-weight:600;">{c.name}</div><div style="color:#8696a0; font-size:11px;">{c.email}</div></div>
-        <span style="color:#00a884; font-weight:700;">+ Add</span>
-      </button>
-    {:else}
-      <div style="color:#8696a0; font-size:13px; text-align:center; padding:20px;">No contacts to add. Invite contacts first.</div>
-    {/each}
-  </div>
-  <div class="modal-btns" style="margin-top:12px;"><button class="btn-secondary" onclick={()=>showAddMembersModal=false}>Close</button></div>
-</div>
-</div>
-{/if}
-
-{#if showMessageOptions && selectedMessageForOptions}<button class="message-options-overlay" onclick={()=>showMessageOptions=false}></button><div class="message-options" style="left:{messageOptionsPos.x}px; top:{messageOptionsPos.y}px;" use:clickOutside={()=>showMessageOptions=false}><button onclick={()=>handleReply(selectedMessageForOptions)}>↩️ Reply</button><button onclick={()=>handleForward(selectedMessageForOptions)}>➡️ Forward</button><button onclick={()=>{ if(browser){ navigator.clipboard.writeText(selectedMessageForOptions.content); } showMessageOptions=false; }}>📋 Copy</button></div>{/if}
-{#if showForwardModal}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showForwardModal=false}></button><div class="modal large"><h3>Forward to...</h3><div class="forward-list">{#each contacts as contact}<button class="forward-item" onclick={()=>handleForwardToContact(contact)}><span>{contact.name}</span></button>{/each}</div><button class="btn-secondary" onclick={()=>showForwardModal=false}>Cancel</button></div></div>{/if}
+  <div class="modal-btns" style="margin-top:14px;"><button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button>{#if avatarTarget?.isSelf || avatarType==='group'}<label class="btn-primary" style="text-align:center;cursor:pointer;">{#if avatarUploading}Uploading...{:else}Change Photo{/if}<input type="file" accept="image/*" hidden disabled={avatarUploading} onchange={onAvatarFileChange} /></label>{:else}<button class="btn-primary" onclick={()=>{ showAvatarModal=false; if(avatarTarget) handleContactLoad(avatarTarget); }}>💬 Message</button>{/if}</div>
+</div></div>{/if}
+{#if showAddMembersModal}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showAddMembersModal=false}></button><div class="modal large" style="width:400px;"><h3>➕ Add to {groupToAddMembers?.name}</h3><div style="display:flex; flex-direction:column; gap:6px; max-height:50vh; overflow-y:auto;">{#each contacts.filter(c=>!c.isSelf && c.actual_user_id) as c}<button style="display:flex; align-items:center; gap:10px; background:#2a3942; border:none; padding:10px 12px; border-radius:10px; cursor:pointer; text-align:left;" onclick={()=>addMemberToGroup(c)} disabled={addMemberLoading}><img src={c.avatar_url || `https://ui-avatars.com/api/?name=${c.name}`} style="width:36px;height:36px;border-radius:50%;" alt="" /><div style="flex:1;"><div style="color:#e9edef; font-size:13px; font-weight:600;">{c.name}</div><div style="color:#8696a0; font-size:11px;">{c.email}</div></div><span style="color:#00a884; font-weight:700;">+ Add</span></button>{:else}<div style="color:#8696a0; font-size:13px; text-align:center; padding:20px;">No contacts</div>{/each}</div><div class="modal-btns" style="margin-top:12px;"><button class="btn-secondary" onclick={()=>showAddMembersModal=false}>Close</button></div></div></div>{/if}
 {#if showContactForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showContactForm=false}></button><div class="modal"><h3>New Contact</h3><input class="modal-input" bind:value={contactEmail} placeholder="Contact Email" /><div class="modal-btns"><button class="btn-primary" onclick={createContact}>{invitingUser?'Inviting...':'Invite'}</button><button class="btn-secondary" onclick={() => showContactForm=false}>Cancel</button></div></div></div>{/if}
-{#if showGroupForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showGroupForm=false}></button><div class="modal"><h3>👥 Create Group</h3><input class="modal-input" bind:value={groupName} placeholder="Group Name" maxlength="50" onkeydown={(e)=>{ if(e.key==='Enter') createGroup(); }} /><div class="modal-btns"><button class="btn-secondary" onclick={()=>showGroupForm=false}>Cancel</button><button class="btn-primary" onclick={createGroup}>Create</button></div></div></div>{/if}
-
-{#if showTemplateModal}
-  <TemplatePopup
-    templates={templates}
-    loading={templateLoading}
-    on:close={()=>showTemplateModal=false}
-    on:use={handleUseTemplate}
-    on:new={handleCreateTemplate}
-    on:create={handleCreateTemplate}
-    on:deleted={(e)=>{ templates=templates.filter(t=>t.id!==e.detail.template.id); }}
-  />
-{/if}
-
+{#if showGroupForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showGroupForm=false}></button><div class="modal"><h3>👥 Create Group</h3><input class="modal-input" bind:value={groupName} placeholder="Group Name" maxlength="50" /><div class="modal-btns"><button class="btn-secondary" onclick={()=>showGroupForm=false}>Cancel</button><button class="btn-primary" onclick={createGroup}>Create</button></div></div></div>{/if}
+{#if showTemplateModal}<TemplatePopup templates={templates} loading={templateLoading} on:close={()=>showTemplateModal=false} on:use={handleUseTemplate} on:new={handleCreateTemplate} on:create={handleCreateTemplate} on:deleted={(e)=>{ templates=templates.filter(t=>t.id!==e.detail.template.id); }} />{/if}
 {#if showTemplateForm && selectedTemplate}<div style="position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);"><TemplateForm template={selectedTemplate} on:close={()=>{ showTemplateForm=false; selectedTemplate=null; }} on:submit={sendTemplateReport} /></div>{/if}
-{#if showDetailModal && detailData}<div class="detail-bg"><button class="modal-bg-btn" onclick={()=>showDetailModal=false}></button><div class="detail-modal"><div class="detail-header"><h3>📋 {detailData.template_name}</h3><button class="detail-close" onclick={()=>showDetailModal=false}>✕</button></div><div class="detail-body">{#if detailData.fields && detailData.fields.length}{#each detailData.fields as f}{@const key = f.field_name || f.name}{@const val = detailData.values[key]?? detailData.values[key?.toLowerCase()]?? detailData.values[f.label]?? '-'}<div class="detail-row"><span class="d-label">{f.label}</span><b class="d-value">{String(val)}</b></div>{/each}{:else}{#each Object.entries(detailData.values) as [k, v]}{#if !['t_code','template_code','template_name','template_id','owner_id','user_id','owner_email','created_at','fields','data'].includes(k)}<div class="detail-row"><span class="d-label">{k.replace(/_/g,' ')}</span><b class="d-value">{String(v||'-')}</b></div>{/if}{/each}{/if}</div><div class="detail-actions"><button class="btn-secondary" onclick={()=>showDetailModal=false}>Close</button></div></div></div>{/if}
-{#if showInviteModal && selectedInvite}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showInviteModal=false}></button><div class="modal" style="width:440px;"><h3>📩 Invite Details</h3><div style="background:#2a3942; padding:14px; border-radius:10px;"><b style="color:#e9edef;">{selectedInvite.email}</b> - {selectedInvite.status}</div><div class="modal-btns"><button class="btn-secondary" onclick={()=>showInviteModal=false}>Close</button><button class="btn-primary" onclick={async ()=>{ try{ await chatDB.from('contact_invites').delete().eq('id', selectedInvite.id); }catch{} showInviteModal=false; await loadContacts(true); }}>Delete</button></div></div></div>{/if}
-{#if showIncomingModal && selectedIncoming}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showIncomingModal=false}></button><div class="modal" style="width:440px;"><h3>📩 New Invite</h3><div style="background:#2a3942; padding:14px; border-radius:10px; text-align:center;"><b style="color:#e9edef;">{selectedIncoming.name}</b><br/><span style="color:#8696a0;">{selectedIncoming.email}</span></div><div class="modal-btns"><button class="btn-secondary" onclick={rejectIncoming}>Reject</button><button class="btn-primary" onclick={acceptIncoming}>Accept & Chat</button></div></div></div>{/if}
-{#if showSettingsModal}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showSettingsModal=false}></button><div class="modal"><h3>⚙️ Settings</h3><div class="modal-btns"><button class="btn-secondary" onclick={()=>showSettingsModal=false}>Close</button><button class="btn-primary" onclick={()=>{ if(browser) window.location.href='/settings'; }}>Open Settings</button></div></div></div>{/if}
+{#if showDetailModal && detailData}<div class="detail-bg"><button class="modal-bg-btn" onclick={()=>showDetailModal=false}></button><div class="detail-modal"><div class="detail-header"><h3>📋 {detailData.template_name}</h3><button class="detail-close" onclick={()=>showDetailModal=false}>✕</button></div><div class="detail-body">{#each detailData.fields as f}{@const key = f.field_name || f.name}{@const val = detailData.values[key]?? '-'}<div class="detail-row"><span class="d-label">{f.label}</span><b class="d-value">{String(val)}</b></div>{/each}</div></div></div>{/if}
+{#if showInviteModal && selectedInvite}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showInviteModal=false}></button><div class="modal"><h3>📩 Invite</h3><div style="background:#2a3942; padding:14px; border-radius:10px;"><b style="color:#e9edef;">{selectedInvite.email}</b></div><div class="modal-btns"><button class="btn-secondary" onclick={()=>showInviteModal=false}>Close</button><button class="btn-primary" onclick={async ()=>{ await chatDB.from('contact_invites').delete().eq('id', selectedInvite.id); showInviteModal=false; await loadContacts(true); }}>Delete</button></div></div></div>{/if}
+{#if showIncomingModal && selectedIncoming}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showIncomingModal=false}></button><div class="modal"><h3>📩 New Invite</h3><div style="background:#2a3942; padding:14px; border-radius:10px; text-align:center;"><b style="color:#e9edef;">{selectedIncoming.name}</b></div><div class="modal-btns"><button class="btn-secondary" onclick={rejectIncoming}>Reject</button><button class="btn-primary" onclick={acceptIncoming}>Accept</button></div></div></div>{/if}
 
 <style>
 	.main-container{display:flex;height:100dvh;max-height:100dvh;width:100vw;background:#111b21;overflow:hidden;font-family:Inter,Segoe UI,sans-serif;}

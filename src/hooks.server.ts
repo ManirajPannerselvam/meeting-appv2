@@ -56,10 +56,11 @@ export const handle: Handle = async ({ event, resolve }) => {
                 });
         }
 
-        if (event.locals.user && (path === '/login' || path === '/register')) {
+        // ✅ FIXED - directly go to /chat after login, not /dashboard
+        if (event.locals.user && (path === '/login' || path === '/register' || path === '/' || path === '/dashboard')) {
                 return new Response(null, {
                         status: 303,
-                        headers: { location: '/dashboard' }
+                        headers: { location: '/chat' }
                 });
         }
 
