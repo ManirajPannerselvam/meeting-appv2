@@ -15,3 +15,5 @@ obj/
 
 # Prisma local database
 prisma/*.db
+.vercel 
+.svelte-kit 
