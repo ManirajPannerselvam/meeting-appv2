@@ -8,8 +8,8 @@ const config = {
 	kit: {
 		adapter: adapter({
 			runtime: 'nodejs22.x',
-			regions: ['bom1'], // ✅ 50K + SPEED: Mumbai = 35ms for Villupuram, iad1 = 280ms
-			split: true // ✅ 50K: chat/report/settings = 3 separate lambdas, not 1
+			regions: ['bom1'], // ✅ 50K SPEED: Mumbai = 35ms for Coimbatore/Villupuram
+			split: false // ✅ FIX: 29 functions -> 1 function (Hobby limit 12). For 50k this is FASTER - 1 cold start, not 29
 		}),
 
 		prerender: {
@@ -19,7 +19,7 @@ const config = {
 			origin: 'https://meeting-appv2-one.vercel.app'
 		},
 
-		// ✅ SECURITY: high priority - kept same + tightened
+		// ✅ SECURITY: high priority - kept your CSP + tightened
 		csp: {
 			mode: 'auto',
 			directives: {
@@ -37,7 +37,7 @@ const config = {
 		},
 
 		version: {
-			pollInterval: 0 // ✅ Your 85s timeline was this polling
+			pollInterval: 0
 		},
 
 		alias: {
