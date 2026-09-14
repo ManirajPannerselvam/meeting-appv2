@@ -2,7 +2,6 @@
 	import { onMount, onDestroy } from "svelte";
 	import { browser } from "$app/environment";
 	import { getChatClient, supabaseTemplates } from '$lib/supabase';
-	const chatDB = getChatClient();
 	import ChatSidebar from "$lib/components/chat/ChatSidebar.svelte";
 	import ChatHeader from "$lib/components/chat/ChatHeader.svelte";
 	import MessageList from "$lib/components/chat/MessageList.svelte";
@@ -10,6 +9,9 @@
 	import TemplatePopup from "$lib/components/templates/TemplatePopup.svelte";
 	import TemplateForm from "$lib/components/templates/form/TemplateForm.svelte";
 	import { goto, preloadData } from "$app/navigation";
+
+	let chatDB: any = null;
+	function getDB(){ if(!chatDB) chatDB = getChatClient(); return chatDB; }
 
 	let { data } = $props();
 	let currentUser = $state<any>(data?.user?? null);
@@ -39,9 +41,7 @@
 	let uploadingFiles = $state<File[]>([]);
 	let messagesChannel: any = $state(null);
 	let presenceChannel: any = $state(null);
-	let profileChannel: any = $state(null);
-	let globalChannel: any = $state(null);
-	let invitesChannel: any = $state(null);
+	let mainChannel: any = $state(null);
 	let templates = $state<any[]>([]);
 	let templateLoading = $state(false);
 	let replyingTo = $state<any>(null);
@@ -75,23 +75,85 @@
 	let showArchived = $state(false);
 	let showStarred = $state(false);
 	let showSettingsModal = $state(false);
-	let showAddMembersModal = $state(false);
-	let groupToAddMembers = $state<any>(null);
-	let addMemberLoading = $state(false);
 	const roomCache = new Map<string,string>();
-	let realtimeCleaned = $state(false);
+
+	let allChats = $derived.by(()=>{
+	  const gSlice = groups.slice(0,100);
+	  const cSlice = contacts.filter((c:any)=>!c.isSelf).slice(0,150);
+	  const all = [
+		...gSlice.map((g:any)=>({...g, _type:'group', _sortTime: g.last_message_at || g.created_at || 0})),
+		...cSlice.map((c:any)=>({...c, _type:'contact', _sortTime: c.last_message_at || c.created_at || 0}))
+	  ];
+	  all.sort((a,b)=> new Date(b._sortTime||0).getTime() - new Date(a._sortTime||0).getTime());
+	  return all.slice(0,200);
+	});
 
 	function goBottom(tab:string){
+	  if(bottomTab===tab) return;
 	  bottomTab=tab;
 	  const target = tab==='chat'? '/chat' : tab==='report'? '/reports' : '/settings';
-	  goto(target, { keepFocus:true, noScroll:true, replaceState: tab==='chat' });
+	  if(browser){
+	    requestAnimationFrame(()=>{
+	      try{ preloadData(target); }catch{}
+	      goto(target, { keepFocus:true, noScroll:true, replaceState:false } as any);
+	    });
+	  }
 	}
 	function isTemplateMsg(m:any){ return m.content?.includes('__TEMPLATE_DATA__') || m.content?.startsWith('📋'); }
 	function isMeetingMsg(m:any){ return m.content?.includes('__MEETING_DATA__'); }
-	function getMeta(m:any){ try{ let p = m.content?.split('__TEMPLATE_DATA__'); if(p?.length>1) return JSON.parse(p[1]); }catch{} return null; }
-	function sanitize(str:string){ if(!str) return ""; return str.toString().slice(0,4000).trim().replace(/<script.*?>.*?<\/script>/gi,'').replace(/javascript:/gi,'').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-	function evalFormulaChat(formulaStr: string, vals: Record<string,any>): string { if(!formulaStr || formulaStr.length>200) return "0.00"; try{ let expr = formulaStr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/—/g,'-'); expr = expr.replace(/\{([^}]+)\}/g, (_, k)=>{ let v = vals[k]?? vals[k.toLowerCase()]?? "0"; let num = Number(String(v).replace(/[^0-9.\-]/g,'')); if(isNaN(num)) return "0"; return String(Math.max(-1e9, Math.min(1e9,num))); }); expr = expr.replace(/%/g,''); if(/[^0-9+\-*/().\s]/.test(expr)) return "0.00"; if(expr.length>120 || expr.includes('**')) return "0.00"; return Number(Function('"use strict";return ('+expr+')')()).toFixed(2); }catch{ return "0.00"; } }
-	function calcAllFormulas(template: any, vals: Record<string,any>){ let out = {...vals}; let fields = template?.fields || template?.data?.fields || selectedTemplate?.data?.fields || []; for(let f of fields){ if(f.type==='formula' && f.formula){ out[f.field_name] = evalFormulaChat(f.formula, out); } } return out; }
+	function getMeta(m:any){ try{ let p = m.content?.split('__TEMPLATE_DATA__'); if(p?.length>1) return JSON.parse(p[1].slice(0,10000)); }catch{} return null; }
+	function sanitize(str:string){
+	  if(!str) return "";
+	  return str.toString().slice(0,4000).trim()
+	.replace(/<script.*?>.*?<\/script>/gi,'')
+	.replace(/javascript:/gi,'')
+	.replace(/on\w+\s*=/gi,'')
+	.replace(/[<>`$]/g,(c)=> c==='<'?'&lt;':c==='>'?'&gt;':'')
+	.slice(0,4000);
+	}
+	function evalFormulaChat(formulaStr: string, vals: Record<string,any>): string {
+	  if(!formulaStr || formulaStr.length>200) return "0.00";
+	  try{
+	    let expr = formulaStr.replace(/×/g,'*').replace(/÷/g,'/').replace(/−/g,'-').replace(/—/g,'-');
+	    expr = expr.replace(/\{([^}]{1,100})\}/g, (_, k)=>{
+	      let key = String(k||'').trim().slice(0,100).replace(/[^a-zA-Z0-9_ \-]/g,'');
+	      let v = vals[key]?? vals[key.toLowerCase()]?? vals[key.toLowerCase().replace(/\s+/g,"_")]?? vals[key.toUpperCase()]?? "0";
+	      let num = Number(String(v).replace(/[^0-9.\-]/g,'').slice(0,20));
+	      if(isNaN(num)||!isFinite(num)) return "0";
+	      return String(Math.max(-1e9, Math.min(1e9,num)));
+	    });
+	    expr = expr.replace(/%/g,'').trim();
+	    if(/[^0-9+\-*/().\s]/.test(expr) || expr.length>150 || expr.includes('**')) return "0.00";
+	    if(!expr) return "0.00";
+	    if(/[\+\-\*\/]{2,}/.test(expr.replace(/\s/g,''))) return "0.00";
+	    let r = Function('"use strict";return ('+expr+')')();
+	    if(!isFinite(r)) return "0.00";
+	    const nr = Number(r);
+	    if(nr>1e12||nr<-1e12) return "0.00";
+	    return nr.toFixed(2);
+	  }catch{ return "0.00"; }
+	}
+	function calcAllFormulas(template: any, vals: Record<string,any>){
+	  let out:any = {...vals};
+	  let raw = template?.data?.fields || template?.fields || template?.data?.form_fields || [];
+	  let fields = Array.isArray(raw)? raw.slice(0,100) : [];
+	  for(let k in out){
+	    const nk = String(k||'').slice(0,100);
+	    if(!nk) continue;
+	    out[nk.toLowerCase()]=out[k];
+	    out[nk.toUpperCase()]=out[k];
+	    out[nk.toLowerCase().replace(/\s+/g,'_')]=out[k];
+	  }
+	  for(let f of fields){
+	    if((f.type==='formula' || f.field_type==='formula') && f.formula){
+	      let key = String(f.field_name||'').slice(0,100);
+	      if(!key) continue;
+	      let calc = evalFormulaChat(f.formula, out);
+	      out[key]=calc; out[key.toLowerCase()]=calc;
+	    }
+	  }
+	  return out;
+	}
 	let filteredMessages = $derived.by(()=>{
 		if(chatMode==='template'){ let list = messages.filter(isTemplateMsg); if(selectedTemplate){ return list.filter((m:any)=>{ let meta = getMeta(m); if(meta?.template_id===selectedTemplate.id) return true; return m.content?.includes(selectedTemplate.template_code); }); } return list; }
 		if(chatMode==='meeting'){ return messages.filter(isMeetingMsg); }
@@ -102,185 +164,346 @@
 	function checkMobile(){ if (!browser) return; isMobileView = window.innerWidth < 768; }
 	function scrollToBottom(force=false){ if(!browser) return; requestAnimationFrame(()=>{ const el = scrollEl || document.querySelector('.messages-scroll') as HTMLElement; if(el) el.scrollTo({ top: el.scrollHeight, behavior: force? 'auto':'smooth' }); }); }
 	function setupScrollListener(){ if(!browser) return; scrollEl = document.querySelector('.messages-scroll') as HTMLElement; if(!scrollEl) return; let ticking=false; scrollEl.addEventListener('scroll', ()=>{ if(ticking) return; ticking=true; requestAnimationFrame(()=>{ if(scrollEl && scrollEl.scrollTop < 80 &&!loadingMore &&!isLoadingMessages && hasMore){ loadMessages({ roomId: selectedRoomId, groupId: selectedGroupId, older:true }); } ticking=false; }); }, { passive:true }); }
-	function updateLastMessageInList(msg:any){ if(!msg) return; const short = msg.content?.split('__')[0]?.slice(0,45); if(msg.group_id){ groups = groups.map(g=> g.id===msg.group_id? {...g, last_message: short, last_message_at: msg.created_at} : g); } else if(msg.room_id){ contacts = contacts.map(c=> c.room_id===msg.room_id? {...c, last_message: short, last_message_at: msg.created_at } : c); } }
+	function updateLastMessageInList(msg:any){
+	  if(!msg) return;
+	  const short = (msg.content?.split('__')[0]?.slice(0,45) || "").replace(/[<>]/g,'').trim();
+	  const now = msg.created_at || new Date().toISOString();
+	  if(msg.group_id){ groups = groups.map(g=> g.id===msg.group_id? {...g, last_message: short, last_message_at: now} : g); }
+	  else if(msg.room_id){ contacts = contacts.map(c=> c.room_id===msg.room_id? {...c, last_message: short, last_message_at: now } : c); }
+	}
 	async function handleHeaderAction(action: string){
 		const uid = getCurrentUserId(); if(!uid) return;
 		if(action === 'info'){ if(selectedGroup) openAvatarModal(selectedGroup,'group'); else if(selectedContact) openAvatarModal(selectedContact,'contact'); return; }
-		if(action === 'mute'){ const id = selectedRoomId || selectedGroupId || selectedContact?.id; if(!id) return; if(mutedRooms.has(id)) mutedRooms.delete(id); else mutedRooms.add(id); mutedRooms = new Set(mutedRooms); if(browser) localStorage.setItem('mutedRooms', JSON.stringify([...mutedRooms])); return; }
-		if(action === 'clear'){ if(!confirm("Clear chat only for you?")) return; const list = selectedGroupId? await chatDB.from("messages").select("id,deleted_by").eq("group_id", selectedGroupId).limit(200) : await chatDB.from("messages").select("id,deleted_by").eq("room_id", selectedRoomId).limit(200); for(const m of list.data||[]){ await chatDB.from("messages").update({ deleted_by: [...(m.deleted_by||[]), uid] }).eq("id", m.id); } messages = []; return; }
-		if(action === 'exit'){ if(!selectedGroup) return; if(!confirm(`Exit group "${selectedGroup.name}"?`)) return; await chatDB.from("chat_group_members").delete().eq("group_id", selectedGroupId).eq("user_id", uid); groups = groups.filter(g=> g.id!== selectedGroupId); messages = []; selectedGroup = null; selectedGroupId = null; return; }
+		if(action === 'mute'){ const id = selectedRoomId || selectedGroupId || selectedContact?.id; if(!id) return; if(mutedRooms.has(id)) mutedRooms.delete(id); else mutedRooms.add(id); mutedRooms = new Set(mutedRooms); if(browser) localStorage.setItem('mutedRooms', JSON.stringify([...mutedRooms].slice(0,100))); return; }
+		if(action === 'clear'){ if(!confirm("Clear chat only for you?")) return; const list = selectedGroupId? await getDB().from("messages").select("id,deleted_by").eq("group_id", selectedGroupId).limit(100) : await getDB().from("messages").select("id,deleted_by").eq("room_id", selectedRoomId).limit(100); for(const m of list.data||[]){ await getDB().from("messages").update({ deleted_by: [...(m.deleted_by||[]), uid].slice(0,20) }).eq("id", m.id); } messages = []; return; }
+		if(action === 'exit'){ if(!selectedGroup) return; if(!confirm(`Exit group "${selectedGroup.name}"?`)) return; await getDB().from("chat_group_members").delete().eq("group_id", selectedGroupId).eq("user_id", uid); groups = groups.filter(g=> g.id!== selectedGroupId); messages = []; selectedGroup = null; selectedGroupId = null; return; }
 		if(action === 'block'){ if(!selectedContact || selectedContact.isSelf) return; if(!confirm(`Block ${selectedContact.name}?`)) return; contacts = contacts.filter(c=> c.id!== selectedContact.id); messages = []; selectedContact = null; selectedRoomId = null; return; }
+		if(action === 'settings' || action === 'setting'){ handleSettingsAction(); return; }
 	}
 	function handleArchivedAction(){ showArchived=!showArchived; showStarred=false; }
 	function handleStarredAction(){ showStarred=!showStarred; showArchived=false; }
-	function handleSettingsAction(){ showSettingsModal=true; }
+	function handleSettingsAction(){
+	  bottomTab='user';
+	  if(browser) goto('/settings', { keepFocus:true, noScroll:true } as any);
+	}
 	async function openAvatarModal(target: any, type: 'contact'|'group'){
-	  avatarTarget = target; avatarType = type; avatarPreview = target?.avatar_url || null; showAvatarModal = true; commonGroups = [];
-	  if(type==='group' && target?.id){ loadGroupDetails(target.id); }
+	  avatarTarget = target; avatarType = type; avatarPreview = target?.avatar_url || null; showAvatarModal = true; commonGroups = []; groupMembers=[];
+	  if(type==='group' && target?.id){ await loadGroupDetails(target.id); }
 	  else if(type==='contact' && target?.actual_user_id){
 	    try{
 	      const uid = getCurrentUserId(); const otherId = target.actual_user_id; if(!uid ||!otherId) return;
-	      const { data: myGroups } = await chatDB.from("chat_group_members").select("group_id").eq("user_id", uid).limit(200);
-	      const myGroupIds = (myGroups||[]).map((m:any)=>m.group_id);
+	      const { data: myGroups } = await getDB().from("chat_group_members").select("group_id").eq("user_id", uid).limit(100);
+	      const myGroupIds = (myGroups||[]).map((m:any)=>m.group_id).filter(Boolean);
 	      if(myGroupIds.length){
-	        const { data: otherGroups } = await chatDB.from("chat_group_members").select("group_id").eq("user_id", otherId).in("group_id", myGroupIds).limit(200);
-	        const commonIds = (otherGroups||[]).map((m:any)=>m.group_id);
+	        const { data: otherGroups } = await getDB().from("chat_group_members").select("group_id").eq("user_id", otherId).in("group_id", myGroupIds).limit(100);
+	        const commonIds = (otherGroups||[]).map((m:any)=>m.group_id).filter(Boolean);
 	        if(commonIds.length){
-	          const { data: gData } = await chatDB.from("chat_groups").select("id,name,avatar_url").in("id", commonIds).limit(50);
+	          const { data: gData } = await getDB().from("chat_groups").select("id,name,avatar_url").in("id", commonIds).limit(30);
 	          commonGroups = gData||[];
 	        }
 	      }
 	    }catch{}
 	  }
 	}
-
 	onMount(async () => {
 		if (!browser) return;
+		chatDB = getChatClient();
 		checkMobile(); window.addEventListener('resize', checkMobile);
-		try{ mutedRooms = new Set(JSON.parse(localStorage.getItem('mutedRooms') || '[]')); }catch{}
-		try{
-		  const cached = localStorage.getItem('recent_contacts_cache_v2');
-		  if(cached){
-		    const parsed = JSON.parse(cached);
-		    if(Array.isArray(parsed) && parsed.length) contacts = parsed.filter((c:any)=>!c._ts);
-		  }
-		}catch{}
-		const { data: { user } } = await chatDB.auth.getUser();
+		try{ mutedRooms = new Set(JSON.parse((localStorage.getItem('mutedRooms') || '[]').slice(0,5000))); }catch{}
+		const { data: { user } } = await getDB().auth.getUser();
 		if(user){ currentUser = {...(data?.user||{}),...user, avatar_url: user.user_metadata?.avatar_url || data?.user?.avatar_url || null }; } else if(data?.user?.id){ currentUser = data.user; }
 		const uid = getCurrentUserId(); if(!uid) return;
 		await Promise.allSettled([ loadContacts(true), loadGroups() ]);
-		setTimeout(()=>{ try{ preloadData('/reports'); preloadData('/settings'); }catch{} }, 600);
+		setTimeout(()=>{ try{ preloadData('/reports'); preloadData('/settings'); }catch{} }, 800);
 		await cleanupRealtime();
-		setTimeout(()=>{ if(realtimeCleaned) return; setupPresence(); setupProfileLive(); setupGlobalListener(); setupInvitesListener(); }, 600);
+		setTimeout(()=> setupMainChannel(), 600);
 		if(browser && 'Notification' in window && Notification.permission==='default'){ Notification.requestPermission(); }
 	});
-	onDestroy(async () => { realtimeCleaned = true; if (browser) window.removeEventListener('resize', checkMobile); await cleanupRealtime(); });
-
+	onDestroy(async () => { if (browser) window.removeEventListener('resize', checkMobile); await cleanupRealtime(); });
 	async function cleanupRealtime(){
-	  realtimeCleaned = false;
-	  const ch = [messagesChannel, presenceChannel, profileChannel, globalChannel, invitesChannel].filter(Boolean);
-	  messagesChannel = null; presenceChannel = null; profileChannel = null; globalChannel = null; invitesChannel=null;
-	  if(ch.length) { try{ await Promise.allSettled(ch.map((c:any) => chatDB.removeChannel(c))); }catch{} }
+	  const ch = [messagesChannel, presenceChannel, mainChannel].filter(Boolean);
+	  messagesChannel = null; presenceChannel = null; mainChannel = null;
+	  if(ch.length){ try{ await Promise.allSettled(ch.map((c:any)=> getDB().removeChannel(c))); }catch{} }
 	}
-
-	function setupProfileLive(){
-	  if(profileChannel) return;
+	function setupMainChannel(){
+	  if(mainChannel) return;
 	  const uid = getCurrentUserId(); if(!uid) return;
-	  profileChannel = chatDB.channel(`profiles-live-${uid}-${Date.now()}-${Math.random().toString(36).slice(2)}`)
-	 .on('postgres_changes',{event:'UPDATE',schema:'public',table:'profiles', filter: `id=neq.${uid}`},(payload)=>{
-	      const p = payload.new as any; if(!p?.id) return;
-	      contacts = contacts.map(c=> (c.actual_user_id===p.id || c.id===p.id)? {...c, avatar_url: p.avatar_url?.slice(0,300), name: (p.name||c.name)?.toString().slice(0,50)} : c);
-	      if(selectedContact && (selectedContact.actual_user_id===p.id || selectedContact.id===p.id)){ selectedContact = {...selectedContact, avatar_url: p.avatar_url?.slice(0,300), name: p.name?.slice(0,50) || selectedContact.name}; }
-	      if(currentUser?.id===p.id){ currentUser = {...currentUser, avatar_url: p.avatar_url?.slice(0,300)}; }
-	    }).subscribe();
-	}
-	function setupInvitesListener(){
-	  if(invitesChannel) return;
-	  const uid = getCurrentUserId(); if(!uid) return;
-	  const emailLower = (currentUser?.email || data?.user?.email || '').toLowerCase().slice(0,100);
-	  if(!emailLower) return;
-	  invitesChannel = chatDB.channel(`invites-${uid}-${Date.now()}`)
-	 .on('postgres_changes',{event:'*',schema:'public',table:'contact_invites', filter: `email=eq.${emailLower}`},()=>{ loadContacts(true); })
-	 .subscribe();
-	}
-	async function setupGlobalListener(){
-	  if(globalChannel) return;
-	  const uid = getCurrentUserId(); if(!uid) return;
-	  globalChannel = chatDB.channel(`global-${uid}-${Date.now()}`)
-		.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages', filter: `receiver_id=eq.${uid}`}, async (payload)=>{
+	  mainChannel = getDB().channel(`main-${uid}`)
+		.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages', filter: `receiver_id=eq.${uid}`}, async (payload:any)=>{
 		  const msg:any = payload.new; if(!msg?.id || msg.sender_id===uid) return;
-		  try{ await chatDB.from('messages').update({status:'delivered', delivered_at: new Date().toISOString()}).eq('id', msg.id).eq('status','sent'); }catch{}
-		  const short = sanitize(msg.content).split('__')[0].slice(0,40);
+		  try{ await getDB().from('messages').update({status:'delivered', delivered_at: new Date().toISOString()}).eq('id', msg.id).eq('status','sent'); }catch{}
+		  const short = msg.content?.split('__')[0]?.slice(0,40).replace(/[<>]/g,'');
 		  const isOpen = (msg.room_id && msg.room_id===selectedRoomId) || (msg.group_id && msg.group_id===selectedGroupId);
-		  contacts = contacts.map(c=>{
-		    if(c.room_id===msg.room_id || (msg.group_id && c.id===msg.group_id) || c.actual_user_id===msg.sender_id){
-		      return {...c, last_message: short, last_message_at: msg.created_at, unread: isOpen? 0 : (c.unread||0)+1};
-		    }
-		    return c;
-		  });
-		  if(!isOpen && browser && Notification.permission==='granted'){ try{ new Notification('New message', { body: short }); }catch{} }
-		  if(isOpen &&!messages.some(m=>m.id===msg.id)){ messages = [...messages, {...msg, status:'delivered', is_own:false}]; scrollToBottom(); setTimeout(()=> markAsRead(), 300); }
+		  contacts = contacts.map(c=> c.room_id===msg.room_id || c.actual_user_id===msg.sender_id? {...c, last_message: short, last_message_at: msg.created_at, unread: isOpen?0:(c.unread||0)+1} : c);
+		  if(msg.group_id){ groups = groups.map(g=> g.id===msg.group_id? {...g, last_message: short, last_message_at: msg.created_at} : g); }
+		  if(isOpen &&!messages.some(m=>m.id===msg.id)){ messages = [...messages, {...msg, is_own:false}]; scrollToBottom(); setTimeout(()=> markAsRead(), 300); }
 		})
-		.on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages', filter: `receiver_id=eq.${uid}`}, (payload)=>{
-		  const upd:any = payload.new; if(!upd?.id) return; messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status, delivered_at:upd.delivered_at, read_at:upd.read_at} : m);
+		.on('postgres_changes',{event:'UPDATE',schema:'public',table:'messages', filter: `receiver_id=eq.${uid}`}, (payload:any)=>{
+		  const upd:any = payload.new; if(!upd?.id) return; messages = messages.map(m=> m.id===upd.id? {...m, status:upd.status} : m);
 		}).subscribe();
 	}
-	async function setupPresence() {
-	  if(presenceChannel) return;
-	  const userId = getCurrentUserId(); if(!userId) return;
-	  presenceChannel = chatDB.channel(`online-users-${userId}-${Date.now()}`, { config: { presence: { key: userId } } });
-	  presenceChannel.on("presence", { event: "sync" }, () => { try{ onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); }catch{} }).subscribe(async (s:any) => { if(s==="SUBSCRIBED") await presenceChannel!.track({ user_id: userId }); });
+	function setupPresenceForChat(){
+	  if(presenceChannel){ try{ getDB().removeChannel(presenceChannel); }catch{} presenceChannel=null; }
+	  const chatId = selectedGroupId || selectedRoomId; if(!chatId) return;
+	  const uid = getCurrentUserId(); if(!uid) return;
+	  presenceChannel = getDB().channel(`presence-${chatId}`, { config: { presence: { key: uid } } });
+	  presenceChannel.on("presence", { event: "sync" }, () => { try{ onlineUsers = new Set(Object.keys(presenceChannel!.presenceState())); }catch{} }).subscribe(async (s:any) => { if(s==="SUBSCRIBED") await presenceChannel!.track({ user_id: uid }); });
 	}
 	function isUserOnline(id: string){ return onlineUsers.has(id); }
-	async function loadGroups() { const userId = getCurrentUserId(); if(!userId) return; try{ let { data } = await chatDB.from("chat_group_members").select(`chat_groups(id,name,description,avatar_url)`).eq("user_id", userId).limit(100); let list = (data?? []).map((m: any) => m.chat_groups).filter(Boolean); groups = list; }catch{} }
+
+	async function loadGroups() {
+	  const userId = getCurrentUserId(); if(!userId) return;
+	  try{
+	    console.log("loadGroups start", userId);
+	    let ids: string[] = [];
+	    try{
+	      const { data } = await getDB().from("chat_group_members").select("group_id").eq("user_id", userId).limit(100);
+	      ids = (data||[]).map((m:any)=>String(m.group_id||'').slice(0,50)).filter(Boolean);
+	      console.log("Memberships", ids.length);
+	    }catch{}
+	    if(ids.length===0){
+	      try{
+	        const { data } = await getDB().from("chat_groups").select("id").eq("owner_id", userId).limit(100);
+	        ids = (data||[]).map((g:any)=>String(g.id||'').slice(0,50)).filter(Boolean);
+	        console.log("Fallback owner_id", ids.length);
+	      }catch{}
+	    }
+	    if(ids.length===0){ groups=[]; console.log("No group IDs"); return; }
+	    const { data: gData } = await getDB().from("chat_groups").select("id,name,avatar_url,created_at,owner_id").in("id", ids.slice(0,100)).limit(100);
+	    console.log("Groups data", gData?.length);
+	    groups = (gData||[]).map((g:any)=>({
+	    ...g,
+	      name: String(g.name||'Unnamed').slice(0,80).replace(/[<>]/g,''),
+	      last_message: "No messages yet",
+	      last_message_at: g.created_at || new Date(0).toISOString()
+	    })).sort((a:any,b:any)=> new Date(b.last_message_at||0).getTime() - new Date(a.last_message_at||0).getTime());
+	    console.log("Groups final", groups.length);
+	  }catch(e:any){ console.warn("loadGroups:", String(e?.message||'').slice(0,120)); }
+	}
+
 	async function loadContacts(force=false) {
-	    const userId = getCurrentUserId(); if(!userId){ contacts = []; return; }
-	    const myEmail = (currentUser?.email || data?.user?.email || "").toLowerCase();
-	    let mapped: any[] = [{ id: userId, actual_user_id: userId, name: "You (Saved Messages)", email: currentUser?.email || "You", avatar_url: currentUser?.avatar_url || null, room_id: null, status: 'accepted', isSelf: true, last_message: "Message yourself", unread:0, last_message_at: new Date().toISOString() }];
-	    try{
-	        const { data: accepted } = await chatDB.from("contact_invites").select("id,email,status,invited_by").eq("invited_by", userId).in("status", ["accepted","pending"]).limit(100);
-	        for(const inv of accepted||[]){
-	            if(mapped.find(m=>m.email?.toLowerCase()===inv.email.toLowerCase())) continue;
-	            const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").ilike("email", inv.email).maybeSingle();
-	            if(prof){ mapped.push({ id: prof.id, actual_user_id: prof.id, name: prof.name||prof.email.split('@')[0], email: prof.email, avatar_url: prof.avatar_url, room_id: roomCache.get(prof.id)||null, status: inv.status, isInvite: inv.status==='pending', isOutgoing: true, inviteData: inv, last_message: inv.status==='pending'?'⏳ Invite pending':'Tap to chat', last_message_at: new Date().toISOString(), unread:0 }); }
-	            else { mapped.push({ id: inv.id, actual_user_id: null, name: inv.email.split('@')[0]+' (invite)', email: inv.email, avatar_url: null, room_id: null, status: inv.status, isInvite: true, isOutgoing: true, inviteData: inv, last_message: '⏳ Invite pending', last_message_at: null, unread:0 }); }
+	  const userId = getCurrentUserId(); if(!userId){ contacts = []; return; }
+	  try{
+	    console.log("Loading contacts for:", userId);
+	    const myEmail = (currentUser?.email || data?.user?.email || "").toLowerCase().trim().slice(0,100);
+	    let mapped: any[] = [{
+	      id: userId, actual_user_id: userId, name: "You (Saved Messages)", email: currentUser?.email || "You",
+	      avatar_url: currentUser?.avatar_url || null, room_id: null, status: 'accepted', isSelf: true,
+	      last_message: "Message yourself", unread:0, last_message_at: new Date().toISOString()
+	    }];
+	    let q = getDB().from("contact_invites").select("id,email,status,invited_by,created_at").limit(100);
+	    if(myEmail && myEmail.includes('@')) q = q.or(`invited_by.eq.${userId},email.ilike.${myEmail}`);
+	    else q = q.eq("invited_by", userId);
+	    const { data: invites } = await q;
+	    console.log("Invites found:", invites?.length);
+	    if(!invites || invites.length===0){ contacts = mapped; console.log("Contacts loaded:", contacts.length); return; }
+	    const acceptedEmails = [...new Set(invites.filter((i:any)=> i.status==='accepted' && i.invited_by===userId).map((i:any)=> String(i.email||'').toLowerCase().trim()).filter(e=> e.includes('@')))].slice(0,50);
+	    const incomingIds = [...new Set(invites.filter((i:any)=> i.invited_by!==userId).map((i:any)=> String(i.invited_by).slice(0,50)).filter(Boolean))].slice(0,50);
+	    let profByEmail = new Map<string,any>();
+	    let profById = new Map<string,any>();
+	    if(acceptedEmails.length>0){
+	      try{
+	        const { data } = await getDB().from("profiles").select("id,name,email,avatar_url").in("email", acceptedEmails).limit(50);
+	        (data||[]).forEach((p:any)=>{ if(p.email) profByEmail.set(String(p.email).toLowerCase(), p); });
+	      }catch{}
+	    }
+	    if(incomingIds.length>0){
+	      try{
+	        const { data } = await getDB().from("profiles").select("id,name,email,avatar_url").in("id", incomingIds).limit(50);
+	        (data||[]).forEach((p:any)=> profById.set(p.id, p));
+	      }catch{}
+	    }
+	    for(const inv of invites){
+	      const emailLower = String(inv.email||'').toLowerCase().trim().slice(0,100);
+	      if(!emailLower.includes('@')) continue;
+	      const isMine = inv.invited_by===userId;
+	      if(isMine){
+	        if(inv.status==='pending'){
+	          if(mapped.some(m=> String(m.email||'').toLowerCase()===emailLower)) continue;
+	          mapped.push({ id: inv.id, actual_user_id: null, name: emailLower.split('@')[0].slice(0,20)+' (invite)', email: emailLower, avatar_url: null, room_id: null, status: 'pending', isInvite: true, isOutgoing: true, inviteData: inv, last_message: '⏳ Invite pending', last_message_at: inv.created_at, unread:0 });
+	        } else if(inv.status==='accepted'){
+	          const prof = profByEmail.get(emailLower);
+	          if(prof &&!mapped.some(m=> m.actual_user_id===prof.id)){
+	            mapped.push({ id: prof.id, actual_user_id: prof.id, name: String(prof.name||emailLower.split('@')[0]).slice(0,30).replace(/[<>]/g,''), email: String(prof.email||emailLower).slice(0,100), avatar_url: prof.avatar_url||null, room_id: roomCache.get(prof.id)||null, status: 'accepted', last_message: "Tap to chat", last_message_at: inv.created_at||new Date().toISOString(), unread:0 });
+	          }
 	        }
-	    }catch{}
-	    try{
-	        if(myEmail){
-	            const { data: incoming } = await chatDB.from("contact_invites").select("id,email,status,invited_by").ilike("email", myEmail).eq("status","pending").limit(50);
-	            for(const inv of incoming||[]){
-	                if(mapped.find(m=>m.actual_user_id===inv.invited_by)) continue;
-	                const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", inv.invited_by).maybeSingle();
-	                mapped.push({ id: `incoming_${inv.id}`, actual_user_id: inv.invited_by, name: prof?.name||"New Invite", email: prof?.email||"", avatar_url: prof?.avatar_url||null, room_id: null, status: 'incoming', isIncomingInvite: true, inviteData: inv, inviterProfile: prof, last_message: `📩 Tap to Accept`, last_message_at: null, unread:0 });
-	            }
-	            const { data: acceptedIn } = await chatDB.from("contact_invites").select("id,email,status,invited_by").ilike("email", myEmail).eq("status","accepted").limit(100);
-	            for(const inv of acceptedIn||[]){
-	                if(mapped.find(m=>m.actual_user_id===inv.invited_by)) continue;
-	                const { data: prof } = await chatDB.from("profiles").select("id,name,email,avatar_url").eq("id", inv.invited_by).maybeSingle();
-	                if(prof) mapped.push({ id: prof.id, actual_user_id: prof.id, name: prof.name||"Contact", email: prof.email, avatar_url: prof.avatar_url, room_id: roomCache.get(inv.invited_by)||null, status: 'accepted', last_message: "Tap to chat", last_message_at: new Date().toISOString(), unread:0 });
-	            }
+	      } else {
+	        const prof = profById.get(inv.invited_by);
+	        if(inv.status==='pending'){
+	          if(mapped.some(m=> m.actual_user_id===inv.invited_by)) continue;
+	          mapped.push({ id: `incoming_${inv.id}`.slice(0,100), actual_user_id: inv.invited_by, name: String(prof?.name||"New Invite").slice(0,30).replace(/[<>]/g,''), email: String(prof?.email||"").slice(0,100), avatar_url: prof?.avatar_url||null, room_id: null, status: 'incoming', isIncomingInvite: true, inviteData: inv, inviterProfile: prof, last_message: `📩 Tap to Accept`, last_message_at: inv.created_at, unread:0 });
+	        } else if(inv.status==='accepted' && prof){
+	          if(mapped.some(m=> m.actual_user_id===prof.id)) continue;
+	          mapped.push({ id: prof.id, actual_user_id: prof.id, name: String(prof.name||"Contact").slice(0,30).replace(/[<>]/g,''), email: String(prof.email||'').slice(0,100), avatar_url: prof.avatar_url, room_id: roomCache.get(prof.id)||null, status: 'accepted', last_message: "Tap to chat", last_message_at: inv.created_at||new Date().toISOString(), unread:0 });
 	        }
-	    }catch{}
-	    const self = mapped.find(m=>m.isSelf); const others = mapped.filter(m=>!m.isSelf).sort((a,b)=> new Date(b.last_message_at||0).getTime() - new Date(a.last_message_at||0).getTime());
-	    contacts = self? [self,...others] : others;
-	    try{
-	      if(browser){
-	        const safe = contacts.slice(0,30).map((c:any)=>({id:c.id, actual_user_id:c.actual_user_id, name:String(c.name).slice(0,80), email:c.email, avatar_url:c.avatar_url, room_id:c.room_id, last_message_at:c.last_message_at}));
-	        localStorage.setItem('recent_contacts_cache_v2', JSON.stringify(safe));
 	      }
+	    }
+	    try{
+	      const { data: myRooms } = await getDB().from("rooms").select("id,user1_id,user2_id").or(`user1_id.eq.${userId},user2_id.eq.${userId}`).limit(100);
+	      (myRooms||[]).forEach((r:any)=>{ const other = r.user1_id===userId? r.user2_id : r.user1_id; if(other) roomCache.set(other, r.id); });
+	      mapped = mapped.map((c:any)=> c.actual_user_id && roomCache.has(c.actual_user_id)? {...c, room_id: roomCache.get(c.actual_user_id)} : c);
 	    }catch{}
+	    contacts = mapped.slice(0,100);
+	    console.log("Contacts loaded:", contacts.length);
+	  }catch(err:any){ console.error("loadContacts error:", String(err?.message||'').slice(0,100)); }
 	}
+
 	function resizeTo128(file: File): Promise<Blob> {
-		return new Promise((resolve, reject) => {
-			const img = new Image(); const url = URL.createObjectURL(file);
-			img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128; const ctx = canvas.getContext('2d')!; const scale = Math.max(128 / img.width, 128 / img.height); const w = img.width * scale, h = img.height * scale; ctx.fillStyle='#fff'; ctx.fillRect(0,0,128,128); ctx.drawImage(img, (128-w)/2, (128-h)/2, w, h); canvas.toBlob((b) => b? resolve(b) : reject('blob fail'), 'image/webp', 0.8); URL.revokeObjectURL(url); }; img.onerror = reject; img.src = url;
-		});
+	  return new Promise((resolve, reject) => {
+	    if(!file.type.startsWith('image/')){ reject('not image'); return; }
+	    if(file.size>5*1024*1024){ reject('>5MB'); return; }
+	    const img = new Image(); const url = URL.createObjectURL(file);
+	    img.onload = () => {
+	      try{
+	        const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 128;
+	        const ctx = canvas.getContext('2d')!;
+	        const scale = Math.max(128 / img.width, 128 / img.height);
+	        const w = img.width * scale, h = img.height * scale;
+	        ctx.fillStyle='#fff'; ctx.fillRect(0,0,128,128);
+	        ctx.drawImage(img, (128-w)/2, (128-h)/2, w, h);
+	        canvas.toBlob((b) => b? resolve(b) : reject('blob fail'), 'image/webp', 0.8);
+	      }catch(e){ reject(e); } finally{ URL.revokeObjectURL(url); }
+	    };
+	    img.onerror = ()=>{ URL.revokeObjectURL(url); reject('load fail'); };
+	    img.src = url;
+	  });
 	}
+
 	async function onAvatarFileChange(e: any){
 		const file = e.detail?.file || e.target?.files?.[0]; const contact = e.detail?.contact || avatarTarget;
 		if(!file) return; if(file.size > 5*1024*1024){ alert("Max 5MB"); return; } if(!file.type.startsWith('image/')){ alert("Image only"); return; }
 		if(contact &&!contact.isSelf && contact.id!==getCurrentUserId() && avatarType!=='group'){ alert("You can only change your own photo"); return; }
 		avatarPreview = URL.createObjectURL(file);
-		try{ avatarUploading = true; const blob = await resizeTo128(file); const fileName = `${avatarType}_${contact?.id}_${Date.now()}.webp`; const formData = new FormData(); formData.append('file', blob); formData.append('fileName', fileName); const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData }); const json = await res.json(); if(!res.ok) throw new Error(json.error || 'Upload failed'); const publicUrl = json.url; const realId = contact.actual_user_id || contact.id; await chatDB.from('profiles').update({ avatar_url: publicUrl }).eq('id', realId); contacts = contacts.map(c=> c.id===contact.id? {...c, avatar_url: publicUrl} : c); if(selectedContact?.id === contact.id) selectedContact = {...selectedContact, avatar_url: publicUrl}; if(contact?.isSelf) currentUser = {...currentUser, avatar_url: publicUrl}; showAvatarModal = false; }catch(err:any){ alert("Upload failed: "+err.message); } finally{ avatarUploading = false; }
+		try{ avatarUploading = true; const blob = await resizeTo128(file); const fileName = `${avatarType}_${contact?.id}_${Date.now()}.webp`.slice(0,100); const formData = new FormData(); formData.append('file', blob); formData.append('fileName', fileName); const res = await fetch('/api/upload-avatar', { method: 'POST', body: formData }); const json = await res.json(); if(!res.ok) throw new Error(json.error || 'Upload failed'); const publicUrl = String(json.url||'').slice(0,500); if(!publicUrl.startsWith('https://')) throw new Error('Bad URL'); const realId = contact.actual_user_id || contact.id; await getDB().from('profiles').update({ avatar_url: publicUrl }).eq('id', realId); contacts = contacts.map(c=> c.id===contact.id? {...c, avatar_url: publicUrl} : c); if(selectedContact?.id === contact.id) selectedContact = {...selectedContact, avatar_url: publicUrl}; if(contact?.isSelf) currentUser = {...currentUser, avatar_url: publicUrl}; showAvatarModal = false; }catch(err:any){ alert("Upload failed: "+(err.message||'').slice(0,100)); } finally{ avatarUploading = false; }
 	}
 	async function loadTemplates(){
-		templateLoading=true; let localList:any[]=[]; try{ if(browser){ const raw = localStorage.getItem("templates"); if(raw) localList = JSON.parse(raw); } }catch{} templates = localList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data }));
-		try{ const uid = getCurrentUserId(); const res = await fetch(`/api/templates?t=${Date.now()}&user_id=${uid}`, { cache:"no-store" }); if(res.ok){ const json = await res.json(); let apiList = json.templates || json.data || json || []; if(Array.isArray(apiList) && apiList.length>0){ apiList = apiList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data) : t.data })); const map = new Map(); [...localList,...apiList].forEach((t:any)=>{ const k = String(t.id||t.template_code||t.name); if(!map.has(k)) map.set(k, t); }); templates = Array.from(map.values()); } } }catch{} finally{ templateLoading=false; }
+		templateLoading=true; let localList:any[]=[]; try{ if(browser){ const raw = localStorage.getItem("templates"); if(raw && raw.length<100000) localList = JSON.parse(raw); } }catch{} templates = localList.map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(t.data.slice(0,20000)) : t.data }));
+		try{ const uid = getCurrentUserId(); const res = await fetch(`/api/templates?t=${Date.now()}&user_id=${encodeURIComponent(uid.slice(0,100))}`, { cache:"no-store" }); if(res.ok){ const json = await res.json(); let apiList = json.templates || json.data || json || []; if(Array.isArray(apiList) && apiList.length>0){ apiList = apiList.slice(0,50).map((t:any)=>({...t, data: typeof t.data==='string'? JSON.parse(String(t.data).slice(0,20000)) : t.data })); const map = new Map(); [...localList,...apiList].forEach((t:any)=>{ const k = String(t.id||t.template_code||t.name).slice(0,100); if(!map.has(k)) map.set(k, t); }); templates = Array.from(map.values()).slice(0,50); } } }catch{} finally{ templateLoading=false; }
 	}
 	function onOpenTemplate(){ showTemplateModal = true; showTemplateForm = false; loadTemplates(); }
-	function handleUseTemplate(e:any){ const t = e.detail?.template || e.detail; if(!t) return; selectedTemplate = {...t, data: typeof t.data==='string'? JSON.parse(t.data) : (t.data||{}) }; showTemplateModal=false; setTimeout(()=>{ showTemplateForm=true; }, 120); }
-	function handleCreateTemplate(){ showTemplateModal=false; showTemplateForm=false; const contactId = selectedContact?.actual_user_id || selectedContact?.id || ''; const groupId = selectedGroupId || ''; if(browser) window.location.href=`/templates/create?contact_id=${contactId}&group_id=${groupId}`; }
-	function handleOpenDetail(tpl: any, msg: any){ let fields = tpl?.fields || tpl?.data?.fields || tpl?.values?.fields || msg?.fields || []; if(fields.length===0){ let meta = getMeta(msg); if(meta?.fields) fields = meta.fields; } detailData = { template_name: tpl.template_name || tpl.template_code || tpl.name || 'Production Report', template_code: tpl.template_code || tpl.t_code, values: tpl.values || tpl.data || {}, fields: fields, t_code: tpl.template_code || tpl.t_code, user_name: msg.sender_name || msg.sender_id || 'User', created_at: msg.created_at, }; showDetailModal = true; }
+	function handleUseTemplate(e:any){ const t = e.detail?.template || e.detail; if(!t) return; selectedTemplate = {...t, data: typeof t.data==='string'? JSON.parse(String(t.data).slice(0,20000)) : (t.data||{}) }; showTemplateModal=false; setTimeout(()=>{ showTemplateForm=true; }, 120); }
+	function handleCreateTemplate(){ showTemplateModal=false; showTemplateForm=false; const contactId = String(selectedContact?.actual_user_id || selectedContact?.id || '').slice(0,100); const groupId = String(selectedGroupId || '').slice(0,100); if(browser) window.location.href=`/templates/create?contact_id=${encodeURIComponent(contactId)}&group_id=${encodeURIComponent(groupId)}`; }
+	function handleOpenDetail(tpl: any, msg: any){
+  let fields: any[] = []; let vals: any = {};
+  try{
+    if(tpl?.fields) fields = tpl.fields.slice(0,50);
+    else if(tpl?.data?.fields) fields = tpl.data.fields.slice(0,50);
+    else if(tpl?._fullRaw?.fields) fields = tpl._fullRaw.fields.slice(0,50);
+    vals = tpl.values || tpl.data || tpl._fullRaw?.values || tpl._fullRaw || {};
+    if(fields.length===0 || Object.keys(vals).length===0){
+      let meta = getMeta(msg);
+      if(meta){
+        if(meta.fields) fields = meta.fields.slice(0,50);
+        if(meta.values) vals = meta.values;
+        else if(meta.data) vals = meta.data;
+      }
+    }
+    // also try parse from message text: "Enter Input: 789"
+    if(Object.keys(vals).length===0 && msg.content){
+      let txt = msg.content.split('__')[0];
+      let lines = txt.split('\n');
+      for(let line of lines){
+        let parts = line.split(':');
+        if(parts.length>=2){
+          let k = parts[0].replace(/[^a-zA-Z0-9% ]/g,'').trim().slice(0,50);
+          let v = parts[1].trim().slice(0,50);
+          if(k) vals[k]=v;
+        }
+      }
+    }
+  }catch{}
+
+  // ✅ FINAL FIX - recalc Yield% always
+  try{
+    let flat: any = {};
+    for(let k in vals){
+      let v = vals[k];
+      flat[k]=v;
+      flat[String(k).toLowerCase()]=v;
+      flat[String(k).toLowerCase().replace(/[^a-z0-9]/g,'')]=v; // enterinput
+    }
+    // find input / output by fuzzy search
+    let findNum = (keywords: string[])=>{
+      for(let k in flat){
+        let lk = String(k).toLowerCase();
+        for(let kw of keywords){
+          if(lk.includes(kw)){
+            let n = Number(String(flat[k]).replace(/[^0-9.\-]/g,''));
+            if(n>0 && isFinite(n)) return n;
+          }
+        }
+      }
+      return 0;
+    };
+    let inputVal = findNum(['input']) || Number(flat['enterinput']||flat['enter_input']||flat['input']||0);
+    let outputVal = findNum(['output']) || Number(flat['enteroutput']||flat['enter_output']||flat['output']||0);
+
+    // force calc
+    if(inputVal>0){
+      let y = (outputVal / inputVal * 100);
+      let yStr = y.toFixed(2);
+      flat['Yield%']=yStr;
+      flat['Yield']=yStr;
+      flat['yield%']=yStr;
+      flat['yield']=yStr;
+      flat['yieldpercent']=yStr;
+      // also set original keys
+      vals['Yield%']=yStr;
+      vals['Yield']=yStr;
+    }
+    vals = {...vals,...flat};
+    // ensure fields have Yield%
+    if(!fields.some((f:any)=> String(f.field_name||'').toLowerCase().includes('yield'))){
+      fields = [...fields, { field_name: 'Yield%', label: 'Yield%' }];
+    }
+  }catch(e){ console.log("yield calc error", e); }
+
+  if(fields.length===0) fields = [
+    { field_name: 'Station', label: 'Station' },
+    { field_name: 'Enter Input', label: 'Enter Input' },
+    { field_name: 'Enter Output', label: 'Enter Output' },
+    { field_name: 'Yield%', label: 'Yield%' }
+  ];
+
+  detailData = {
+    template_name: String(tpl.template_name || tpl.template_code || tpl.name || 'Daily Yield').slice(0,80).replace(/[<>]/g,''),
+    template_code: String(tpl.template_code || tpl.t_code || 'Y01').slice(0,30),
+    values: vals || {},
+    fields: fields,
+    t_code: String(tpl.template_code || tpl.t_code||'').slice(0,30),
+    user_name: String(msg.sender_name || msg.sender_id || 'User').slice(0,50),
+    created_at: msg.created_at,
+  };
+  showDetailModal = true;
+}
+
 	async function sendTemplateReport(e:any){
-		const { template, values } = e.detail; if(!template) return; const calculatedValues = calcAllFormulas(template, values); let realFields = template?.fields || template?.data?.fields || []; let displayLines = [`📋 *${sanitize(template.name)}*`, ``]; realFields.forEach((f:any)=>{ let key = f.field_name || f.name; let label = f.label || key; let val = calculatedValues[key]?? ""; if(val==="") return; displayLines.push(`${sanitize(label)}: ${sanitize(String(val))}`); }); const display = displayLines.join('\n'); const t_code = template.template_code || template.code || template.t_code; const installData = { type:'TEMPLATE_REPORT', template_id: template.id, template_name: template.name, template_code: t_code, values: calculatedValues, fields: realFields, created_at: new Date().toISOString() }; const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData)}`; try{ const { data: { user: chatUser } } = await chatDB.auth.getUser(); const realUid = chatUser?.id || getCurrentUserId(); const payload:any = { t_code: sanitize(t_code), reference_template_id: template.id, data: {...calculatedValues, template_code: t_code, template_name: template.name, template_id: template.id, owner_id: realUid, user_id: realUid, created_at: new Date().toISOString() }, ts: new Date().toISOString() }; await supabaseTemplates.from("records").insert(payload); }catch(err:any){ alert("Save failed: "+err?.message); return; } showTemplateForm=false; await sendMessage({ detail: { content: fullContent } } as any); selectedTemplate=null;
+		const detail = e.detail || e;
+		const template = detail.template || selectedTemplate;
+		const values = detail.values || {};
+		if(!template) return;
+		const calculatedValues = calcAllFormulas(template, values);
+		let realFields = (template?.fields || template?.data?.fields || []).slice(0,50);
+		let displayLines = [`📋 *${sanitize(template.name).slice(0,80)}*`, ``];
+		realFields.forEach((f:any)=>{ let key = String(f.field_name || f.name||'').slice(0,100); if(!key) return; let label = String(f.label || key).slice(0,50).replace(/[<>]/g,''); let val = calculatedValues[key]?? ""; if(val==="") return; displayLines.push(`${label}: ${sanitize(String(val)).slice(0,200)}`); });
+		const display = displayLines.join('\n').slice(0,4000);
+		const t_code = String(template.template_code || template.code || template.t_code || template.id || 'PRO01').slice(0,50);
+		const installData = { type:'TEMPLATE_REPORT', template_id: String(template.id||'').slice(0,100), template_name: String(template.name||'').slice(0,100), template_code: t_code, values: calculatedValues, fields: realFields, created_at: new Date().toISOString() };
+		const fullContent = `${display}\n\n__TEMPLATE_DATA__\n${JSON.stringify(installData).slice(0,8000)}`;
+		try{
+		  const realUid = getCurrentUserId().slice(0,100);
+		  const payload:any = { t_code: t_code, reference_template_id: String(template.id||'').slice(0,100), data: {...calculatedValues, template_code: t_code, template_name: String(template.name||'').slice(0,100), template_id: String(template.id||'').slice(0,100), owner_id: realUid }, ts: new Date().toISOString() };
+		  supabaseTemplates.from("records").insert(payload).then(()=>{}).catch(()=>{});
+		}catch{}
+		showTemplateForm=false; selectedTemplate=null;
+		await sendMessage(fullContent);
 	}
 	async function loadMessages({ roomId, groupId, older=false }: any){
 	  if(older && loadingMore) return; if(!older && isLoadingMessages) return;
 	  if(older) loadingMore = true; else isLoadingMessages=true;
 	  try{
 	    const uid = getCurrentUserId();
-	    let query = chatDB.from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status,deleted_by").order("created_at", {ascending:false}).limit(20);
+	    let query = getDB().from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status,deleted_by").order("created_at", {ascending:false}).limit(20);
 	    if(older && messages.length){ const oldest = messages[0]?.created_at; if(oldest) query = query.lt("created_at", oldest); }
 	    if(groupId) query = query.eq("group_id", groupId); else if(roomId) query = query.eq("room_id", roomId); else query = query.eq("sender_id", uid).eq("receiver_id", uid);
 	    const { data, error } = await query;
@@ -289,42 +512,57 @@
 	    const seen = new Set(messages.map((m:any)=>m.id));
 	    const filtered = data.reverse().filter((m:any)=>!(m.deleted_by||[]).includes(uid)).filter((m:any)=>!seen.has(m.id)).map((m:any)=>({...m, is_own:m.sender_id===uid}));
 	    if(older){ if(!filtered.length) return; const el = scrollEl || document.querySelector('.messages-scroll') as HTMLElement; const oldH = el?.scrollHeight || 0; messages = [...filtered,...messages]; requestAnimationFrame(()=>{ if(el) el.scrollTop = el.scrollHeight - oldH + 20; }); }
-	    else { messages = filtered; setTimeout(()=>{ scrollToBottom(true); setupScrollListener(); }, 80); await markDelivered(); setTimeout(()=> markAsRead(), 300); }
+	    else { messages = filtered; setTimeout(()=>{ scrollToBottom(true); setupScrollListener(); setupPresenceForChat(); }, 80); await markDelivered(); setTimeout(()=> markAsRead(), 300); }
 	    if(!older) await subscribeToMessages({ roomId, groupId });
 	  } finally { isLoadingMessages=false; loadingMore=false; }
 	}
-	async function markDelivered(){ const uid = getCurrentUserId(); const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status==='sent').slice(0,10); for(const m of toMark){ try{ await chatDB.from("messages").update({ status:'delivered', delivered_at: new Date().toISOString() }).eq('id', m.id); }catch{} } }
-	async function markAsRead(){ const uid = getCurrentUserId(); if(!uid || (!selectedRoomId &&!selectedGroupId)) return; const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status!=='read').slice(0,20); if(!toMark.length) return; for(const m of toMark){ try{ await chatDB.from("messages").update({ status:'read', read_at: new Date().toISOString() }).eq('id', m.id); }catch{} } messages = messages.map((m:any)=> m.sender_id!==uid? {...m, status:'read'} : m); if(selectedRoomId) contacts = contacts.map(c=> c.room_id===selectedRoomId? {...c, unread:0} : c); }
+	async function markDelivered(){ const uid = getCurrentUserId(); const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status==='sent').slice(0,10); for(const m of toMark){ try{ await getDB().from("messages").update({ status:'delivered', delivered_at: new Date().toISOString() }).eq('id', m.id); }catch{} } }
+	async function markAsRead(){ const uid = getCurrentUserId(); if(!uid || (!selectedRoomId &&!selectedGroupId)) return; const toMark = messages.filter((m:any)=> m.sender_id!==uid && m.status!=='read').slice(0,20); if(!toMark.length) return; for(const m of toMark){ try{ await getDB().from("messages").update({ status:'read', read_at: new Date().toISOString() }).eq('id', m.id); }catch{} } messages = messages.map((m:any)=> m.sender_id!==uid? {...m, status:'read'} : m); if(selectedRoomId) contacts = contacts.map(c=> c.room_id===selectedRoomId? {...c, unread:0} : c); }
 	async function subscribeToMessages({ roomId, groupId }: any){
-	  if(messagesChannel){ try{ await chatDB.removeChannel(messagesChannel); }catch{} messagesChannel=null; }
+	  if(messagesChannel){ try{ await getDB().removeChannel(messagesChannel); }catch{} messagesChannel=null; }
 	  if(!roomId &&!groupId) return;
-	  const realName = groupId? `group-${groupId}-${Date.now()}` : `room-${roomId}-${Date.now()}`;
-	  messagesChannel=chatDB.channel(realName)
+	  const realName = `group-${String(groupId||'').slice(0,50)}-room-${String(roomId||'').slice(0,50)}`;
+	  messagesChannel=getDB().channel(realName)
 		.on("broadcast", { event: "new_msg" }, (payload:any)=>{ const newMsg = payload.payload as any; if(newMsg.sender_id===getCurrentUserId()) return; if(messages.some(m=>m.id===newMsg.id)) return; messages = [...messages, {...newMsg, is_own:false}]; updateLastMessageInList(newMsg); scrollToBottom(); setTimeout(()=> markAsRead(), 200); })
-		.on("postgres_changes",{event:"INSERT",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : `room_id=eq.${roomId}` },async (payload)=>{ const newMsg = payload.new as any; const uid = getCurrentUserId(); if((newMsg.deleted_by||[]).includes(uid)) return; if(messages.some(m=>m.id===newMsg.id)) return; if(newMsg.sender_id!==uid){ try{ await chatDB.from("messages").update({ status:'delivered' }).eq('id', newMsg.id).eq('status','sent'); }catch{} } messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}]; updateLastMessageInList(newMsg); scrollToBottom(); if(newMsg.sender_id!==uid) setTimeout(()=>markAsRead(),200); })
-		.on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : `room_id=eq.${roomId}`}, (payload)=>{ const updated = payload.new as any; messages = messages.map((m:any)=> m.id===updated.id? {...m, status: updated.status} : m); }).subscribe();
+		.on("postgres_changes",{event:"INSERT",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : `room_id=eq.${roomId}` },async (payload:any)=>{ const newMsg = payload.new as any; const uid = getCurrentUserId(); if((newMsg.deleted_by||[]).includes(uid)) return; if(messages.some(m=>m.id===newMsg.id)) return; if(newMsg.sender_id!==uid){ try{ await getDB().from("messages").update({ status:'delivered' }).eq('id', newMsg.id).eq('status','sent'); }catch{} } messages = [...messages, {...newMsg, is_own:newMsg.sender_id===uid}]; updateLastMessageInList(newMsg); scrollToBottom(); if(newMsg.sender_id!==uid) setTimeout(()=>markAsRead(),200); })
+		.on("postgres_changes",{event:"UPDATE",schema:"public",table:"messages", filter: groupId? `group_id=eq.${groupId}` : `room_id=eq.${roomId}`}, (payload:any)=>{ const updated = payload.new as any; messages = messages.map((m:any)=> m.id===updated.id? {...m, status: updated.status} : m); }).subscribe();
 	}
-	async function handleSendLocation(e:any){ const { latitude, longitude, url } = e.detail || {}; if(!latitude ||!longitude) return; await sendMessage({ detail: { content: `📍 Location: ${url} __LOCATION_DATA__${JSON.stringify({latitude, longitude})}` } } as any); }
+	async function handleSendLocation(e:any){ const { latitude, longitude, url } = e.detail || {}; if(!latitude ||!longitude) return; await sendMessage(`📍 Location: ${String(url||'').slice(0,200)} __LOCATION_DATA__${JSON.stringify({latitude, longitude}).slice(0,200)}`); }
 	async function sendMessage(eventOrContent: any = null) {
-	  if(sendingLock) return; if(Date.now() - lastSent < 150) return;
-	  let content = ""; if (typeof eventOrContent === 'string') content = eventOrContent; else if (eventOrContent?.detail?.content!== undefined) content = eventOrContent.detail.content; else if (eventOrContent?.content!== undefined) content = eventOrContent.content; else content = newMessage;
-	  content = sanitize(content); if (!content) return; newMessage = ""; const myId = getCurrentUserId(); if (!myId) return;
+	  if(sendingLock) return;
+	  if(Date.now() - lastSent < 200) return;
+	  let content = "";
+	  if (typeof eventOrContent === 'string') content = eventOrContent;
+	  else if (eventOrContent?.detail?.content!== undefined) content = eventOrContent.detail.content;
+	  else if (eventOrContent?.detail && typeof eventOrContent.detail === 'string') content = eventOrContent.detail;
+	  else if (eventOrContent?.content!== undefined) content = eventOrContent.content;
+	  else content = newMessage;
+	  const isTemplateContent = content.includes('__TEMPLATE_DATA__') || content.includes('__LOCATION_DATA__');
+	  let finalContent = isTemplateContent? String(content).slice(0,8000) : sanitize(content);
+	  if (!finalContent) return;
+	  newMessage = "";
+	  const myId = getCurrentUserId(); if (!myId) return;
 	  sendingLock = true; lastSent = Date.now();
-	  const tempId = `temp_${Date.now()}`; const optimistic = { id: tempId, content, sender_id: myId, room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId, created_at: new Date().toISOString(), status: 'sent', is_own: true };
+	  const tempId = `temp_${Date.now()}`;
+	  const optimistic = { id: tempId, content: finalContent, sender_id: myId, room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId, created_at: new Date().toISOString(), status: 'sent', is_own: true };
 	  messages = [...messages, optimistic]; updateLastMessageInList(optimistic); scrollToBottom(true);
 	  try{ if(messagesChannel) messagesChannel.send({ type: 'broadcast', event: 'new_msg', payload: optimistic }); }catch{}
 	  try{
-	    const payload: any = { content, sender_id: myId, status: 'sent', room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId };
-	    if(selectedGroupId) payload.room_id = null; if(selectedRoomId) payload.group_id = null; if(!selectedRoomId &&!selectedGroupId){ payload.room_id = null; payload.group_id = null; }
-	    const { data: inserted, error } = await chatDB.from('messages').insert(payload).select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status").single();
-	    if (error) throw error; messages = messages.map((m:any) => m.id === tempId? {...inserted, is_own: true } : m); updateLastMessageInList(inserted);
-	  }catch(err:any){ messages = messages.filter((m:any) => m.id!== tempId); newMessage = content; } finally { sendingLock = false; }
+	    const payload: any = { content: finalContent, sender_id: myId, status: 'sent', room_id: selectedRoomId, group_id: selectedGroupId, receiver_id: selectedContact?.actual_user_id || selectedContact?.id || myId };
+	    if(selectedGroupId) payload.room_id = null;
+	    if(selectedRoomId) payload.group_id = null;
+	    if(!selectedRoomId &&!selectedGroupId){ payload.room_id = null; payload.group_id = null; }
+	    const { data: inserted, error } = await getDB().from('messages').insert(payload).select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status").single();
+	    if (error) throw error;
+	    messages = messages.map((m:any) => m.id === tempId? {...inserted, is_own: true } : m);
+	    updateLastMessageInList(inserted);
+	  }catch{ messages = messages.filter((m:any) => m.id!== tempId); if(!isTemplateContent) newMessage = content.slice(0,4000); } finally { setTimeout(()=>{ sendingLock = false; }, 300); }
 	}
 	async function getOrCreateRoom(otherId: string){
 		if(!otherId) return null; const uid = getCurrentUserId(); if(!uid || otherId===uid) return null; if(roomCache.has(otherId)) return roomCache.get(otherId)!;
-		try{ const { data } = await chatDB.from("rooms").select("id").eq("user1_id", uid).eq("user2_id", otherId).maybeSingle(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{}
-		try{ const { data } = await chatDB.from("rooms").select("id").eq("user1_id", otherId).eq("user2_id", uid).maybeSingle(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{}
-		try{ const { data } = await chatDB.from("rooms").insert({user1_id:uid, user2_id:otherId}).select("id").single(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{}
+		try{ const { data } = await getDB().from("rooms").select("id").eq("user1_id", uid).eq("user2_id", otherId).maybeSingle(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{}
+		try{ const { data } = await getDB().from("rooms").select("id").eq("user1_id", otherId).eq("user2_id", uid).maybeSingle(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{}
+		try{ const { data } = await getDB().from("rooms").insert({user1_id:uid, user2_id:otherId}).select("id").single(); if(data?.id){ roomCache.set(otherId, data.id); return data.id; } }catch{}
 		return null;
 	}
 	async function handleContactLoad(contact:any){
@@ -334,52 +572,61 @@
 	  if(roomId){ contacts = contacts.map(c=> c.room_id===roomId? {...c, unread:0} : c); selectedRoomId = roomId; selectedGroupId = null; selectedGroup = null; selectedContact = contact; hasMore=true; await loadMessages({roomId, groupId:null}); } else { selectedRoomId = null; selectedGroupId = null; selectedGroup = null; selectedContact = contact; hasMore=true; messages=[]; }
 	}
 	function onSelectGroup(group:any){ if(!group?.id) return; selectedContact=null; selectedRoomId=null; selectedGroup={...group}; selectedGroupId=group.id; hasMore=true; loadGroupDetails(group.id); }
-	async function loadGroupDetails(groupId:string){ if(!groupId) return; try{ const { data }=await chatDB.from("chat_group_members").select(`users:user_id(id,name,email,avatar_url)`).eq("group_id",groupId).limit(200); groupMembers=(data?? []).map((m:any)=>m.users).filter(Boolean); }catch{} await loadMessages({roomId:null, groupId}); }
+	async function loadGroupDetails(groupId:string){ if(!groupId) return; try{ const { data }=await getDB().from("chat_group_members").select(`users:user_id(id,name,email,avatar_url)`).eq("group_id",groupId).limit(100); groupMembers=(data?? []).map((m:any)=>m.users).filter(Boolean); }catch{} await loadMessages({roomId:null, groupId}); }
 	function handleMessageLongPress(msg:any, event:any){ longPressTimer = setTimeout(()=>{ selectedMessageForOptions = msg; messageOptionsPos = { x: event.clientX||0, y: event.clientY||0 }; showMessageOptions = true; }, 500); }
 	function handleMessagePressEnd(){ if(longPressTimer) clearTimeout(longPressTimer); }
 	function handleReply(msg:any){ replyingTo = msg; showMessageOptions = false; }
 	function handleForward(msg:any){ forwardMessage = msg; showForwardModal = true; showMessageOptions = false; }
-	async function handleForwardToContact(contact:any){ if(!forwardMessage) return; const roomId = contact.room_id || await getOrCreateRoom(contact.actual_user_id || contact.id); if(!roomId) return; await chatDB.from("messages").insert({ sender_id: getCurrentUserId(), content: sanitize(`Forwarded: ${forwardMessage.content}`), room_id: roomId, receiver_id: contact.actual_user_id || contact.id, status:'sent' }); showForwardModal = false; forwardMessage = null; }
-	function handleBackToList(){ selectedContact = null; selectedGroup = null; selectedRoomId = null; selectedGroupId = null; messages = []; chatMode='chat'; if(messagesChannel) { try{ chatDB.removeChannel(messagesChannel); }catch{} messagesChannel=null; } }
-	async function handleInvite(event: any){ const { inviteId, action }=event.detail; if(!['accepted','rejected'].includes(action)) return; await chatDB.from('contact_invites').update({status:action}).eq('id',inviteId); await loadContacts(true); }
+	async function handleForwardToContact(contact:any){ if(!forwardMessage) return; const roomId = contact.room_id || await getOrCreateRoom(contact.actual_user_id || contact.id); if(!roomId) return; await getDB().from("messages").insert({ sender_id: getCurrentUserId(), content: sanitize(`Forwarded: ${forwardMessage.content}`), room_id: roomId, receiver_id: contact.actual_user_id || contact.id, status:'sent' }); showForwardModal = false; forwardMessage = null; }
+	function handleBackToList(){ selectedContact = null; selectedGroup = null; selectedRoomId = null; selectedGroupId = null; messages = []; chatMode='chat'; if(messagesChannel) { try{ getDB().removeChannel(messagesChannel); }catch{} messagesChannel=null; } if(presenceChannel){ try{ getDB().removeChannel(presenceChannel); }catch{} presenceChannel=null; } }
+	async function handleInvite(event: any){ const { inviteId, action }=event.detail; if(!['accepted','rejected'].includes(action)) return; await getDB().from('contact_invites').update({status:action}).eq('id',inviteId); await loadContacts(true); }
 	async function handleDeleteContact(e:any){
-	  const c = e.detail || e; if(!c) return; const isGroup = groups.some((g:any)=> g.id===c.id);
-	  if(!confirm(isGroup? `Delete group "${c.name}"?` : `Delete "${c.name}"?`)) return;
-	  if(isGroup){ await chatDB.from("chat_group_members").delete().eq("group_id", c.id); await chatDB.from("messages").delete().eq("group_id", c.id); await chatDB.from("chat_groups").delete().eq("id", c.id); groups = groups.filter((x:any)=> x.id!== c.id); if(selectedGroup?.id===c.id){ selectedGroup=null; selectedGroupId=null; messages=[]; } return; }
-	  const realId = c.actual_user_id || c.id; const rId = c.room_id || roomCache.get(realId);
-	  if(rId){ await chatDB.from("messages").delete().eq("room_id", rId); await chatDB.from("rooms").delete().eq("id", rId); }
-	  if(c.inviteData?.id){ await chatDB.from("contact_invites").delete().eq("id", c.inviteData.id); }
-	  roomCache.delete(realId); contacts = contacts.filter((x:any)=> x.id!== c.id && x.actual_user_id!==realId);
-	  if(selectedContact?.id===c.id){ selectedContact=null; selectedRoomId=null; messages=[]; } showAvatarModal=false; await loadContacts(true);
+	  const c = e.detail || e; if(!c) return;
+	  const isGroup = groups.some((g:any)=> g.id===c.id);
+	  if(!confirm(`Remove "${String(c.name||'').slice(0,30)}"? SAFE - only hides, not delete DB`)) return;
+	  if(isGroup){
+	    const uid = getCurrentUserId();
+	    await getDB().from("chat_group_members").delete().eq("group_id", c.id).eq("user_id", uid);
+	    groups = groups.filter((x:any)=> x.id!== c.id);
+	    if(selectedGroup?.id===c.id){ selectedGroup=null; selectedGroupId=null; messages=[]; }
+	    return;
+	  }
+	  if(c.inviteData?.id){ await getDB().from("contact_invites").update({status:'hidden'}).eq("id", c.inviteData.id); }
+	  contacts = contacts.filter((x:any)=> x.id!== c.id);
+	  if(selectedContact?.id===c.id){ selectedContact=null; selectedRoomId=null; messages=[]; } showAvatarModal=false;
 	}
-   	async function acceptIncoming(){ if(!selectedIncoming) return; const inv = selectedIncoming.inviteData; await chatDB.from('contact_invites').update({status:'accepted'}).eq('id', inv.id); const roomId = await getOrCreateRoom(inv.invited_by); showIncomingModal = false; await loadContacts(true); const c = contacts.find(x=>x.actual_user_id===inv.invited_by); if(c) await handleContactLoad({...c, room_id: roomId}); }
-	async function rejectIncoming(){ if(!selectedIncoming) return; await chatDB.from('contact_invites').update({status:'rejected'}).eq('id', selectedIncoming.inviteData.id); showIncomingModal = false; await loadContacts(true); }
+   	async function acceptIncoming(){ if(!selectedIncoming) return; const inv = selectedIncoming.inviteData; await getDB().from('contact_invites').update({status:'accepted'}).eq('id', inv.id); const roomId = await getOrCreateRoom(inv.invited_by); showIncomingModal = false; await loadContacts(true); const c = contacts.find(x=>x.actual_user_id===inv.invited_by); if(c) await handleContactLoad({...c, room_id: roomId}); }
+	async function rejectIncoming(){ if(!selectedIncoming) return; await getDB().from('contact_invites').update({status:'rejected'}).eq('id', selectedIncoming.inviteData.id); showIncomingModal = false; await loadContacts(true); }
 	async function createContact(){
-	    const raw = contactEmail.trim().toLowerCase(); if(!raw) return; if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)){ alert("Invalid email"); return; } if((currentUser?.email||"").toLowerCase()===raw){ alert("Cannot add yourself"); return; } invitingUser=true;
-	    try{ const uid = getCurrentUserId(); const { error } = await chatDB.from('contact_invites').insert({email: raw, invited_by: uid, status: 'pending', token: crypto.randomUUID()}).select().single(); if(error) throw error; showContactForm=false; contactEmail=""; await loadContacts(true); }catch(e:any){ alert("Invite failed: "+(e.message||'').slice(0,80)); }finally{ invitingUser=false; }
+	    const raw = contactEmail.trim().toLowerCase().slice(0,100); if(!raw) return; if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)){ alert("Invalid email"); return; } if((currentUser?.email||"").toLowerCase()===raw){ alert("Cannot add yourself"); return; } invitingUser=true;
+	    try{ const uid = getCurrentUserId(); const { error } = await getDB().from('contact_invites').insert({email: raw, invited_by: uid, status: 'pending', token: crypto.randomUUID()}).select().single(); if(error) throw error; showContactForm=false; contactEmail=""; await loadContacts(true); }catch(e:any){ alert("Invite failed: "+(e.message||'').slice(0,80)); }finally{ invitingUser=false; }
 	}
 	async function createGroup(){
-	  const clean = sanitize(groupName).slice(0,50); if(clean.length<3){ alert("Min 3 chars"); return; } const uid = getCurrentUserId(); if(!uid) return;
-	  try{ const { data: g1 } = await chatDB.from("chat_groups").insert({name: clean}).select("id,name").single(); await chatDB.from("chat_group_members").insert({group_id: g1.id, user_id: uid}); groupName=""; showGroupForm=false; await loadGroups(); const ng = groups.find((gr:any)=>gr.id===g1.id); if(ng) onSelectGroup(ng); }catch(err:any){ alert("Create failed: "+(err.message||'')); }
-	}
-	async function openAddMembers(group:any){ groupToAddMembers = group; showAddMembersModal = true; }
-	async function addMemberToGroup(contact:any){
-	  if(!groupToAddMembers ||!contact?.actual_user_id) return; if(contact.isSelf || addMemberLoading) return; addMemberLoading = true;
-	  try{ await chatDB.from("chat_group_members").insert({ group_id: groupToAddMembers.id, user_id: contact.actual_user_id }); if(selectedGroupId===groupToAddMembers.id) await loadGroupDetails(groupToAddMembers.id); showAddMembersModal = false; }catch(e:any){ if(e.code==='23505') alert("Already in group"); else alert("Add failed"); } finally { addMemberLoading = false; }
+	  const clean = String(groupName||'').trim().slice(0,50).replace(/[<>`$&"'=]/g,'');
+	  if(clean.length<3){ alert("Min 3 chars"); return; }
+	  const uid = getCurrentUserId(); if(!uid) return;
+	  try{
+	    const { data: g1, error: gErr } = await getDB().from("chat_groups").insert({ name: clean, owner_id: uid, created_by: uid }).select("id,name,owner_id").single();
+	    if(gErr) throw gErr;
+	    await getDB().from("chat_group_members").insert({ group_id: g1.id, user_id: uid });
+	    groupName=""; showGroupForm=false;
+	    groups = [ {...g1, last_message: "Group created", last_message_at: new Date().toISOString()},...groups];
+	    const ng = groups.find((gr:any)=>gr.id===g1.id); if(ng) onSelectGroup(ng);
+	  }catch(err:any){ alert("Create failed: "+String(err.message||'').slice(0,120)); }
 	}
 </script>
 
 <div class="main-container" class:mobile-chat-open={isMobileView && (selectedContact || selectedGroup)}>
 	<div class="sidebar-wrapper" class:hidden-mobile={isMobileView && (selectedContact || selectedGroup)}>
 		<div class="sidebar-scroll">
-			<ChatSidebar {groups} {contacts} {selectedGroup} {selectedContact}
+			<ChatSidebar {groups} {contacts} {allChats} {selectedGroup} {selectedContact}
   onSelectContact={(c:any)=>{ const detail = c?.detail || c; if(!detail) return; selectedContact={...detail}; selectedGroup=null; selectedGroupId=null; selectedRoomId=detail.room_id||null; handleContactLoad(detail); }}
   onSelectGroup={(e:any)=>{ const g=e?.detail||e; if(g) onSelectGroup(g); }}
   onNewGroup={() => showGroupForm=true}
   onNewContact={() => showContactForm=true}
   onHandleInvite={handleInvite}
   onDeleteContact={handleDeleteContact}
-  onLogout={async () => { await chatDB.auth.signOut(); if(browser) location.reload(); }}
+  onLogout={async () => { await getDB().auth.signOut(); if(browser) location.reload(); }}
   onArchived={handleArchivedAction}
   onStarred={handleStarredAction}
   onSettings={handleSettingsAction}
@@ -396,7 +643,21 @@
 	<section class="chat-area" class:show-mobile={isMobileView && (selectedContact || selectedGroup)}>
 		{#if selectedContact || selectedGroup}
 			<div class="chat-header-fixed"><ChatHeader title={selectedContact?.name?? selectedGroup?.name?? ''} subtitle={selectedContact? (isUserOnline(selectedContact?.actual_user_id||selectedContact?.id)? "Online" : "Tap for photo") : `${groupMembers.length} members`} avatarUrl={selectedContact?.avatar_url?? selectedGroup?.avatar_url?? ''} showBack={isMobileView} isGroup={!!selectedGroup} onBack={handleBackToList} onAction={(e)=>handleHeaderAction(e.detail)} /></div>
-			<div class="filter-fixed"><div class="mode-row"><div class="dd-wrap" use:clickOutside={()=>openMode=false}><button class="mode-btn" onclick={(e)=>{e.stopPropagation(); openMode=!openMode}}><span>{chatMode==='chat'?'💬':chatMode==='template'?'📋':'📅'}</span><b>{chatMode==='chat'?'Chat':chatMode==='template'?'Template':'Meeting'}</b><span class="arr">{openMode?'▲':'▼'}</span></button>{#if openMode}<div class="dd"><button class:active={chatMode==='chat'} onclick={()=>{chatMode='chat'; openMode=false; openList=false; selectedTemplate=null; showArchived=false; showStarred=false;}}>💬 Chat</button><button class:active={chatMode==='template'} onclick={()=>{chatMode='template'; openMode=false;}}>📋 Template</button><button class:active={chatMode==='meeting'} onclick={()=>{chatMode='meeting'; openMode=false;}}>📅 Meeting</button></div>{/if}</div>{#if chatMode!=='chat'}<div class="dd-wrap second" use:clickOutside={()=>openList=false}><button class="list-btn" onclick={(e)=>{e.stopPropagation(); openList=!openList}}><span class="cut">{#if chatMode==='template'}{selectedTemplate?.name || 'Select Template'}{:else}{selectedMeeting?.title || 'Select Meeting'}{/if}</span><span class="arr">{openList?'▲':'▼'}</span></button>{#if openList}<div class="dd dd2">{#if chatMode==='template'}{#each templates as t}<button class:active={selectedTemplate?.id===t.id} onclick={()=>{selectedTemplate=t; openList=false;}}><b>{t.name}</b><small>{t.template_code}</small></button>{:else}<div class="empty">No templates</div>{/each}{:else}{#each meetings as m}<button class:active={selectedMeeting?.id===m.id} onclick={()=>{selectedMeeting=m; openList=false;}}><b>{m.title}</b><small>{m.date}</small></button>{:else}<div class="empty">No meetings</div>{/each}{/if}</div>{/if}</div>{#if chatMode==='template' && selectedTemplate}<button class="use-btn" onclick={()=>{handleUseTemplate({detail:{template:selectedTemplate}})}}>Use</button>{/if}{/if}</div></div>
+			<div class="filter-fixed">
+				<div class="mode-row">
+					<div class="dd-wrap" use:clickOutside={()=>openMode=false}>
+						<button class="mode-btn" onclick={(e)=>{e.stopPropagation(); openMode=!openMode}}><span>{chatMode==='chat'?'💬':chatMode==='template'?'📋':'📅'}</span><b>{chatMode==='chat'?'Chat':chatMode==='template'?'Template':'Meeting'}</b><span class="arr">{openMode?'▲':'▼'}</span></button>
+						{#if openMode}<div class="dd"><button class:active={chatMode==='chat'} onclick={()=>{chatMode='chat'; openMode=false; openList=false; selectedTemplate=null; showArchived=false; showStarred=false;}}>💬 Chat</button><button class:active={chatMode==='template'} onclick={()=>{chatMode='template'; openMode=false;}}>📋 Template</button><button class:active={chatMode==='meeting'} onclick={()=>{chatMode='meeting'; openMode=false;}}>📅 Meeting</button></div>{/if}
+					</div>
+					{#if chatMode!=='chat'}
+					<div class="dd-wrap second" use:clickOutside={()=>openList=false}>
+						<button class="list-btn" onclick={(e)=>{e.stopPropagation(); openList=!openList}}><span class="cut">{#if chatMode==='template'}{selectedTemplate?.name || 'Select Template'}{:else}{selectedMeeting?.title || 'Select Meeting'}{/if}</span><span class="arr">{openList?'▲':'▼'}</span></button>
+						{#if openList}<div class="dd dd2">{#if chatMode==='template'}{#each templates as t}<button class:active={selectedTemplate?.id===t.id} onclick={()=>{selectedTemplate=t; openList=false;}}><b>{t.name}</b><small>{t.template_code}</small></button>{:else}<div class="empty">No templates</div>{/each}{:else}{#each meetings as m}<button class:active={selectedMeeting?.id===m.id} onclick={()=>{selectedMeeting=m; openList=false;}}><b>{m.title}</b><small>{m.date}</small></button>{:else}<div class="empty">No meetings</div>{/each}{/if}</div>{/if}
+					</div>
+					{#if chatMode==='template' && selectedTemplate}<button class="use-btn" onclick={()=>{handleUseTemplate({detail:{template:selectedTemplate}})}}>Use</button>{/if}
+					{/if}
+				</div>
+			</div>
 			<div class="filter-info">Showing: {showArchived? 'Archived' : showStarred? 'Starred' : chatMode}{selectedTemplate? ` - ${selectedTemplate.name}`:''} | {filteredMessages.length}/{messages.length} {#if loadingMore}• Loading...{/if}</div>
 			<div class="messages-scroll" bind:this={scrollEl}><MessageList messages={filteredMessages} {selectedContact} {selectedGroup} currentUser={currentUser} selectedUser={currentUser} {replyingTo} onReply={handleReply} onForward={handleForward} onLongPress={handleMessageLongPress} onPressEnd={handleMessagePressEnd} onOpenDetail={(e)=>handleOpenDetail(e.detail.template, e.detail.message)} /></div>
 			{#if replyingTo}<div class="reply-preview"><span>Replying to: {replyingTo.content?.slice(0,50)}...</span><button onclick={()=>replyingTo=null}>✕</button></div>{/if}
@@ -410,48 +671,105 @@
 <div class="modal" style="width:380px; max-height:90vh; overflow-y:auto; background:#111b21; border:1px solid #2a3942;">
   <div style="display:flex; justify-content:space-between; align-items:center;"><h3 style="margin:0; color:#e9edef;">{avatarType==='group'? '👥 Group Info' : avatarTarget?.isSelf? '💾 Your Profile' : '👤 Contact Info'}</h3><button style="background:#2a3942; border:none; color:#8696a0; width:32px; height:32px; border-radius:50%; cursor:pointer;" onclick={()=>showAvatarModal=false}>✕</button></div>
   <div style="display:flex; flex-direction:column; align-items:center; gap:10px; padding:10px 0 14px;">
-    <img src={avatarPreview || avatarTarget?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarTarget?.name || 'User')}&background=00a884&color=fff&size=300`} alt="avatar" loading="lazy" decoding="async" style="width:170px;height:170px;border-radius:50%;object-fit:cover;border:4px solid #00a884;" />
+    <img src={avatarPreview || avatarTarget?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(avatarTarget?.name || 'User')}&background=00a884&color=fff&size=300}`} alt="avatar" loading="lazy" style="width:170px;height:170px;border-radius:50%;object-fit:cover;border:4px solid #00a884;" />
     <b style="color:#e9edef; font-size:20px;">{avatarTarget?.name || 'User'}</b><span style="color:#8696a0; font-size:13px;">{avatarTarget?.email || ''}</span>
-    {#if avatarType==='contact' && commonGroups.length>0}
-      <div style="width:100%; margin-top:12px; background:#202c33; border-radius:8px; padding:10px;">
-        <small style="color:#00a884; font-weight:700;">Common Groups ({commonGroups.length})</small>
-        <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px;">
-          {#each commonGroups as g}
-            <div style="display:flex; align-items:center; gap:8px; background:#2a3942; padding:6px 10px; border-radius:6px;">
-              <img src={g.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(g.name)}&background=00a884&color=fff`} alt="" style="width:28px;height:28px;border-radius:50%;" />
-              <span style="color:#e9edef; font-size:13px;">{g.name}</span>
-            </div>
-          {/each}
-        </div>
-      </div>
-    {/if}
-    {#if avatarType==='group'}
-      <div style="width:100%; margin-top:12px; background:#202c33; border-radius:8px; padding:10px;">
-        <small style="color:#00a884; font-weight:700;">Members ({groupMembers.length})</small>
-        <div style="display:flex; flex-direction:column; gap:6px; margin-top:8px; max-height:150px; overflow:auto;">
-          {#each groupMembers as m}
-            <div style="display:flex; align-items:center; gap:8px; background:#2a3942; padding:6px 10px; border-radius:6px;">
-              <img src={m.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name||'U')}&background=00a884&color=fff`} alt="" style="width:28px;height:28px;border-radius:50%;" />
-              <span style="color:#e9edef; font-size:13px;">{m.name}</span>
-            </div>
-          {/each}
-        </div>
-      </div>
-    {/if}
   </div>
+  {#if commonGroups.length>0}
+  <div style="margin-top:10px;">
+    <div style="color:#8696a0; font-size:11px; margin-bottom:6px; text-transform:uppercase; font-weight:600;">Groups in common ({commonGroups.length})</div>
+    {#each commonGroups as cg}
+      <div style="display:flex; align-items:center; gap:8px; padding:8px; background:#202c33; border-radius:8px; margin-bottom:4px;">
+        <span style="width:28px; height:28px; border-radius:50%; background:#00a884; display:flex; align-items:center; justify-content:center; font-size:12px;">👥</span>
+        <span style="color:#e9edef; font-size:13px;">{cg.name}</span>
+      </div>
+    {/each}
+  </div>
+  {/if}
+  {#if avatarType==='group' && groupMembers.length>0}
+  <div style="margin-top:10px;">
+    <div style="color:#8696a0; font-size:11px; margin-bottom:6px; text-transform:uppercase; font-weight:600;">Members ({groupMembers.length})</div>
+    {#each groupMembers.slice(0,20) as m}
+      <div style="display:flex; align-items:center; gap:8px; padding:8px; background:#202c33; border-radius:8px; margin-bottom:4px;">
+        <img src={m.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(m.name||'U')}&background=00a884&color=fff&size=64`} style="width:28px; height:28px; border-radius:50%;" alt="" />
+        <span style="color:#e9edef; font-size:13px;">{m.name || m.email}</span>
+      </div>
+    {/each}
+  </div>
+  {/if}
   <div class="modal-btns" style="margin-top:14px;"><button class="btn-secondary" onclick={()=>showAvatarModal=false}>Close</button>{#if avatarTarget?.isSelf || avatarType==='group'}<label class="btn-primary" style="text-align:center;cursor:pointer;">{#if avatarUploading}Uploading...{:else}Change Photo{/if}<input type="file" accept="image/*" hidden disabled={avatarUploading} onchange={onAvatarFileChange} /></label>{:else}<button class="btn-primary" onclick={()=>{ showAvatarModal=false; if(avatarTarget) handleContactLoad(avatarTarget); }}>💬 Message</button>{/if}</div>
 </div></div>{/if}
 
-{#if showContactForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showContactForm=false} aria-label="close"></button><div class="modal"><h3>New Contact</h3><input class="modal-input" bind:value={contactEmail} placeholder="Contact Email" autocomplete="email" maxlength="100" /><div class="modal-btns"><button class="btn-primary" onclick={createContact}>{invitingUser?'Inviting...':'Invite'}</button><button class="btn-secondary" onclick={() => showContactForm=false}>Cancel</button></div></div></div>{/if}
-{#if showGroupForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showGroupForm=false} aria-label="close"></button><div class="modal"><h3>👥 Create Group</h3><input class="modal-input" bind:value={groupName} placeholder="Group Name" maxlength="50" /><div class="modal-btns"><button class="btn-secondary" onclick={()=>showGroupForm=false}>Cancel</button><button class="btn-primary" onclick={createGroup}>Create</button></div></div></div>{/if}
+{#if showContactForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showContactForm=false} aria-label="close"></button><div class="modal"><h3>New Contact</h3><input id="contact-email" class="modal-input" bind:value={contactEmail} placeholder="Contact Email" autocomplete="email" maxlength="100" /><div class="modal-btns"><button class="btn-primary" onclick={createContact}>{invitingUser?'Inviting...':'Invite'}</button><button class="btn-secondary" onclick={() => showContactForm=false}>Cancel</button></div></div></div>{/if}
+{#if showGroupForm}<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showGroupForm=false} aria-label="close"></button><div class="modal"><h3>👥 Create Group</h3><input id="group-name" class="modal-input" bind:value={groupName} placeholder="Group Name" maxlength="50" /><div class="modal-btns"><button class="btn-secondary" onclick={()=>showGroupForm=false}>Cancel</button><button class="btn-primary" onclick={createGroup}>Create</button></div></div></div>{/if}
 {#if showTemplateModal}<TemplatePopup templates={templates} loading={templateLoading} on:close={()=>showTemplateModal=false} on:use={handleUseTemplate} on:new={handleCreateTemplate} on:create={handleCreateTemplate} on:deleted={(e)=>{ templates=templates.filter(t=>t.id!==e.detail.template.id); }} />{/if}
-{#if showTemplateForm && selectedTemplate}<div style="position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);"><TemplateForm template={selectedTemplate} on:close={()=>{ showTemplateForm=false; selectedTemplate=null; }} onsubmit={sendTemplateReport} /></div>{/if}
-
+{#if showTemplateForm && selectedTemplate}<div style="position:fixed;inset:0;z-index:10050;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.4);"><TemplateForm template={selectedTemplate} on:close={()=>{ showTemplateForm=false; selectedTemplate=null; }} on:submit={sendTemplateReport} on:send={sendTemplateReport} /></div>{/if}
 {#if showIncomingModal && selectedIncoming}
 <div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showIncomingModal=false} aria-label="close"></button><div class="modal"><h3>📩 New Invite</h3><p style="color:#e9edef;">{selectedIncoming.inviterProfile?.name || selectedIncoming.email} invited you</p><div class="modal-btns"><button class="btn-primary" onclick={acceptIncoming}>Accept</button><button class="btn-secondary" onclick={rejectIncoming}>Reject</button></div></div></div>
 {/if}
 {#if showInviteModal && selectedInvite}
 <div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showInviteModal=false} aria-label="close"></button><div class="modal"><h3>Invite Status</h3><p style="color:#e9edef;">Invite to {selectedInvite.email} is {selectedInvite.status}</p><div class="modal-btns"><button class="btn-secondary" onclick={()=>showInviteModal=false}>Close</button></div></div></div>
+{/if}
+
+{#if showMessageOptions && selectedMessageForOptions}
+<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showMessageOptions=false} aria-label="close"></button>
+<div class="modal" style="width:300px; padding:0; overflow:hidden; background:#233138;">
+  <div style="padding:14px; background:#202c33; color:#e9edef; font-weight:600; border-bottom:1px solid #2a3942;">Message Options</div>
+  <button style="width:100%; padding:14px 16px; background:transparent; border:none; border-bottom:1px solid #2a3942; color:#e9edef; text-align:left; cursor:pointer; font-size:14px;" onclick={()=>handleReply(selectedMessageForOptions)}>↩️ Reply</button>
+  <button style="width:100%; padding:14px 16px; background:transparent; border:none; border-bottom:1px solid #2a3942; color:#e9edef; text-align:left; cursor:pointer; font-size:14px;" onclick={()=>handleForward(selectedMessageForOptions)}>➡️ Forward</button>
+  <button style="width:100%; padding:14px 16px; background:transparent; border:none; color:#8696a0; text-align:left; cursor:pointer; font-size:14px;" onclick={()=>showMessageOptions=false}>✕ Cancel</button>
+</div></div>
+{/if}
+
+{#if showDetailModal && detailData}
+<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showDetailModal=false} aria-label="close"></button>
+<div class="modal" style="width:90%; max-width:500px; max-height:85vh; overflow-y:auto; background:#111b21;">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+    <h3 style="margin:0; color:#e9edef; font-size:16px;">{detailData.template_name}</h3>
+    <button style="background:#2a3942; border:none; color:#fff; width:30px; height:30px; border-radius:50%; cursor:pointer;" onclick={()=>showDetailModal=false}>✕</button>
+  </div>
+  <div style="color:#8696a0; font-size:11px; margin-bottom:12px;">{detailData.template_code} • {detailData.user_name} • {new Date(detailData.created_at).toLocaleString()}</div>
+  <div style="display:flex; flex-direction:column; gap:2px;">
+  {#each detailData.fields as f}
+    <div style="display:flex; justify-content:space-between; padding:10px 8px; background:#202c33; border-radius:6px; margin-bottom:4px;">
+      <span style="color:#8696a0; font-size:13px;">{f.label || f.field_name}</span>
+      <b style="color:#e9edef; font-size:13px;">
+  {#if String(f.field_name||'').toLowerCase().includes('yield')}
+    {detailData.values['Yield%'] || detailData.values['Yield'] || detailData.values['yield%'] || detailData.values[f.field_name] || '0.00'}%
+  {:else}
+    {detailData.values[f.field_name]?? detailData.values[f.label]?? '-'}
+  {/if}
+</b>
+    </div>
+  {/each}
+  </div>
+  <button class="btn-secondary" style="margin-top:14px; width:100%;" onclick={()=>showDetailModal=false}>Close</button>
+</div></div>
+{/if}
+
+{#if showForwardModal && forwardMessage}
+<div class="modal-bg"><button class="modal-bg-btn" onclick={()=>showForwardModal=false} aria-label="close"></button>
+<div class="modal" style="width:380px; max-height:80vh; overflow-y:auto; background:#111b21;">
+  <h3 style="color:#e9edef; margin:0 0 12px;">Forward to...</h3>
+  <div style="color:#8696a0; font-size:12px; margin-bottom:8px; padding:8px; background:#202c33; border-radius:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{forwardMessage.content?.slice(0,60)}</div>
+  <div style="max-height:300px; overflow-y:auto; display:flex; flex-direction:column; gap:4px;">
+    {#each contacts.filter(c=>!c.isSelf &&!c.isInvite &&!c.isIncomingInvite) as c}
+      <button style="display:flex; align-items:center; gap:10px; padding:10px 8px; background:#202c33; border:none; border-radius:8px; cursor:pointer; text-align:left; width:100%;" onclick={()=>handleForwardToContact(c)}>
+        <img src={c.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(c.name)}&background=00a884&color=fff&size=64`} style="width:36px; height:36px; border-radius:50%;" alt="" />
+        <span style="color:#e9edef; font-size:14px;">{c.name}</span>
+      </button>
+    {/each}
+    {#each groups as g}
+      <button style="display:flex; align-items:center; gap:10px; padding:10px 8px; background:#202c33; border:none; border-radius:8px; cursor:pointer; text-align:left; width:100%;" onclick={async ()=>{
+        await getDB().from("messages").insert({ sender_id: getCurrentUserId(), content: sanitize(`Forwarded: ${forwardMessage.content}`), group_id: g.id, status:'sent' });
+        showForwardModal=false; forwardMessage=null;
+      }}>
+        <span style="width:36px; height:36px; border-radius:50%; background:#00a884; display:flex; align-items:center; justify-content:center; color:#fff; font-size:14px;">👥</span>
+        <span style="color:#e9edef; font-size:14px;">{g.name}</span>
+      </button>
+    {/each}
+  </div>
+  <button class="btn-secondary" style="margin-top:12px; width:100%;" onclick={()=>showForwardModal=false}>Cancel</button>
+</div></div>
 {/if}
 
 <style>

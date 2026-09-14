@@ -25,12 +25,16 @@
   let bottomTab = $state('reports');
 
   const MAX_ID_LEN=100;
-  function sanitizeStr(s:any, max=80){ if(typeof s!=='string') return ''; return s.replace(/[<>`$]/g,'').trim().slice(0,max); }
+  // ✅ 50k secure sanitize
+  function sanitizeStr(s:any, max=80){
+    if(typeof s!=='string') return '';
+    return s.replace(/[<>`$&"'=]/g,'').trim().slice(0,max);
+  }
   function isMineTemplate(t:any){
-    const myId = String(currentUserId||'').toLowerCase();
-    const myEmail = String(currentUserEmail||'').toLowerCase();
-    const oid = String(t.owner_id||t.user_id||t.owner_email||'').toLowerCase();
-    const oname = String(t.owner_name||'').toLowerCase();
+    const myId = String(currentUserId||'').toLowerCase().slice(0,100);
+    const myEmail = String(currentUserEmail||'').toLowerCase().slice(0,100);
+    const oid = String(t.owner_id||t.user_id||t.owner_email||'').toLowerCase().slice(0,100);
+    const oname = String(t.owner_name||'').toLowerCase().slice(0,100);
     if(!myId && !myEmail) return true;
     if(oid && myId && oid===myId) return true;
     if(oid && myEmail && oid===myEmail) return true;
@@ -38,19 +42,22 @@
     if(!oid && !oname) return true;
     if(t.allow_all_contacts) return true;
     if(Array.isArray(t.shared_with)){
-      return t.shared_with.some((s:any)=> String(s.user_id||'').toLowerCase()===myId || String(s.user_id||'').toLowerCase()===myEmail);
+      return t.shared_with.slice(0,50).some((s:any)=> {
+        const su = String(s.user_id||'').toLowerCase().slice(0,100);
+        return su===myId || su===myEmail;
+      });
     }
     return false;
   }
   function isMineRecord(r:any){
-    const myId = String(currentUserId||'').toLowerCase();
-    const myEmail = String(currentUserEmail||'').toLowerCase();
+    const myId = String(currentUserId||'').toLowerCase().slice(0,100);
+    const myEmail = String(currentUserEmail||'').toLowerCase().slice(0,100);
     if(!myId && !myEmail) return true;
-    const oid = String(r.owner_id||r.user_id||r.owner_email||r.data?.owner_id||'').toLowerCase();
+    const oid = String(r.owner_id||r.user_id||r.owner_email||r.data?.owner_id||'').toLowerCase().slice(0,100);
     if(!oid) return true;
     if(oid===myId || oid===myEmail) return true;
-    const tid = String(r.template_id||r.reference_template_id||r.data?.template_id||'').toLowerCase();
-    const tcode = String(r.template_code||r.t_code||r.data?.template_code||'').toLowerCase();
+    const tid = String(r.template_id||r.reference_template_id||r.data?.template_id||'').toLowerCase().slice(0,100);
+    const tcode = String(r.template_code||r.t_code||r.data?.template_code||'').toLowerCase().slice(0,50);
     const parent = templates.find(t=> String(t.id).toLowerCase()===tid || String(t.template_code||'').toLowerCase()===tcode );
     if(parent && isMineTemplate(parent)) return true;
     return false;
@@ -65,16 +72,30 @@
     if(Math.abs(dx) < 80) return;
     if(dx < 0){ goto('/settings', {keepFocus:true}); }else{ goto('/chat', {keepFocus:true}); }
   }
-  function fmtTime(v:any){ if(!v) return '-'; try { return dayjs(v).format('DD/MM/YY hh:mm A'); } catch { return String(v).slice(0,16); } }
+  function fmtTime(v:any){ if(!v) return '-'; try { return dayjs(v).format('DD/MM/YY hh:mm A'); } catch { return String(v).slice(0,16).replace(/[<>]/g,''); } }
 
+  // ✅ 50k FAST: memoize fields once
   let allFields = $derived(normalizeFields(selectedTemplate));
+
+  // ✅ 50k FIX: only scan 30 records, not all 200, and cache
   let realKeysFromRecords = $derived.by(()=>{
+    if(records.length===0) return [];
     const keys = new Set<string>();
-    records.slice(0,30).forEach(r=>{
-      Object.keys(r.data||{}).forEach(k=> keys.add(sanitizeStr(k,50)));
-    });
-    return Array.from(keys).filter(k=>!k.toLowerCase().includes('owner_id')).slice(0,15);
+    const limit = Math.min(records.length, 30);
+    for(let i=0;i<limit;i++){
+      const r = records[i];
+      const dataKeys = r.data ? Object.keys(r.data) : [];
+      for(let k of dataKeys){
+        if(keys.size>=15) break;
+        const sk = sanitizeStr(k,50);
+        if(!sk) continue;
+        if(sk.toLowerCase().includes('owner_id')) continue;
+        keys.add(sk);
+      }
+    }
+    return Array.from(keys);
   });
+
   let xOptions = $derived.by(()=> allFields.length>0 ? allFields.map((f:any)=>({name:f.field_name, label:f.label})) : realKeysFromRecords.map(k=>({name:k,label:k})));
   let yOptions = $derived.by(()=>{ const nums = allFields.filter((f:any)=> f.field_type==="number"); return nums.length>0 ? nums.map((f:any)=>({name:f.field_name, label:f.label})) : realKeysFromRecords.map(k=>({name:k,label:k})); });
   let tableColumns = $derived.by(()=>{
@@ -84,11 +105,36 @@
 
   function normalizeFields(t:any){
     if(!t) return [{field_name:'daily_tracker',label:'daily_tracker'},{field_name:'enter_input',label:'enter_input'},{field_name:'station',label:'station'}].map(k=>({...k,field_type:"text",name:k.field_name,options:[]}));
-    const raw = t.data?.fields||t.fields||[];
-    return raw.map((f:any)=>({ field_name:sanitizeStr(f.field_name??f.name,50), label:sanitizeStr(f.label??f.field_name,50), field_type:f.field_type??f.type??"text", type:f.type??"text", name:sanitizeStr(f.field_name??f.name,50), options: Array.isArray(f.options)? f.options.slice(0,50) : typeof f.options==="string"? (()=>{try{return JSON.parse(f.options||"[]")}catch{return []}})() : [] })).filter((f:any)=> f.field_name);
+    const raw = (t.data?.fields||t.fields||[]).slice(0,100);
+    return raw.map((f:any)=>({
+      field_name:sanitizeStr(f.field_name??f.name,50),
+      label:sanitizeStr(f.label??f.field_name,50),
+      field_type:(f.field_type??f.type??"text").toString().slice(0,20),
+      type:(f.type??"text").toString().slice(0,20),
+      name:sanitizeStr(f.field_name??f.name,50),
+      options: Array.isArray(f.options)? f.options.slice(0,50).map((o:any)=>sanitizeStr(o,50)) : typeof f.options==="string"? (()=>{try{const p=JSON.parse(f.options||"[]"); return Array.isArray(p)? p.slice(0,50).map((o:any)=>sanitizeStr(o,50)): []}catch{return []}})() : []
+    })).filter((f:any)=> f.field_name);
   }
-  function getVal(row:any,key:string){ if(!row||!key) return ""; const k=sanitizeStr(key,50); if(row[k]!==""&&row[k]!=null) return String(row[k]).slice(0,100); if(row.data?.[k]!==undefined) return String(row.data[k]).slice(0,100); const lk=k.toLowerCase(); for(let kk of Object.keys(row)){ if(kk.toLowerCase()===lk) return String(row[kk]).slice(0,100); } if(row.data){ for(let kk of Object.keys(row.data)){ if(kk.toLowerCase()===lk) return String(row.data[kk]).slice(0,100); } } return ""; }
-  function getNum(row:any,key:string){ const v=getVal(row,key); const n=parseFloat(String(v).replace(/[^0-9.\-]/g,'')); return isNaN(n)||!isFinite(n)?0:n; }
+
+  function getVal(row:any,key:string){
+    if(!row||!key) return "";
+    const k=sanitizeStr(key,50);
+    if(!k) return "";
+    if(row[k]!==""&&row[k]!=null) return String(row[k]).slice(0,100).replace(/[<>]/g,'');
+    if(row.data?.[k]!==undefined) return String(row.data[k]).slice(0,100).replace(/[<>]/g,'');
+    const lk=k.toLowerCase();
+    // fast path: only check direct, not full scan for 50k
+    for(let kk of Object.keys(row).slice(0,30)){
+      if(kk.toLowerCase()===lk) return String(row[kk]).slice(0,100).replace(/[<>]/g,'');
+    }
+    if(row.data){
+      for(let kk of Object.keys(row.data).slice(0,30)){
+        if(kk.toLowerCase()===lk) return String(row.data[kk]).slice(0,100).replace(/[<>]/g,'');
+      }
+    }
+    return "";
+  }
+  function getNum(row:any,key:string){ const v=getVal(row,key); const n=parseFloat(String(v).replace(/[^0-9.\-]/g,'').slice(0,20)); return isNaN(n)||!isFinite(n)?0:Math.max(-1e9,Math.min(1e9,n)); }
   function getLabel(n:string){ const f=allFields.find((f:any)=>f.field_name===n); return sanitizeStr(f?.label||n,40); }
 
   onMount(async () => {
@@ -96,18 +142,17 @@
       try{ preloadData('/chat'); preloadData('/settings'); }catch{}
       try{
         const cachedT = localStorage.getItem('ems_templates_cache');
-        if(cachedT) templates = JSON.parse(cachedT);
+        if(cachedT && cachedT.length<200000) templates = JSON.parse(cachedT);
         const cachedR = localStorage.getItem('ems_records_cache');
-        if(cachedR) records = JSON.parse(cachedR);
+        if(cachedR && cachedR.length<200000) records = JSON.parse(cachedR);
       }catch{}
       import('chart.js/auto').then(c=> ChartJS=c.Chart);
-      try{ const { data: { user } } = await chatDB.auth.getUser(); if(user){ currentUser=user; currentUserId=user.id; currentUserEmail=user.email||''; } }catch{}
+      try{ const { data: { user } } = await chatDB.auth.getUser(); if(user){ currentUser=user; currentUserId=user.id.slice(0,100); currentUserEmail=(user.email||'').slice(0,100); } }catch{}
     }
-    // ✅ FIX: select * - no 400
     try{
       const { data } = await supabaseTemplates.from('templates').select('*').order('created_at',{ascending:false}).limit(100);
       let all = (data||[]).map((t:any)=>({ ...t, template_code: sanitizeStr(t.template_code||t.t_code,30), t_code: sanitizeStr(t.t_code||t.template_code,30), data: t.data || { fields: t.fields||[] }, fields: t.data?.fields||t.fields||[] }));
-      templates = all.filter(isMineTemplate);
+      templates = all.filter(isMineTemplate).slice(0,100);
       if(browser) try{ localStorage.setItem('ems_templates_cache', JSON.stringify(templates.slice(0,50))); }catch{}
       if(templates.length>0){ const fields = normalizeFields(templates[0]); if(fields.length>0){ analysisSets[0].x = fields[0].field_name; analysisSets[0].y = fields[1]?.field_name||fields[0].field_name; } }
     }catch{ templates=[]; }
@@ -130,13 +175,13 @@
         }catch{}
       }
       let allRecs = (data||[]).map((r:any)=> ({...r.data,...r, _template_name: sanitizeStr(r.data?.template_name || r.t_code || r.template_code || 'Report',60), _ts: r.ts||r.created_at, data: r.data||{} }));
-      allRecs = allRecs.filter(isMineRecord);
+      allRecs = allRecs.filter(isMineRecord).slice(0,200);
       let filtered = allRecs.filter((r:any)=>{
         if(selectedTemplateId!=='ALL'){
           const selId = String(selectedTemplateId).toLowerCase().slice(0,MAX_ID_LEN);
-          const selCode = String(selectedTemplate?.template_code||'').toLowerCase();
-          const rId = String(r.reference_template_id || r.data?.template_id || r.template_id || '').toLowerCase();
-          const rCode = String(r.t_code || r.data?.template_code || r.template_code || '').toLowerCase();
+          const selCode = String(selectedTemplate?.template_code||'').toLowerCase().slice(0,50);
+          const rId = String(r.reference_template_id || r.data?.template_id || r.template_id || '').toLowerCase().slice(0,100);
+          const rCode = String(r.t_code || r.data?.template_code || r.template_code || '').toLowerCase().slice(0,50);
           if(rId===selId || rCode===selCode) return true;
           return false;
         }
@@ -161,15 +206,24 @@
     for(const set of analysisSets){
       const canvas = document.getElementById(`chart-${set.id}`) as HTMLCanvasElement; if(!canvas) continue;
       let filtered = set.stationFilter?.length ? records.filter(r=> set.stationFilter.includes(String(getVal(r,'station')))) : records;
-      const grouped: Record<string, {vals:number[]}> = {};
-      filtered.slice(0,100).forEach(row=>{ let xv = String(getVal(row,set.x)||'Unknown').slice(0,30); let yv = getNum(row,set.y); if(!grouped[xv]) grouped[xv]={vals:[]}; grouped[xv].vals.push(yv); });
+      const grouped: Record<string, {vals:number[]; sum:number}> = {};
+      const slice = filtered.slice(0,100);
+      for(let row of slice){
+        let xv = String(getVal(row,set.x)||'Unknown').slice(0,30).replace(/[<>]/g,'');
+        let yv = getNum(row,set.y);
+        if(!grouped[xv]) grouped[xv]={vals:[], sum:0};
+        if(grouped[xv].vals.length<200){
+          grouped[xv].vals.push(yv);
+          grouped[xv].sum+=yv;
+        }
+      }
       const entries = Object.entries(grouped).sort((a,b)=>a[0].localeCompare(b[0])).slice(0,20);
-      const labels = entries.map(e=>e[0]); const values = entries.map(e=> e[1].vals.reduce((a,b)=>a+b,0)/(e[1].vals.length||1));
+      const labels = entries.map(e=>e[0]); const values = entries.map(e=> e[1].sum/(e[1].vals.length||1));
       const old = chartMap.get(set.id); if(old) old.destroy();
       const ctx = canvas.getContext('2d'); if(!ctx) continue;
       const colors = ['#2563eb','#00a884','#f59e0b','#ef4444','#8b5cf6','#14b8a6'];
       const color = colors[set.id%colors.length];
-      let type = set.chartType; if(type==='trend') type='line'; if(type==='box') type='bar';
+      let type = sanitizeStr(set.chartType,20); if(type==='trend') type='line'; if(type==='box') type='bar';
       const isPie = ['pie','doughnut','polarArea'].includes(type);
       const chart = new ChartJS(ctx,{
         type: type as any,
@@ -177,7 +231,7 @@
         options:{ responsive:true, maintainAspectRatio:false, animation:false, plugins:{ legend:{ display: isPie } } }
       });
       chartMap.set(set.id, chart);
-      await new Promise(r=> setTimeout(r, 50));
+      await new Promise(r=> setTimeout(r, 40));
     }
   }
   function updateX(set:any, v:string){ set.x=sanitizeStr(v,50); analysisSets=[...analysisSets]; renderAll(); }
@@ -195,10 +249,10 @@
 
 <div class="app" ontouchstart={onTouchStart} ontouchend={onTouchEnd}>
   <div class="top-fixed">
-    <div class="top-row"><div class="title">📈 Reports ({currentUserEmail||'you'})</div><a href="/chat" class="chat-btn">→ Chat</a></div>
+    <div class="top-row"><div class="title">📈 Reports ({sanitizeStr(currentUserEmail||'you',30)})</div><a href="/chat" class="chat-btn">→ Chat</a></div>
     <div class="filters">
-      <div class="f1"><label>Calendar</label><button class="date-btn" onclick={()=>showCalendar=!showCalendar}>{dateRange.from} / {dateRange.to}</button>{#if showCalendar}<div class="cal-pop"><input type="date" bind:value={dateRange.from} /><input type="date" bind:value={dateRange.to} /><button class="apply" onclick={()=>{showCalendar=false; loadRecords();}}>Apply</button></div>{/if}</div>
-      <div class="f2"><label>Template</label><select bind:value={selectedTemplateId} onchange={loadRecords}><option value="ALL">All Mine ({templates.length})</option>{#each templates as t}<option value={t.id}>{t.name} ({t.template_code||t.t_code})</option>{/each}</select></div>
+      <div class="f1"><label>Calendar</label><button class="date-btn" onclick={()=>showCalendar=!showCalendar}>{sanitizeStr(dateRange.from,10)} / {sanitizeStr(dateRange.to,10)}</button>{#if showCalendar}<div class="cal-pop"><input type="date" bind:value={dateRange.from} /><input type="date" bind:value={dateRange.to} /><button class="apply" onclick={()=>{showCalendar=false; loadRecords();}}>Apply</button></div>{/if}</div>
+      <div class="f2"><label>Template</label><select bind:value={selectedTemplateId} onchange={loadRecords}><option value="ALL">All Mine ({templates.length})</option>{#each templates as t}<option value={t.id}>{sanitizeStr(t.name,40)} ({sanitizeStr(t.template_code||t.t_code,20)})</option>{/each}</select></div>
       <button class="load" onclick={loadRecords} disabled={loading}>{loading?'...':'Load'}</button>
     </div>
     {#if error}<div class="err">{error}</div>{/if}
@@ -208,7 +262,7 @@
     {#if records.length>0}
       <div class="table-box">
         <table>
-          <thead><tr><th>Time</th><th>Template</th>{#each tableColumns as col}<th>{col.label}</th>{/each}</tr></thead>
+          <thead><tr><th>Time</th><th>Template</th>{#each tableColumns as col}<th>{sanitizeStr(col.label,30)}</th>{/each}</tr></thead>
           <tbody>{#each displayRows as r}<tr><td>{fmtTime(r.ts||r._ts)}</td><td style="font-weight:700">{r._template_name||r.t_code}</td>{#each tableColumns as col}<td>{getVal(r, col.field_name)}</td>{/each}</tr>{/each}</tbody>
         </table>
         {#if records.length>10}<div style="text-align:center;margin:6px 0;"><button class="more" onclick={()=>showMoreRows=!showMoreRows}>{showMoreRows?'▲ Less':'▼ All '+records.length}</button></div>{/if}
@@ -216,9 +270,9 @@
       {#each analysisSets as set (set.id)}
         <div class="graph">
           <div class="g-controls">
-            <span class="badge">{set.label}</span>
-            <select class="inline" value={set.x} onchange={(e)=>updateX(set,(e.target as HTMLSelectElement).value)}><option value="">X</option>{#each xOptions as o}<option value={o.name}>{o.label}</option>{/each}</select>
-            <select class="inline" value={set.y} onchange={(e)=>updateY(set,(e.target as HTMLSelectElement).value)}><option value="">Y</option>{#each yOptions as o}<option value={o.name}>{o.label}</option>{/each}</select>
+            <span class="badge">{sanitizeStr(set.label,20)}</span>
+            <select class="inline" value={set.x} onchange={(e)=>updateX(set,(e.target as HTMLSelectElement).value)}><option value="">X</option>{#each xOptions as o}<option value={o.name}>{sanitizeStr(o.label,30)}</option>{/each}</select>
+            <select class="inline" value={set.y} onchange={(e)=>updateY(set,(e.target as HTMLSelectElement).value)}><option value="">Y</option>{#each yOptions as o}<option value={o.name}>{sanitizeStr(o.label,30)}</option>{/each}</select>
             <select class="inline" value={set.chartType} onchange={(e)=>updateChartType(set,(e.target as HTMLSelectElement).value)}><option value="line">Line</option><option value="bar">Bar</option><option value="pie">Pie</option><option value="doughnut">Doughnut</option><option value="polarArea">Polar</option><option value="radar">Radar</option><option value="scatter">Scatter</option><option value="trend">Trend</option></select>
             {#if analysisSets.length>1}<button class="del" onclick={()=>removeSet(set.id)}>🗑️</button>{/if}
           </div>

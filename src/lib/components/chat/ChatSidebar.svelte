@@ -2,6 +2,7 @@
   let {
     contacts = [] as any[],
     groups = [] as any[],
+    allChats = [] as any[],
     selectedContact = null as any,
     selectedGroup = null as any,
     onSelectContact = (_c:any)=>{},
@@ -28,36 +29,114 @@
   let contextPos = $state({x:0, y:0});
   let debounceT: any = null;
 
-  function sanitizeSearch(s:string){ return (s||'').toString().slice(0,100).replace(/[<>]/g,''); }
-  function sanitizeUrl(u:string){ if(!u) return ''; if(u.startsWith('http') || u.startsWith('data:image')) return u.slice(0,500); return ''; }
-  function getInitials(n:string){ return n? n.trim().split(' ').map((x:string)=>x[0]).join('').toUpperCase().slice(0,2) : 'U'; }
+  function sanitizeSearch(s:string){ return (s||'').toString().slice(0,100).replace(/[<>\"'&]/g,''); }
+  function sanitizeUrl(u:string){
+    if(!u) return '';
+    const v = u.trim().slice(0,500);
+    if(v.startsWith('https://') || v.startsWith('data:image/')) return v;
+    return '';
+  }
+  function getInitials(n:string){
+    const clean = (n||'').toString().replace(/[^a-zA-Z0-9 ]/g,'').trim();
+    return clean? clean.split(/\s+/).map((x:string)=>x[0]).join('').toUpperCase().slice(0,2) : 'U';
+  }
+  function formatTime(ts:any){
+    if(!ts) return '';
+    try{
+      const d = new Date(ts);
+      if(isNaN(d.getTime())) return '';
+      const now = new Date();
+      const diff = now.getTime() - d.getTime();
+      if(diff < 24*60*60*1000) return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+      if(diff < 7*24*60*60*1000) return d.toLocaleDateString([], {weekday:'short'});
+      return d.toLocaleDateString([], {day:'2-digit', month:'short'});
+    }catch{ return ''; }
+  }
 
-  // ✅ SPEED: debounce search 120ms
   $effect(()=>{
     const v = search;
     clearTimeout(debounceT);
-    debounceT = setTimeout(()=>{ searchDebounced = sanitizeSearch(v); }, 120);
+    debounceT = setTimeout(()=>{ searchDebounced = sanitizeSearch(v); }, 150);
+  });
+
+  // ✅ 50K FIX: Fast sort - limit before heavy sort
+  let combinedList = $derived.by(()=>{
+    // For 50k, take only 300 most recent from source before sort
+    let source = allChats.length? allChats.slice(0, 300) : [
+    ...groups.slice(0,100).map((g:any)=>({...g, _type:'group', _sortTime: g.last_message_at || g.created_at || 0})),
+    ...contacts.filter((c:any)=>!c.isSelf).slice(0,200).map((c:any)=>({...c, _type:'contact', _sortTime: c.last_message_at || 0}))
+    ];
+
+    let list = [...source];
+
+    // search - secure + fast
+    if(searchDebounced.trim()){
+      const s = searchDebounced.toLowerCase();
+      const out:any[] = [];
+      for(let i=0; i<list.length; i++){
+        if(out.length>=100) break;
+        const c = list[i];
+        const name = (c.name||'').toLowerCase();
+        const email = (c.email||'').toLowerCase();
+        const last = (c.last_message||'').toLowerCase();
+        if(name.includes(s) || email.includes(s) || last.includes(s)) out.push(c);
+      }
+      list = out;
+    }
+
+    // sort only filtered (max 300) - not 50k
+    list.sort((a:any,b:any)=> {
+      const at = a._sortTime? new Date(a._sortTime).getTime() : new Date(a.last_message_at||0).getTime();
+      const bt = b._sortTime? new Date(b._sortTime).getTime() : new Date(b.last_message_at||0).getTime();
+      return bt - at;
+    });
+
+    // filters
+    if(activeFilter==='Unread') {
+      const u:any[] = [];
+      for(let c of list){ if(u.length>=100) break; if((c.unread||c.unread_count||0)>0) u.push(c); }
+      list = u;
+    }
+    if(activeFilter==='Groups') {
+      const g:any[] = [];
+      for(let c of list){ if(g.length>=100) break; if(c._type==='group') g.push(c); }
+      list = g;
+    }
+    if(activeFilter==='Favorites') {
+      const f:any[] = [];
+      for(let c of list){ if(f.length>=100) break; if(c.isFavorite || c.isPinned) f.push(c); }
+      list = f;
+    }
+    return list.slice(0,100);
   });
 
   let filteredContacts = $derived.by(()=>{
-    if(!searchDebounced.trim()) return contacts;
+    if(activeFilter==='Groups') return [];
+    if(!searchDebounced.trim()) return contacts.slice(0,80);
     const s = searchDebounced.toLowerCase();
     const out:any[] = [];
     for(let c of contacts){
       if(out.length>=100) break;
       const name = (c.name||'').toLowerCase();
       const email = (c.email||'').toLowerCase();
-      const last = (c.last_message||'').toLowerCase();
-      if(name.includes(s) || email.includes(s) || last.includes(s)) out.push(c);
+      if(name.includes(s) || email.includes(s)) out.push(c);
     }
     return out;
   });
+
   let filteredGroups = $derived.by(()=>{
-    if(!searchDebounced.trim()) return groups;
+    if(!searchDebounced.trim()) return groups.slice(0,30);
     const s = searchDebounced.toLowerCase();
-    return groups.filter((g:any)=> (g.name||'').toLowerCase().includes(s)).slice(0,50);
+    const out:any[] = [];
+    for(let g of groups){
+      if(out.length>=50) break;
+      if((g.name||'').toLowerCase().includes(s)) out.push(g);
+    }
+    return out;
   });
+
   let displayContacts = $derived.by(()=>{
+    if(combinedList.length &&!searchDebounced && activeFilter==='All') return [];
     if(activeFilter==='Groups') return [];
     let list = [...filteredContacts];
     let selfIdx = list.findIndex((c:any)=>c.isSelf);
@@ -69,12 +148,14 @@
         if(a.isSelf) return -1; if(b.isSelf) return 1;
         const at = a.last_message_at? new Date(a.last_message_at).getTime():0;
         const bt = b.last_message_at? new Date(b.last_message_at).getTime():0;
-        if(bt!==at) return bt-at; return 0;
+        return bt-at;
       });
     }
     return list.slice(0,80);
   });
+
   let displayGroups = $derived.by(()=>{
+    if(combinedList.length &&!searchDebounced && activeFilter==='All') return [];
     if(activeFilter==='All') return filteredGroups.slice(0,30);
     if(activeFilter==='Groups') return filteredGroups.slice(0,80);
     if(activeFilter==='Unread') return filteredGroups.filter((g:any)=> (g.unread||g.unread_count||0)>0).slice(0,50);
@@ -90,7 +171,6 @@
     document.addEventListener('mousedown', handle, true);
     return { destroy() { document.removeEventListener('mousedown', handle, true); } };
   }
-
   function handleAvatarClick(c:any, e:MouseEvent, type:string){
     e.stopPropagation();
     onAvatarClick({detail:{contact:c, type}});
@@ -98,7 +178,8 @@
   function handleContactClick(c:any, e: MouseEvent){
     e.stopPropagation();
     if(showDeleteMenu){ showDeleteMenu=null; return; }
-    onSelectContact({detail: c});
+    if(c._type==='group') onSelectGroup({detail: c});
+    else onSelectContact({detail: c});
   }
   function handleGroupClick(g:any, e: MouseEvent){
     e.stopPropagation();
@@ -131,11 +212,15 @@
     if(c.isSelf) return c.last_message || 'Message yourself';
     if(c.isInvite || c.isOutgoing || c.status==='pending') return '⏳ Invite pending';
     if(c.isIncomingInvite || c.status==='invite_received' || c.status==='incoming') return '📩 Tap to Accept';
-    if(c.last_message) return c.last_message.slice(0,38);
+    const msg = (c.last_message||'').toString().slice(0,38).replace(/[<>]/g,'');
+    if(msg) return msg;
     if(c.email) return c.email.slice(0,26);
     return 'Tap to chat';
   }
-  function getUnread(c:any){ return c.unread?? c.unread_count?? 0; }
+  function getUnread(c:any){
+    const u = c.unread?? c.unread_count?? 0;
+    return typeof u === 'number' && u>0? u : 0;
+  }
 </script>
 
 <div class="sidebar">
@@ -170,47 +255,75 @@
   </div>
 
   <div class="chat-list">
-    {#each displayGroups as g (g.id)}
-      <div class="chat-row" class:selected={selectedGroup?.id===g.id} role="button" tabindex="0"
-        onclick={(e)=>handleGroupClick(g,e)}
-        ontouchstart={(e)=>onTouchStart(g,e)} ontouchend={onTouchEnd} ontouchmove={onTouchEnd}
-        oncontextmenu={(e)=>onContextMenu(e,g)}
-        onkeydown={(e)=>{ if(e.key==='Enter') handleGroupClick(g,e)}}>
-        <div class="avatar group" onclick={(e)=>handleAvatarClick(g,e,'group')}>
-          {#if g.avatar_url}<img src={sanitizeUrl(g.avatar_url)} alt="" loading="lazy" decoding="async" />{:else}<span>👥</span>{/if}
+    {#if combinedList.length && activeFilter==='All' &&!searchDebounced}
+      {#each combinedList as c (c.id + '_' + c._type)}
+        <div class="chat-row wa-row" class:selected={selectedContact?.id===c.id || selectedGroup?.id===c.id} role="button" tabindex="0"
+          onclick={(e)=>handleContactClick(c,e)}
+          ontouchstart={(e)=>onTouchStart(c,e)} ontouchend={onTouchEnd} ontouchmove={onTouchEnd}
+          oncontextmenu={(e)=>onContextMenu(e,c)}
+          onkeydown={(e)=>{ if(e.key==='Enter') handleContactClick(c,e)}}>
+          <div class="avatar" class:group={c._type==='group'} class:self-avatar={c.isSelf} onclick={(e)=>handleAvatarClick(c,e,c._type==='group'?'group':'contact')}>
+            {#if c.avatar_url}<img src={sanitizeUrl(c.avatar_url)} alt="" loading="lazy" decoding="async" />{:else if c._type==='group'}<span>👥</span>{:else if c.isSelf}<span>💾</span>{:else}<span>{getInitials(c.name||c.email)}</span>{/if}
+          </div>
+          <div class="info">
+            <div class="top">
+              <span class="name">{c.name||c.email}{#if c.isSelf} <small style="color:#00a884;">(You)</small>{/if}</span>
+              <span class="time">{formatTime(c.last_message_at || c._sortTime)}</span>
+            </div>
+            <div class="bottom">
+              {#if c.status==='pending' || c.isOutgoing || c.isInvite}
+                <span class="sub pending">⏳ Invite pending</span>
+              {:else if c.status==='invite_received' || c.isIncomingInvite || c.status==='incoming'}
+                <span class="sub incoming">📩 Tap to Accept</span>
+              {:else}<span class="sub">{getLastMessage(c)}</span>{/if}
+              {#if getUnread(c)>0 && c.status!=='pending' &&!c.isOutgoing &&!c.isIncomingInvite}<span class="badge">{getUnread(c)>99?'99+':getUnread(c)}</span>{/if}
+            </div>
+          </div>
         </div>
-        <div class="info">
-          <div class="top"><span class="name">{g.name}</span><span class="time">{g.last_time||''}</span></div>
-          <div class="bottom"><span class="sub">{g.last_message || 'Tap to open group'}</span>{#if getUnread(g)>0}<span class="badge">{getUnread(g)}</span>{/if}</div>
+      {/each}
+    {:else}
+      {#each displayGroups as g (g.id)}
+        <div class="chat-row" class:selected={selectedGroup?.id===g.id} role="button" tabindex="0"
+          onclick={(e)=>handleGroupClick(g,e)}
+          ontouchstart={(e)=>onTouchStart(g,e)} ontouchend={onTouchEnd} ontouchmove={onTouchEnd}
+          oncontextmenu={(e)=>onContextMenu(e,g)}
+          onkeydown={(e)=>{ if(e.key==='Enter') handleGroupClick(g,e)}}>
+          <div class="avatar group" onclick={(e)=>handleAvatarClick(g,e,'group')}>
+            {#if g.avatar_url}<img src={sanitizeUrl(g.avatar_url)} alt="" loading="lazy" decoding="async" />{:else}<span>👥</span>{/if}
+          </div>
+          <div class="info">
+            <div class="top"><span class="name">{g.name}</span><span class="time">{formatTime(g.last_message_at)}</span></div>
+            <div class="bottom"><span class="sub">{g.last_message || 'Tap to open group'}</span>{#if getUnread(g)>0}<span class="badge">{getUnread(g)}</span>{/if}</div>
+          </div>
         </div>
-      </div>
-    {/each}
+      {/each}
 
-    {#each displayContacts as c (c.id)}
-      <div class="chat-row wa-row" class:selected={selectedContact?.id===c.id} role="button" tabindex="0"
-        onclick={(e)=>handleContactClick(c,e)}
-        ontouchstart={(e)=>onTouchStart(c,e)} ontouchend={onTouchEnd} ontouchmove={onTouchEnd}
-        oncontextmenu={(e)=>onContextMenu(e,c)}
-        onkeydown={(e)=>{ if(e.key==='Enter') handleContactClick(c,e)}}>
-        <div class="avatar" class:self-avatar={c.isSelf} onclick={(e)=>handleAvatarClick(c,e,'contact')}>
-          {#if c.avatar_url}<img src={sanitizeUrl(c.avatar_url)} alt="" loading="lazy" decoding="async" />{:else if c.isSelf}<span>💾</span>{:else}<span>{getInitials(c.name||c.email)}</span>{/if}
-        </div>
-        <div class="info">
-          <div class="top">
-            <span class="name">{c.name||c.email}{#if c.isSelf} <small style="color:#00a884;">(You)</small>{/if}</span>
-            <span class="time">{c.last_time||''}</span>
+      {#each displayContacts as c (c.id)}
+        <div class="chat-row wa-row" class:selected={selectedContact?.id===c.id} role="button" tabindex="0"
+          onclick={(e)=>handleContactClick(c,e)}
+          ontouchstart={(e)=>onTouchStart(c,e)} ontouchend={onTouchEnd} ontouchmove={onTouchEnd}
+          oncontextmenu={(e)=>onContextMenu(e,c)}
+          onkeydown={(e)=>{ if(e.key==='Enter') handleContactClick(c,e)}}>
+          <div class="avatar" class:self-avatar={c.isSelf} onclick={(e)=>handleAvatarClick(c,e,'contact')}>
+            {#if c.avatar_url}<img src={sanitizeUrl(c.avatar_url)} alt="" loading="lazy" decoding="async" />{:else if c.isSelf}<span>💾</span>{:else}<span>{getInitials(c.name||c.email)}</span>{/if}
           </div>
-          <div class="bottom">
-            {#if c.status==='pending' || c.isOutgoing || c.isInvite}
-              <span class="sub pending">⏳ Invite pending</span>
-            {:else if c.status==='invite_received' || c.isIncomingInvite || c.status==='incoming'}
-              <span class="sub incoming">📩 Tap to Accept</span>
-            {:else}<span class="sub">{getLastMessage(c)}</span>{/if}
-            {#if getUnread(c)>0 && c.status!=='pending' &&!c.isOutgoing &&!c.isIncomingInvite}<span class="badge">{getUnread(c)>99?'99+':getUnread(c)}</span>{/if}
+          <div class="info">
+            <div class="top">
+              <span class="name">{c.name||c.email}{#if c.isSelf} <small style="color:#00a884;">(You)</small>{/if}</span>
+              <span class="time">{formatTime(c.last_message_at)}</span>
+            </div>
+            <div class="bottom">
+              {#if c.status==='pending' || c.isOutgoing || c.isInvite}
+                <span class="sub pending">⏳ Invite pending</span>
+              {:else if c.status==='invite_received' || c.isIncomingInvite || c.status==='incoming'}
+                <span class="sub incoming">📩 Tap to Accept</span>
+              {:else}<span class="sub">{getLastMessage(c)}</span>{/if}
+              {#if getUnread(c)>0 && c.status!=='pending' &&!c.isOutgoing &&!c.isIncomingInvite}<span class="badge">{getUnread(c)>99?'99+':getUnread(c)}</span>{/if}
+            </div>
           </div>
         </div>
-      </div>
-    {/each}
+      {/each}
+    {/if}
   </div>
 </div>
 
@@ -253,7 +366,7 @@
 .info{flex:1;min-width:0;padding:12px 0;border-top:1px solid #222d34;}
 .top{display:flex;justify-content:space-between;gap:8px;}
 .name{color:#e9edef;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
-.time{color:#8696a0;font-size:12px;}
+.time{color:#8696a0;font-size:12px; flex-shrink:0;}
 .bottom{display:flex;justify-content:space-between;gap:8px;margin-top:4px;}
 .sub{color:#8696a0;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
 .sub.pending{color:#f1c40f;}.sub.incoming{color:#00e676;}

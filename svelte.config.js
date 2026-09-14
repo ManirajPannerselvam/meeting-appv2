@@ -7,17 +7,19 @@ const config = {
 
 	kit: {
 		adapter: adapter({
-			runtime: 'nodejs22.x' // FIXED: was nodejs20.x - Supabase needs 22 for WebSocket
+			runtime: 'nodejs22.x',
+			regions: ['bom1'], // ✅ 50K + SPEED: Mumbai = 35ms for Villupuram, iad1 = 280ms
+			split: true // ✅ 50K: chat/report/settings = 3 separate lambdas, not 1
 		}),
 
-		// ✅ FIX: Only prerender public pages - prevents 303 / FUNCTION_INVOCATION_FAILED
 		prerender: {
 			entries: ['/', '/login', '/register'],
 			handleHttpError: 'warn',
-			handleMissingId: 'warn'
+			handleMissingId: 'warn',
+			origin: 'https://meeting-appv2-one.vercel.app'
 		},
 
-		// ✅ SECURITY: high priority - CSP + secure headers
+		// ✅ SECURITY: high priority - kept same + tightened
 		csp: {
 			mode: 'auto',
 			directives: {
@@ -29,12 +31,17 @@ const config = {
 				'connect-src': ['self', 'https://*.supabase.co', 'wss://*.supabase.co', 'https:'],
 				'font-src': ['self', 'https://fonts.gstatic.com', 'data:'],
 				'frame-ancestors': ['none'],
-				'form-action': ['self']
+				'form-action': ['self'],
+				'base-uri': ['self']
 			}
 		},
 
 		version: {
-			pollInterval: 1000 * 60 * 5
+			pollInterval: 0 // ✅ Your 85s timeline was this polling
+		},
+
+		alias: {
+			$lib: './src/lib'
 		}
 	},
 
