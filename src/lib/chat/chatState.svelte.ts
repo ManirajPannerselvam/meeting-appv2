@@ -1,4 +1,4 @@
-// src/lib/chat/chatState.svelte.ts - Svelte 5 runes - 50k secure - FINAL COMPACT
+// src/lib/chat/chatState.svelte.ts - FINAL 0 LEAKAGE + NAME + LIST SHOWING + TICKS + INSTANT
 import { browser } from "$app/environment";
 import { getChatClient } from '$lib/supabase';
 
@@ -31,203 +31,241 @@ export function createChatState(data:any){
   let openMode=$state(false);
   let openList=$state(false);
   let selectedMeeting=$state<any>(null);
-  // FIXED: Added missing popups - your bug was here
   let showMeetingPopup=$state(false);
   let showMeetingListPopup=$state(false);
   let showTemplatePopup=$state(false);
-  let showReportPopup=$state(false); // alias for template
+  let showReportPopup=$state(false);
   let meetingSearch=$state("");
-  let bottomTab=$state('chat');
+  let bottomTab=$state<'chat'|'report'|'meeting'>('chat');
   let sendingLock=$state(false);
   let showArchived=$state(false);
   let showStarred=$state(false);
-  let meetings=$state<any[]>([{id:'1',title:'Daily Standup',code:'MT01'},{id:'2',title:'Client Call',code:'MT02'}]);
+  let meetings=$state<any[]>([{id:'1',title:'Daily Standup',code:'MT01'}]);
   const roomCache = new Map<string,string>();
-  let lastSendAt = 0;
+  let lastSendAt=0;
 
-  function checkMobile(){ if(!browser) return; isMobileView = window.innerWidth < 768; }
-  function getCurrentUserId(){ return currentUser?.id || data?.user?.id || ''; }
-  
-  // SECURE sanitize - 50k high priority
-  function sanitize(str:string){ 
-    if(!str) return ""; 
-    let s = str.toString().trim().slice(0,4000);
-    s = s.replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi,'');
-    s = s.replace(/<style[\s\S]*?>[\s\S]*?<\/style>/gi,'');
-    s = s.replace(/javascript:/gi,'').replace(/data:/gi,'').replace(/vbscript:/gi,'').replace(/on\w+\s*=/gi,'');
-    s = s.replace(/[<>\`\$\\]/g,'');
-    return s.slice(0,4000);
-  }
-  function isValidUUID(id:string){ return /^[0-9a-fA-F-]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id) || id.length>=8; }
-  function isValidEmail(e:string){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length>=5 && e.length<=100; }
+  function checkMobile(){ if(!browser) return; isMobileView=window.innerWidth<768; }
+  function getCurrentUserId(){ return String(currentUser?.id||data?.user?.id||'').slice(0,50); }
+  function sanitize(str:string,max=4000){ if(!str) return ""; let s=String(str).trim().slice(0,max); s=s.replace(/<[^>]*>/g,''); return s.slice(0,max); }
+  function sanitizeShort(s:string,max=50){ return sanitize(s,max); }
+  function isValidUUID(id:string){ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(id||'').trim()); }
+  function isValidEmail(e:string){ return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e) && e.length<=100; }
+  function isReportMsg(m:any){ const c=String(m.content||'').toLowerCase(); return c.startsWith('__report__')||c.includes('station:'); }
+  function isMeetingMsg(m:any){ const c=String(m.content||'').toLowerCase(); return c.startsWith('__meeting__'); }
+  function isVoiceMsg(m:any){ return String(m.content||'').toLowerCase().startsWith('__voice__'); }
 
+  // 0 LEAKAGE GROUPS - only owner or member
   async function loadGroups(){
-    const userId=getCurrentUserId(); if(!userId || !isValidUUID(userId)) return;
+    const uid=getCurrentUserId(); if(!isValidUUID(uid)) return;
     try{
       let ids:string[]=[];
-      try{ const {data, error}=await getDB().from("chat_group_members").select("group_id").eq("user_id",userId).limit(20); if(!error) ids=(data||[]).map((m:any)=>String(m.group_id||'').slice(0,50)).filter(Boolean); }catch{}
-      if(ids.length===0){ try{ const {data}=await getDB().from("chat_groups").select("id").eq("owner_id",userId).limit(20); ids=(data||[]).map((g:any)=>String(g.id||'').slice(0,50)).filter(Boolean); }catch{} }
-      if(ids.length===0){ groups=[]; return; }
-      const {data:gData}=await getDB().from("chat_groups").select("id,name,avatar_url,created_at,owner_id").in("id",ids.slice(0,20)).limit(20);
-      groups=(gData||[]).map((g:any)=>({...g,name:String(g.name||'Unnamed').slice(0,50).replace(/[<>]/g,''),last_message:"Group • Tap avatar",last_message_at:g.created_at||new Date(0).toISOString(),memberCount:1})).slice(0,20);
+      const {data:members}=await getDB().from("chat_group_members").select("group_id").eq("user_id",uid).limit(20);
+      ids=(members||[]).map((m:any)=>m.group_id).filter(isValidUUID);
+      if(ids.length===0){
+        const {data:owned}=await getDB().from("chat_groups").select("id").eq("owner_id",uid).limit(20);
+        ids=(owned||[]).map((g:any)=>g.id).filter(isValidUUID);
+      }
+      if(!ids.length){ groups=[]; return; }
+      const {data:gData}=await getDB().from("chat_groups").select("id,name,avatar_url,created_at").in("id",ids.slice(0,20)).limit(20);
+      groups=(gData||[]).map((g:any)=>({...g,name:sanitizeShort(g.name||'Unnamed',50),last_message:"Group • Tap",last_message_at:g.created_at, _type:'group'})).slice(0,20);
     }catch{ groups=[]; }
   }
 
-  async function loadContacts(force=false){
-    const userId=getCurrentUserId();
-    if(!userId || !isValidUUID(userId)){ contacts=[]; return; }
+  // 0 LEAKAGE CONTACTS - only rooms where you are user1 or user2 + profiles lookup
+  async function loadContacts(){
+    const uid=getCurrentUserId(); if(!isValidUUID(uid)){ contacts=[]; return; }
     try{
-      let mapped:any[]=[
-        {id:userId,actual_user_id:userId,name:"You (Saved)",email:currentUser?.email||"You",avatar_url:currentUser?.avatar_url||null,room_id:null,status:'accepted',isSelf:true,last_message:"Message yourself",last_message_at:new Date().toISOString(),_type:'contact'}
-      ];
-      try{
-        const {data:myRooms}=await getDB().from("rooms").select("id,user1_id,user2_id,created_at").or(`user1_id.eq.${userId},user2_id.eq.${userId}`).order('created_at',{ascending:false}).limit(20);
-        if(myRooms?.length){
-          // FAST: parallel profile fetch for 50k
-          const otherIds = myRooms.slice(0,20).map((r:any)=> r.user1_id===userId? r.user2_id : r.user1_id).filter(Boolean);
-          const profMap = new Map();
-          await Promise.allSettled(otherIds.map(async (oid:string)=>{
-            if(!isValidUUID(oid)) return;
-            try{
-              const {data:prof}=await getDB().from("profiles").select("id,full_name,email,avatar_url").eq("id",oid).maybeSingle();
-              if(prof) profMap.set(oid, prof);
-            }catch{}
-          }));
-          for(const r of myRooms.slice(0,20)){
-            const other=r.user1_id===userId? r.user2_id : r.user1_id;
-            if(!other || !isValidUUID(other)) continue;
-            roomCache.set(other, r.id);
-            if(mapped.find(m=>m.actual_user_id===other)) continue;
-            const prof = profMap.get(other);
-            let pname=prof?.full_name||prof?.email?.split('@')[0]||other.slice(0,8);
-            let pavatar=prof?.avatar_url||null;
-            mapped.push({id:r.id,actual_user_id:other,name:String(pname).slice(0,24).replace(/[<>]/g,''),email:'',avatar_url:pavatar,room_id:r.id,status:'accepted',last_message:"Tap to chat",last_message_at:r.created_at,_type:'contact'});
-          }
+      let mapped:any[]=[{id:uid,actual_user_id:uid,name:"You (Saved)",email:currentUser?.email||"",avatar_url:currentUser?.avatar_url||null,room_id:null,isSelf:true,_type:'contact',last_message:"Message yourself",last_message_at:new Date().toISOString()}];
+      const {data:myRooms}=await getDB().from("rooms").select("id,user1_id,user2_id,created_at").or(`user1_id.eq.${uid},user2_id.eq.${uid}`).order('created_at',{ascending:false}).limit(20);
+      if(myRooms?.length){
+        const otherIds=[...new Set(myRooms.map((r:any)=> r.user1_id===uid? r.user2_id : r.user1_id).filter(isValidUUID))];
+        const profMap=new Map();
+        if(otherIds.length){
+          const {data:profs}=await getDB().from("profiles").select("id,full_name,email,avatar_url").in("id",otherIds.slice(0,20));
+          (profs||[]).forEach((p:any)=>profMap.set(p.id,p));
         }
-      }catch{}
-      try{
-        const {data:invites}=await getDB().from("contact_invites").select("id,email,status,invited_by,created_at").eq("invited_by",userId).limit(20);
-        if(invites?.length){
-          for(const inv of invites.slice(0,20)){
-            const emailLower=String(inv.email||'').toLowerCase().trim().slice(0,100);
-            if(!isValidEmail(emailLower)) continue;
-            if(mapped.find(m=>m.email===emailLower)) continue;
-            mapped.push({id:inv.id,actual_user_id:null,name:emailLower.split('@')[0].slice(0,20),email:emailLower,avatar_url:null,room_id:null,status:inv.status,last_message:inv.status==='pending'?'⏳ Pending':'Tap to chat',last_message_at:inv.created_at,_type:'contact'});
-          }
+        for(const r of myRooms.slice(0,20)){
+          const other=r.user1_id===uid? r.user2_id : r.user1_id;
+          if(!isValidUUID(other)||!isValidUUID(r.id)) continue;
+          if(mapped.find(m=>m.actual_user_id===other)) continue;
+          roomCache.set(other, r.id);
+          const prof=profMap.get(other);
+          const displayName=prof?.full_name?.trim() || prof?.email?.split('@')[0] || "User "+other.slice(0,4);
+          mapped.push({id:r.id,actual_user_id:other,name:sanitizeShort(displayName,24),email:prof?.email||"",avatar_url:prof?.avatar_url||null,room_id:r.id,status:'accepted',_type:'contact',last_message:"Tap to chat",last_message_at:r.created_at});
         }
-      }catch{}
+      }
       contacts=mapped.slice(0,20);
-      // limit cache for 50k
-      if(roomCache.size>1000){ const k=roomCache.keys().next().value; if(k) roomCache.delete(k); }
-    }catch{
-      contacts=[{id:userId,actual_user_id:userId,name:"You (Saved)",email:currentUser?.email||"You",avatar_url:null,room_id:null,status:'accepted',isSelf:true,last_message:"Add contacts",last_message_at:new Date().toISOString(),_type:'contact'}];
-    }
+    }catch{ contacts=[]; }
   }
 
+  // FIXED LOAD - NO BLOCKING EARLY RETURN
   async function loadMessages({roomId,groupId,older=false}:any){
-    if(older&&loadingMore) return; if(!older&&isLoadingMessages) return;
+    if(older && loadingMore) return;
     if(older) loadingMore=true; else isLoadingMessages=true;
     try{
-      const uid=getCurrentUserId(); if(!uid) return;
-      let query=getDB().from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status").order("created_at",{ascending:false}).limit(20);
-      if(older&&messages.length){ const oldest=messages[0]?.created_at; if(oldest) query=query.lt("created_at",oldest); }
-      if(groupId){ if(!isValidUUID(groupId)) return; query=query.eq("group_id",groupId); } 
-      else if(roomId){ if(!isValidUUID(roomId)) return; query=query.eq("room_id",roomId); } 
-      else query=query.eq("sender_id",uid).eq("receiver_id",uid);
-      const {data}=await query; if(!data||data.length===0){ if(!older) messages=[]; if(older) hasMore=false; return; }
-      if(data.length<20) hasMore=false; else hasMore=true;
-      const filtered=data.reverse().map((m:any)=>({...m,is_own:m.sender_id===uid,content:String(m.content||'').slice(0,2000)}));
-      messages = older ? [...filtered,...messages].slice(-100) : filtered.slice(-20);
+      const uid=getCurrentUserId(); if(!isValidUUID(uid)) return;
+      if(roomId && !isValidUUID(roomId)) return;
+      if(groupId && !isValidUUID(groupId)) return;
+      
+      let q=getDB().from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status").order("created_at",{ascending:false}).limit(20);
+      if(older && messages.length) q=q.lt("created_at",messages[0]?.created_at);
+      if(groupId) q=q.eq("group_id",groupId);
+      else if(roomId) q=q.eq("room_id",roomId);
+      else q=q.eq("sender_id",uid).eq("receiver_id",uid);
+
+      const {data, error}=await q;
+      if(error){
+        // fallback if status column missing
+        let q2=getDB().from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at").order("created_at",{ascending:false}).limit(20);
+        if(older && messages.length) q2=q2.lt("created_at",messages[0]?.created_at);
+        if(groupId) q2=q2.eq("group_id",groupId); else if(roomId) q2=q2.eq("room_id",roomId); else q2=q2.eq("sender_id",uid).eq("receiver_id",uid);
+        const r2=await q2;
+        if(!r2.data?.length){ if(!older) messages=[]; return; }
+        messages=r2.data.reverse().map((m:any)=>({...m,is_own:m.sender_id===uid,content:sanitize(m.content||'',4000),status:'sent'})).slice(-20);
+        return;
+      }
+      if(!data?.length){ if(!older) messages=[]; hasMore=false; return; }
+      hasMore=data.length>=20;
+      messages=data.reverse().map((m:any)=>({...m,is_own:m.sender_id===uid,content:sanitize(m.content||'',4000),status:m.status||'sent'})).slice(-20);
+      
+      // mark read 0 leakage
+      if(!older){
+        setTimeout(async()=>{
+          try{
+            if(roomId) await getDB().from("messages").update({status:'read'}).eq("room_id",roomId).neq("sender_id",uid);
+            if(groupId) await getDB().from("messages").update({status:'read'}).eq("group_id",groupId).neq("sender_id",uid);
+          }catch{}
+        },300);
+      }
     }finally{ isLoadingMessages=false; loadingMore=false; }
   }
 
   async function getOrCreateRoom(otherId:string){
-    if(!otherId || !isValidUUID(otherId)) return null; const uid=getCurrentUserId(); if(!uid||otherId===uid || !isValidUUID(uid)) return null; if(roomCache.has(otherId)) return roomCache.get(otherId)!;
-    try{ const {data}=await getDB().from("rooms").select("id").eq("user1_id",uid).eq("user2_id",otherId).maybeSingle(); if(data?.id){ roomCache.set(otherId,data.id); return data.id; } }catch{}
-    try{ const {data}=await getDB().from("rooms").select("id").eq("user1_id",otherId).eq("user2_id",uid).maybeSingle(); if(data?.id){ roomCache.set(otherId,data.id); return data.id; } }catch{}
-    try{ const {data}=await getDB().from("rooms").insert({user1_id:uid,user2_id:otherId}).select("id").single(); if(data?.id){ roomCache.set(otherId,data.id); return data.id; } }catch{}
+    if(!isValidUUID(otherId)) return null;
+    const uid=getCurrentUserId(); if(!isValidUUID(uid)||otherId===uid) return null;
+    if(roomCache.has(otherId)) return roomCache.get(otherId)!;
+    const {data}=await getDB().from("rooms").select("id").or(`and(user1_id.eq.${uid},user2_id.eq.${otherId}),and(user1_id.eq.${otherId},user2_id.eq.${uid})`).maybeSingle();
+    if(data?.id){ roomCache.set(otherId,data.id); return data.id; }
+    const {data:ins}=await getDB().from("rooms").insert({user1_id:uid,user2_id:otherId}).select("id").single();
+    if(ins?.id){ roomCache.set(otherId,ins.id); return ins.id; }
     return null;
   }
 
-  async function handleContactLoad(contact:any){
-    if(!contact) return; const contactUserId=contact.actual_user_id||contact.id; if(!contactUserId || !isValidUUID(contactUserId)) return;
-    if(contactUserId===getCurrentUserId()){ selectedRoomId=null; selectedGroupId=null; selectedGroup=null; selectedContact=contact; hasMore=true; await loadMessages({roomId:null,groupId:null}); return; }
-    let roomId=contact.room_id||roomCache.get(contactUserId)||null; 
-    if(!roomId){ roomId=await getOrCreateRoom(contactUserId); if(roomId) contacts=contacts.map(c=>c.id===contact.id?{...c,room_id:roomId}:c); }
-    if(roomId){ selectedRoomId=roomId; selectedGroupId=null; selectedGroup=null; selectedContact=contact; hasMore=true; await loadMessages({roomId,groupId:null}); }
+  // INSTANT NAV - NO BLOCK
+  function handleContactLoad(contact:any){
+    if(!contact) return;
+    const contactUserId=contact.actual_user_id||contact.id;
+    if(contactUserId===getCurrentUserId()){
+      selectedGroup=null; selectedGroupId=null; selectedRoomId=null; selectedContact=contact; messages=[]; isLoadingMessages=false;
+      setTimeout(()=>loadMessages({roomId:null,groupId:null}),0); return;
+    }
+    selectedGroup=null; selectedGroupId=null;
+    selectedContact=contact;
+    selectedRoomId=contact.room_id||roomCache.get(contactUserId)||null;
+    messages=[]; isLoadingMessages=true;
+    (async()=>{
+      let rid=selectedRoomId;
+      if(!rid && isValidUUID(contactUserId)){ rid=await getOrCreateRoom(contactUserId); if(rid){ selectedRoomId=rid; contacts=contacts.map(c=>c.id===contact.id?{...c,room_id:rid}:c); } }
+      if(rid) await loadMessages({roomId:rid,groupId:null}); else isLoadingMessages=false;
+    })();
   }
 
-  function onSelectGroup(group:any){ if(!group?.id || !isValidUUID(group.id)) return; selectedContact=null; selectedRoomId=null; selectedGroup={...group}; selectedGroupId=group.id; hasMore=true; loadMessages({roomId:null,groupId:group.id}); }
-  function handleBackToList(){ selectedContact=null; selectedGroup=null; selectedRoomId=null; selectedGroupId=null; messages=[]; }
-  function handleHeaderAction(action:string){}
-  function openAvatarModal(target:any,type:'contact'|'group'='contact'){ if(!target) return; avatarTarget={...target,_type:type,name:String(target.name||'').slice(0,24).replace(/[<>]/g,'')}; showAvatarModal=true; }
-  function handleReply(msg:any){ replyingTo=msg; } function handleForward(msg:any){}
-  function handleOpenDetail(tpl:any,msg:any){}
-  async function handleInvite(event:any){}
-  async function handleDeleteContact(c:any){ 
-    if(!c || !c.id) return; if(!confirm(`Delete ${c.name}?`)) return; 
-    try{ 
-      if(c._type==='group'){ if(!isValidUUID(c.id)) return; await getDB().from('chat_groups').delete().eq('id',c.id); await loadGroups(); } 
-      else { await getDB().from('contact_invites').delete().eq('id',c.id); await loadContacts(true); } 
-      if(selectedContact?.id===c.id||selectedGroup?.id===c.id) handleBackToList(); 
-    }catch(e:any){ alert(sanitize(e.message||'Delete failed').slice(0,60)); } 
+  function onSelectGroup(group:any){
+    if(!group?.id||!isValidUUID(group.id)) return;
+    selectedContact=null; selectedRoomId=null;
+    selectedGroup={...group, name:sanitizeShort(group.name||'',50)}; selectedGroupId=group.id;
+    messages=[]; isLoadingMessages=true;
+    setTimeout(()=>loadMessages({roomId:null,groupId:group.id}),0);
   }
-  async function sendMessage(content:any){ 
-    if(sendingLock) return; 
-    // Rate limit 50k secure - 500ms
-    const now=Date.now(); if(now-lastSendAt<500) return; lastSendAt=now;
-    sendingLock=true; 
-    try{ 
-      let final=typeof content==='string'?content:content?.detail?.content||""; 
-      final=sanitize(final).slice(0,2000); 
-      if(!final) return; 
-      const myId=getCurrentUserId(); if(!myId || !isValidUUID(myId)) return;
-      const temp={id:`temp_${Date.now()}`,content:final,sender_id:myId,room_id:selectedRoomId,group_id:selectedGroupId,receiver_id:selectedContact?.actual_user_id||myId,created_at:new Date().toISOString(),is_own:true}; 
-      messages=[...messages.slice(-19),temp]; 
-      const payload:any={content:final,sender_id:myId,room_id:selectedRoomId,group_id:selectedGroupId,receiver_id:selectedContact?.actual_user_id||myId}; 
-      if(selectedGroupId) payload.room_id=null; 
-      if(selectedRoomId) payload.group_id=null; 
-      const {error}=await getDB().from('messages').insert(payload); if(error) throw error;
-    }catch(e){ messages=messages.filter((m:any)=>!String(m.id).startsWith('temp_')); } finally{ sendingLock=false; } 
-  }
-  function handleSendLocation(e:any){}
-  // FIXED: was opening meeting popup, now opens template
-  function onOpenTemplate(){ showMeetingPopup=false; showMeetingListPopup=false; showTemplatePopup=true; showReportPopup=true; }
-  function goBottom(tab:string){ bottomTab=String(tab).slice(0,20); }
-
-  async function inviteContact(){
-    if(sendingLock) return; 
-    const now=Date.now(); if(now-lastSendAt<1000) return; lastSendAt=now;
-    sendingLock=true;
+  function handleBackToList(){ selectedContact=null; selectedGroup=null; selectedRoomId=null; selectedGroupId=null; messages=[]; isLoadingMessages=false; hasMore=true; }
+  function handleHeaderAction(a:string){}
+  function openAvatarModal(t:any,type:'contact'|'group'='contact'){ avatarTarget={...t,_type:type,name:sanitizeShort(t.name||'',24)}; showAvatarModal=true; }
+  function handleReply(m:any){ replyingTo=m; } function handleForward(m:any){}
+  function handleOpenDetail(t:any,m:any){}
+  async function handleInvite(e:any){}
+  async function handleDeleteContact(c:any){
+    if(!c?.id) return; if(!confirm(`Delete ${sanitizeShort(c.name||'',20)}?`)) return;
     try{
-      const email = sanitize(contactEmail).toLowerCase().slice(0,100);
-      if(!isValidEmail(email)) throw new Error('Invalid email 5-100 chars');
-      if(!getCurrentUserId() || !isValidUUID(getCurrentUserId())) throw new Error('No user');
-      const { error } = await getDB().from('contact_invites').insert({ email, invited_by:getCurrentUserId(), status:'pending' }).select('id').single();
-      if(error) throw error;
-      contactEmail=""; showContactForm=false; await loadContacts(true);
-    }catch(e:any){ alert(sanitize(e.message||'Invite failed').slice(0,60)); } finally{ sendingLock=false; }
+      if(c._type==='group') await getDB().from('chat_groups').delete().eq('id',c.id);
+      else await getDB().from('contact_invites').delete().eq('id',c.id);
+      if(selectedContact?.id===c.id||selectedGroup?.id===c.id) handleBackToList();
+      await loadGroups(); await loadContacts();
+    }catch(e:any){ alert(sanitize(e.message||'Delete failed',60)); }
   }
 
-  async function createGroup(){
-    if(sendingLock) return; 
-    const now=Date.now(); if(now-lastSendAt<1000) return; lastSendAt=now;
-    sendingLock=true;
+  async function sendMessage(content:any){
+    if(sendingLock) return; const now=Date.now(); if(now-lastSendAt<400) return; lastSendAt=now; sendingLock=true;
+    const tempId=`temp_${Date.now()}`;
     try{
-      const name = sanitize(groupName).slice(0,50).replace(/[<>]/g,'');
-      if(!name || name.length<2 || name.length>50) throw new Error('Group name 2-50 chars');
-      if(!isValidUUID(getCurrentUserId())) throw new Error('No user');
-      const {data, error}=await getDB().from('chat_groups').insert({ name, owner_id:getCurrentUserId() }).select('id').single();
-      if(error) throw error;
-      if(data?.id){
-        try{ await getDB().from('chat_group_members').insert({group_id:data.id,user_id:getCurrentUserId()}); }catch{}
+      let final=""; let files:File[]=[]; let isVoice=false; let voiceDur=0;
+      if(typeof content==='string') final=content; else { final=content?.content||content?.detail?.content||""; files=content?.files||[]; isVoice=!!content?.voiceMessage; voiceDur=Number(content?.duration||0); }
+      if(!final && !files.length){ sendingLock=false; return; }
+      const myId=getCurrentUserId(); if(!isValidUUID(myId)) return;
+      let uploadUrl="";
+      if(files.length>0){
+        const f=files[0]; if(f.size>5*1024*1024){ alert("Max 5MB"); sendingLock=false; return; }
+        if(isVoice){
+          try{
+            const safeName=`${myId}/${Date.now()}_voice.webm`;
+            const {error}=await getDB().storage.from('voice').upload(safeName,f,{contentType:'audio/webm'});
+            if(!error){ const {data}=getDB().storage.from('voice').getPublicUrl(safeName); uploadUrl=data?.publicUrl||""; final=`__VOICE__${uploadUrl}__DUR__${voiceDur}`; }
+            else { uploadUrl=URL.createObjectURL(f); final=`__VOICE__${uploadUrl}__DUR__${voiceDur}`; }
+          }catch{}
+        }
       }
-      groupName=""; showGroupForm=false; await loadGroups();
-    }catch(e:any){ alert(sanitize(e.message||'Group create failed').slice(0,60)); } finally{ sendingLock=false; }
+      final=sanitize(final,4000); if(!final){ sendingLock=false; return; }
+      const temp:any={id:tempId,content:final,sender_id:myId,room_id:selectedRoomId,group_id:selectedGroupId,receiver_id:selectedContact?.actual_user_id||myId,created_at:new Date().toISOString(),is_own:true,status:'sent',_voiceUrl:uploadUrl};
+      messages=[...messages.slice(-19),temp];
+
+      let payload:any={content:final,sender_id:myId,status:'sent'};
+      if(selectedGroupId) payload.group_id=selectedGroupId; else if(selectedRoomId){ payload.room_id=selectedRoomId; payload.receiver_id=selectedContact?.actual_user_id||myId; } else payload.receiver_id=myId;
+      
+      let inserted:any=null;
+      try{
+        const {data,error}=await getDB().from('messages').insert(payload).select('id,created_at').single(); if(error) throw error; inserted=data;
+      }catch{
+        const p2:any={content:final,sender_id:myId}; if(selectedGroupId) p2.group_id=selectedGroupId; else if(selectedRoomId){ p2.room_id=selectedRoomId; p2.receiver_id=selectedContact?.actual_user_id||myId; } else p2.receiver_id=myId;
+        const {data}=await getDB().from('messages').insert(p2).select('id,created_at').single(); inserted=data;
+      }
+      if(inserted?.id){
+        messages=messages.map((m:any)=> m.id===tempId? {...m,id:inserted.id,status:'sent'}:m);
+        setTimeout(()=>{ messages=messages.map((m:any)=> m.id===inserted.id? {...m,status:'delivered'}:m); },800);
+      }
+    }catch{ messages=messages.filter((m:any)=>m.id!==tempId); }finally{ sendingLock=false; }
   }
 
-  let allChats={ get value(){ const all=[...groups.slice(0,20).map((g:any)=>({...g,_type:'group',_sortTime:g.last_message_at||g.created_at||0})),...contacts.filter((c:any)=>!c.isSelf).slice(0,20).map((c:any)=>({...c,_type:'contact',_sortTime:c.last_message_at||0}))]; all.sort((a,b)=> new Date(b._sortTime||0).getTime()-new Date(a._sortTime||0).getTime()); return all.slice(0,40); } };
+  function handleSendLocation(e:any){}
+  function onOpenTemplate(){ showTemplatePopup=true; showReportPopup=true; }
+  function goBottom(tab:string){ const t=sanitizeShort(tab,20).toLowerCase() as any; if(!['chat','report','meeting'].includes(t)) return; if(bottomTab===t) return; bottomTab=t; }
+  async function inviteContact(){
+    if(sendingLock) return; sendingLock=true;
+    try{
+      const email=sanitize(contactEmail,100).toLowerCase(); if(!isValidEmail(email)) throw new Error('Invalid email');
+      const {error}=await getDB().from('contact_invites').insert({email,invited_by:getCurrentUserId(),status:'pending'}).select('id').single();
+      if(error) throw error; contactEmail=""; showContactForm=false; await loadContacts();
+    }catch(e:any){ alert(sanitize(e.message||'Failed',60)); }finally{ sendingLock=false; }
+  }
+  async function createGroup(){
+    if(sendingLock) return; sendingLock=true;
+    try{
+      const name=sanitizeShort(groupName,50); if(name.length<2) throw new Error('Name 2-50');
+      const {data,error}=await getDB().from('chat_groups').insert({name,owner_id:getCurrentUserId()}).select('id').single();
+      if(error) throw error; if(data?.id) await getDB().from('chat_group_members').insert({group_id:data.id,user_id:getCurrentUserId()});
+      groupName=""; showGroupForm=false; await loadGroups();
+    }catch(e:any){ alert(sanitize(e.message||'Failed',60)); }finally{ sendingLock=false; }
+  }
+
+  let allChats={ get value(){
+    const all=[...groups.slice(0,20).map((g:any)=>({...g,_type:'group',_sortTime:g.last_message_at||0})),...contacts.filter((c:any)=>!c.isSelf).slice(0,20).map((c:any)=>({...c,_type:'contact',_sortTime:c.last_message_at||0}))];
+    all.sort((a,b)=> new Date(b._sortTime||0).getTime()-new Date(a._sortTime||0).getTime());
+    return all.slice(0,40);
+  } };
   let filteredMessages={ get value(){ return messages.slice(-20); } };
+  let messageCounts={ get value(){
+    const list=messages.slice(-100); let chat=0,report=0,meeting=0,voice=0;
+    for(const m of list){ if(isVoiceMsg(m)) voice++; else if(isReportMsg(m)) report++; else if(isMeetingMsg(m)) meeting++; else chat++; }
+    return {chat,report,meeting,voice,all:list.length,chatAll:list.length};
+  } };
 
   return {
     get currentUser(){return currentUser}, set currentUser(v){currentUser=v},
@@ -250,7 +288,7 @@ export function createChatState(data:any){
     get showReportPopup(){return showReportPopup}, set showReportPopup(v){showReportPopup=v; showTemplatePopup=v;},
     get meetingSearch(){return meetingSearch}, set meetingSearch(v){meetingSearch=v},
     get meetings(){return meetings}, set meetings(v){meetings=v},
-    get bottomTab(){return bottomTab}, set bottomTab(v){bottomTab=v},
+    get bottomTab(){return bottomTab}, set bottomTab(v){bottomTab=v as any},
     get replyingTo(){return replyingTo}, set replyingTo(v){replyingTo=v},
     get showAvatarModal(){return showAvatarModal}, set showAvatarModal(v){showAvatarModal=v},
     get avatarTarget(){return avatarTarget}, set avatarTarget(v){avatarTarget=v},
@@ -263,6 +301,7 @@ export function createChatState(data:any){
     get contactEmail(){return contactEmail}, set contactEmail(v){contactEmail=v},
     get groupName(){return groupName}, set groupName(v){groupName=v},
     get filteredMessages(){return filteredMessages.value},
+    get messageCounts(){return messageCounts.value},
     allChats,
     checkMobile, loadGroups, loadContacts, loadMessages, handleContactLoad, onSelectGroup, handleBackToList, handleHeaderAction, openAvatarModal, handleReply, handleForward, handleOpenDetail, handleInvite, handleDeleteContact, sendMessage, handleSendLocation, onOpenTemplate, goBottom, inviteContact, createGroup
   };

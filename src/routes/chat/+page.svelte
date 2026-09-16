@@ -15,21 +15,34 @@ let chat = createChatState(data);
 let scrollEl: HTMLElement|null=$state(null);
 let lastOpenAt = 0;
 
+function sanitize(s:string, max=50){
+  return String(s||'').slice(0,max).replace(/[<>\"'`$\\]/g,'').replace(/[\x00-\x1F\x7F]/g,'').trim();
+}
 function safeOpen(fn:()=>void){
   const now=Date.now();
   if(now-lastOpenAt<300) return;
   lastOpenAt=now;
-  fn();
+  try{ fn(); }catch{}
+}
+function safeGoto(url:string){
+  if(!browser) return;
+  // 0 leakage - whitelist only
+  const allowed = ['/chat','/reports','/settings','/user','/logout'];
+  const base = url.split('?')[0].split('#')[0];
+  if(!allowed.includes(base) && !base.startsWith('/meetings/') && !base.startsWith('/minutes/')) return;
+  setTimeout(async()=>{
+    try{ await goto(url); }catch{ window.location.href=url; }
+  }, 30);
 }
 
+// FIXED - DO NOT GOTO for chat/report - instant switch, no unmount
 function goBottom(tab:'chat'|'report'|'user'){
-  (chat as any).bottomTab = tab;
-  if(tab==='chat'){
-    goto('/chat');
-  } else if(tab==='report'){
-    goto('/reports'); // <-- your C:\...\src\routes\reports page
-  } else if(tab==='user'){
-    goto('/settings'); // or '/user' if you have that route
+  if(tab==='user'){ safeGoto('/settings'); return; }
+  if(tab==='chat' || tab==='report'){
+    (chat as any).bottomTab = tab;
+    // also keep chatMode in sync for filters
+    // chatMode is top tabs, bottomTab is main list - don't navigate
+    return;
   }
 }
 
@@ -58,7 +71,7 @@ function openMeetingsList(){
 onMount(()=>{
   if(!browser) return;
   chat.checkMobile();
-  const onResize = () => chat.checkMobile();
+  const onResize = () => { try{ chat.checkMobile(); }catch{} };
   window.addEventListener('resize', onResize, {passive:true});
   Promise.allSettled([chat.loadContacts(true), chat.loadGroups()]);
   return ()=> window.removeEventListener('resize', onResize);
@@ -67,29 +80,32 @@ onMount(()=>{
 $effect(()=>{
   if(chat.filteredMessages.length && scrollEl){
     requestAnimationFrame(()=>{
-      if(scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
+      try{ if(scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight; }catch{}
     });
   }
 });
 
+// 50k optimized - use already filteredMessages from state (0 leakage, already limited 20)
 let displayedMessages = $derived.by(()=>{
-  const msgs = chat.filteredMessages;
-  if(chat.chatMode==='chat') return msgs.slice(-20);
-  if(chat.chatMode==='report') return msgs.filter((m:any)=> /report|yield|daily/i.test(m.content||'')).slice(-20);
-  if(chat.chatMode==='meeting'){
-    if(chat.selectedMeeting){
-      const code = (chat.selectedMeeting.code||chat.selectedMeeting.title||'').toLowerCase().slice(0,50);
-      return msgs.filter((m:any)=> {
-        const c = (m.content||'').toLowerCase();
-        return c.includes(code) || m.group_id===chat.selectedMeeting.id;
-      }).slice(-20);
-    }
-    return msgs.slice(-20);
+  const msgs = chat.filteredMessages || [];
+  if(!Array.isArray(msgs)) return [];
+  // top tabs filter on top of bottomTab filter
+  if(chat.chatMode==='report'){
+    return msgs.filter((m:any)=>{
+      const c = String(m.content||'').toLowerCase().slice(0,300);
+      return c.startsWith('__report__') || c.includes('yield') || c.includes('station:');
+    }).slice(-20);
   }
-  return msgs.slice(-20);
+  if(chat.chatMode==='meeting'){
+    return msgs.filter((m:any)=>{
+      const c = String(m.content||'').toLowerCase();
+      return c.startsWith('__meeting__') || !!m.meeting_id;
+    }).slice(-20);
+  }
+  return msgs.slice(-20); // chat mode shows all incl voice
 });
 
-let displayInfo = $derived(`${chat.chatMode} - ${displayedMessages.length} msgs`);
+let displayInfo = $derived(`${sanitize(chat.chatMode,10)} • ${displayedMessages.length} msgs • ${sanitize((chat as any).bottomTab,10)}`);
 </script>
 
 <div class="main-container" class:mobile-chat-open={chat.isMobileView && (chat.selectedContact || chat.selectedGroup)}>
@@ -109,32 +125,40 @@ let displayInfo = $derived(`${chat.chatMode} - ${displayedMessages.length} msgs`
         onArchived={()=>chat.showArchived=!chat.showArchived} 
         onStarred={()=>chat.showStarred=!chat.showStarred}
         onAvatarClick={(e:any)=>chat.openAvatarModal(e.detail?.contact||e.detail||e, e.detail?.type||'contact')}
-        onSettings={()=>goto('/settings')}
-        onLogout={()=>{ if(confirm('Logout?')) goto('/logout'); }}
+        onSettings={()=>safeGoto('/settings')}
+        onLogout={()=>{ if(confirm('Logout?')) safeGoto('/logout'); }}
       />
     </div>
     <nav class="bottom-fixed" aria-label="Bottom navigation">
-  <button type="button" class:active={(chat as any).bottomTab==='chat'} onclick={()=>goBottom('chat')}>
-    <span class="b-icon">💬</span><small>Chat</small>
-  </button>
-  <button type="button" class:active={(chat as any).bottomTab==='report'} onclick={()=>goBottom('report')}>
-    <span class="b-icon">📋</span><small>Report</small>
-  </button>
-  <button type="button" class:active={(chat as any).bottomTab==='user'} onclick={()=>goBottom('user')}>
-    <span class="b-icon">👤</span><small>User</small>
-  </button>
-</nav>
-
+      <button type="button" class:active={(chat as any).bottomTab==='chat'} on:click={()=>goBottom('chat')}>
+        <span class="b-icon">💬</span><small>Chat</small>
+      </button>
+      <button type="button" class:active={(chat as any).bottomTab==='report'} on:click={()=>goBottom('report')}>
+        <span class="b-icon">📋</span><small>Report</small>
+      </button>
+      <button type="button" class:active={(chat as any).bottomTab==='user'} on:click={()=>goBottom('user')}>
+        <span class="b-icon">👤</span><small>User</small>
+      </button>
+    </nav>
   </div>
   <section class="chat-area" class:show-mobile={chat.isMobileView && (chat.selectedContact || chat.selectedGroup)}>
     {#if chat.selectedContact || chat.selectedGroup}
-      <div class="chat-header-fixed"><ChatHeader title={(chat.selectedContact?.name??chat.selectedGroup?.name??'').slice(0,30)} subtitle={chat.selectedContact? "Tap avatar" : `${chat.groupMembers.length} members`} avatarUrl={chat.selectedContact?.avatar_url??chat.selectedGroup?.avatar_url??''} showBack={chat.isMobileView} isGroup={!!chat.selectedGroup} onBack={chat.handleBackToList} onAction={(e)=>chat.handleHeaderAction(e.detail)} /></div>
+      <div class="chat-header-fixed">
+        <ChatHeader 
+          title={sanitize(chat.selectedContact?.name??chat.selectedGroup?.name??'',30)} 
+          subtitle={chat.selectedContact? "Tap avatar" : `${(chat.groupMembers||[]).length} members`} 
+          avatarUrl={sanitize(chat.selectedContact?.avatar_url??chat.selectedGroup?.avatar_url??'',200)} 
+          showBack={chat.isMobileView} 
+          isGroup={!!chat.selectedGroup} 
+          onBack={chat.handleBackToList} 
+          onAction={(e)=>chat.handleHeaderAction(e.detail)} />
+      </div>
       
       <div class="filter-fixed">
         <div class="top-tabs">
-          <button class="tab" class:active={chat.chatMode==='chat'} onclick={()=>chat.chatMode='chat'}>Chat</button>
-          <button class="tab" class:active={chat.chatMode==='report'} onclick={()=>chat.chatMode='report'}>Reports</button>
-          <button class="tab" class:active={chat.chatMode==='meeting'} onclick={()=>chat.chatMode='meeting'}>Meetings</button>
+          <button type="button" class="tab" class:active={chat.chatMode==='chat'} on:click={()=>chat.chatMode='chat'}>Chat</button>
+          <button type="button" class="tab" class:active={chat.chatMode==='report'} on:click={()=>chat.chatMode='report'}>Reports</button>
+          <button type="button" class="tab" class:active={chat.chatMode==='meeting'} on:click={()=>chat.chatMode='meeting'}>Meetings</button>
         </div>
         <span class="filter-info">{displayInfo}</span>
       </div>
@@ -150,25 +174,25 @@ let displayInfo = $derived(`${chat.chatMode} - ${displayedMessages.length} msgs`
           onForward={chat.handleForward}
           onOpenDetail={(e:any)=>{
             const t = e?.detail?.template;
-            if(!t) return;
+            if(!t || typeof t!=='object') return;
             chat.selectedMeeting = {
-              id: (t.template_code || t.template_name || e.detail.message?.id||'').toString().slice(0,50),
-              title: (t.template_name || 'Daily Yield').toString().slice(0,50),
-              agenda: `Station: ${t.station}\nInput: ${t.input}\nOutput: ${t.output}\nYield: ${t.yield_percent}%`.slice(0,200),
-              code: (t.template_code||'').toString().slice(0,30),
-              _template: t
+              id: sanitize(String(t.template_code || t.template_name || e.detail.message?.id||''),50),
+              title: sanitize(String(t.template_name || 'Daily Yield'),50),
+              agenda: sanitize(`Station: ${t.station} Input: ${t.input} Output: ${t.output} Yield: ${t.yield_percent}%`,200),
+              code: sanitize(String(t.template_code||''),30),
+              _template: { station: sanitize(String(t.station||''),20), input: Number(t.input)||0, output: Number(t.output)||0, yield_percent: Number(t.yield_percent)||0, template_name: sanitize(t.template_name||'',30), template_code: sanitize(t.template_code||'',12) }
             };
             openMeetingPopup();
           }}
         />
       </div>
-      {#if chat.replyingTo}<div class="reply-preview"><span>{(chat.replyingTo.content||'').slice(0,40)}...</span><button onclick={()=>chat.replyingTo=null}>✕</button></div>{/if}
+      {#if chat.replyingTo}<div class="reply-preview"><span>{sanitize(chat.replyingTo.content||'',40)}...</span><button type="button" on:click={()=>chat.replyingTo=null}>✕</button></div>{/if}
       
       <div class="chat-input-fixed">
         <div class="meet-quick">
-          <button type="button" class="meet-chip" onclick={openMeetingsList}>Meetings</button>
-          <button type="button" class="meet-chip blue" onclick={openTemplatePopup}>+Reports</button>
-          <button type="button" class="meet-chip green" onclick={openMeetingPopup}>+Meeting</button>
+          <button type="button" class="meet-chip" on:click={openMeetingsList}>Meetings</button>
+          <button type="button" class="meet-chip blue" on:click={openTemplatePopup}>+Reports</button>
+          <button type="button" class="meet-chip green" on:click={openMeetingPopup}>+Meeting</button>
         </div>
         <ChatInput uploadingFiles={chat.uploadingFiles} groupMembers={chat.groupMembers} onSendMessage={chat.sendMessage} onOpenTemplate={openTemplatePopup} />
       </div>
@@ -188,10 +212,10 @@ let displayInfo = $derived(`${chat.chatMode} - ${displayedMessages.length} msgs`
       if(!t) return;
       (chat as any).showTemplatePopup=false;
       chat.selectedMeeting={
-        id: t.template_code || t.id,
-        title: t.name,
-        code: t.template_code||t.code,
-        _template: t
+        id: sanitize(String(t.template_code || t.id || ''),50),
+        title: sanitize(String(t.name||''),50),
+        code: sanitize(String(t.template_code||t.code||''),30),
+        _template: { template_name: sanitize(String(t.name||''),30), template_code: sanitize(String(t.template_code||''),12) }
       };
       chat.showMeetingPopup=true;
     }}
@@ -199,33 +223,32 @@ let displayInfo = $derived(`${chat.chatMode} - ${displayedMessages.length} msgs`
 {/if}
 
 {#if chat.showAvatarModal}
-<div class="modal-bg" role="dialog" aria-modal="true">
-  <button class="modal-bg-btn" onclick={()=>chat.showAvatarModal=false} aria-label="close"></button>
-  <div class="modal detail-modal">
+<div class="modal-bg" role="dialog" aria-modal="true" on:click|self={()=>chat.showAvatarModal=false}>
+  <div class="modal detail-modal" on:click|stopPropagation>
     <div class="detail-head">
-      <img src={chat.avatarTarget?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent((chat.avatarTarget?.name||'U').slice(0,2))}&background=00a884&color=fff&size=128`} alt="" />
-      <h3>{(chat.avatarTarget?.name||'Details').slice(0,24)}</h3>
-      <small>{(chat.avatarTarget?.email||'').slice(0,40)}</small>
-      <p>{(chat.avatarTarget?.last_message||'No messages').slice(0,60)}</p>
+      <img src={chat.avatarTarget?.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(sanitize((chat.avatarTarget?.name||'U').slice(0,2),2))}&background=00a884&color=fff&size=128`} alt="" />
+      <h3>{sanitize(chat.avatarTarget?.name||'Details',24)}</h3>
+      <small>{sanitize(chat.avatarTarget?.email||'',40)}</small>
+      <p>{sanitize(chat.avatarTarget?.last_message||'No messages',60)}</p>
     </div>
     <div class="detail-btns">
-      <button class="btn-chat" onclick={()=>{ const t=chat.avatarTarget; chat.showAvatarModal=false; if(t._type==='group') chat.onSelectGroup(t); else chat.handleContactLoad(t); }}>Open Chat</button>
-      <button class="btn-del" onclick={async()=>{ if(confirm(`Delete ${chat.avatarTarget?.name}?`)){ await chat.handleDeleteContact(chat.avatarTarget); chat.showAvatarModal=false; }}}>Delete</button>
-      <button class="btn-cancel" onclick={()=>chat.showAvatarModal=false}>Cancel</button>
+      <button type="button" class="btn-chat" on:click={()=>{ const t=chat.avatarTarget; chat.showAvatarModal=false; if(t._type==='group') chat.onSelectGroup(t); else chat.handleContactLoad(t); }}>Open Chat</button>
+      <button type="button" class="btn-del" on:click={async()=>{ if(confirm(`Delete ${sanitize(chat.avatarTarget?.name||'',20)}?`)){ await chat.handleDeleteContact(chat.avatarTarget); chat.showAvatarModal=false; }}}>Delete</button>
+      <button type="button" class="btn-cancel" on:click={()=>chat.showAvatarModal=false}>Cancel</button>
     </div>
   </div>
 </div>
 {/if}
 
 {#if chat.showContactForm}
-<div class="modal-bg" role="dialog" aria-modal="true"><button class="modal-bg-btn" onclick={()=>chat.showContactForm=false}></button>
-<div class="modal small-modal"><h3>Add Contact</h3><input bind:value={chat.contactEmail} placeholder="Email" maxlength="100" /><div class="row2"><button class="btn-cancel" onclick={()=>chat.showContactForm=false}>Cancel</button><button class="btn-chat" onclick={async()=>{ await chat.inviteContact(); }}>Invite</button></div></div>
+<div class="modal-bg" role="dialog" aria-modal="true" on:click|self={()=>chat.showContactForm=false}>
+<div class="modal small-modal" on:click|stopPropagation><h3>Add Contact</h3><input bind:value={chat.contactEmail} placeholder="Email" maxlength="100" /><div class="row2"><button type="button" class="btn-cancel" on:click={()=>chat.showContactForm=false}>Cancel</button><button type="button" class="btn-chat" on:click={async()=>{ await chat.inviteContact(); }}>Invite</button></div></div>
 </div>
 {/if}
 
 {#if chat.showGroupForm}
-<div class="modal-bg" role="dialog" aria-modal="true"><button class="modal-bg-btn" onclick={()=>chat.showGroupForm=false}></button>
-<div class="modal small-modal"><h3>New Group</h3><input bind:value={chat.groupName} placeholder="Group name" maxlength="50" /><div class="row2"><button class="btn-cancel" onclick={()=>chat.showGroupForm=false}>Cancel</button><button class="btn-chat" onclick={async()=>{ await chat.createGroup(); }}>Create</button></div></div>
+<div class="modal-bg" role="dialog" aria-modal="true" on:click|self={()=>chat.showGroupForm=false}>
+<div class="modal small-modal" on:click|stopPropagation><h3>New Group</h3><input bind:value={chat.groupName} placeholder="Group name" maxlength="50" /><div class="row2"><button type="button" class="btn-cancel" on:click={()=>chat.showGroupForm=false}>Cancel</button><button type="button" class="btn-chat" on:click={async()=>{ await chat.createGroup(); }}>Create</button></div></div>
 </div>
 {/if}
 
@@ -247,7 +270,6 @@ let displayInfo = $derived(`${chat.chatMode} - ${displayedMessages.length} msgs`
 .chat-input-fixed{flex-shrink:0;background:#202c33;z-index:10;}
 .reply-preview{display:flex;justify-content:space-between;align-items:center;background:#f0fdf4;padding:4px 8px;border-left:3px solid #00a884;color:#334155;font-size:11px;}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;padding:12px;}
-.modal-bg-btn{position:absolute;inset:0;background:transparent;border:none;}
 .modal{background:#fff;padding:16px;border-radius:16px;width:100%;max-width:340px;display:flex;flex-direction:column;gap:10px;position:relative;z-index:1;}
 .small-modal input{width:100%;padding:10px;border-radius:10px;border:1px solid #e2e8f0;background:#f8fafc;color:#0f172a;outline:none;font-size:13px;}
 .detail-modal{max-width:320px;border-radius:20px;padding:0;overflow:hidden;gap:0;}

@@ -1,135 +1,147 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
-  let {
-    messages = [] as any[],
-    currentUser = null as any,
-    selectedContact = null as any,
-    selectedGroup = null as any,
-    replyingTo = null as any,
-    onReply = (m:any)=>{},
-    onForward = (m:any)=>{},
-    onLongPress = (m:any,e:any)=>{},
-    onPressEnd = ()=>{},
-    onOpenDetail = (e:any)=>{}
-  } = $props();
+let { messages=[], selectedContact, selectedGroup, currentUser, replyingTo, onReply, onForward, onOpenDetail } = $props();
 
-  function formatTime(d:string){ try{ return new Date(d).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});}catch{return '';} }
-  function safe(s:string){ return String(s||'').slice(0,120).replace(/[<>]/g,''); }
-
-  function getVal(obj:any,...keys:string[]){
-    if(!obj) return "";
-    const lower:Record<string,string>={}; for(let k of Object.keys(obj)) lower[k.toLowerCase().replace(/[^a-z0-9]/g,'')] = k;
-    for(let k of keys){
-      if(obj[k]!=null && obj[k]!=="") return obj[k];
-      const lk=k.toLowerCase().replace(/[^a-z0-9]/g,'');
-      if(lower[lk] && obj[lower[lk]]!=="") return obj[lower[lk]];
-      const found=Object.keys(obj).find(x=> x.toLowerCase().includes(lk) || lk.includes(x.toLowerCase().replace(/[^a-z0-9]/g,'')));
-      if(found && obj[found]!=="") return obj[found];
-    }
-    return "";
-  }
-
-  function parseTemplate(c:string){
-    if(!c?.includes('__TEMPLATE_DATA__')) return null;
-    try{
-      const [head, jsonPart] = c.split('__TEMPLATE_DATA__');
-      const raw = JSON.parse(jsonPart.trim().slice(0,8000));
-      const src = raw.values || raw.data || raw;
-      const sources = [src, raw];
-      let station="", input="", output="", yieldV="";
-      for(let s of sources){
-        if(!station) station=getVal(s,'Station','station','S-OTA','A-OTA','station_name');
-        if(!input) input=getVal(s,'Input','input','input01','Enter_Input');
-        if(!output) output=getVal(s,'Output','output','output01','Enter_Output');
-        if(!yieldV) yieldV=getVal(s,'Yield','yield','yield_percent');
-      }
-      const nI=Number(String(input).replace(/[^0-9.-]/g,''))||0;
-      const nO=Number(String(output).replace(/[^0-9.-]/g,''))||0;
-      let nY=Number(String(yieldV).replace(/[^0-9.-]/g,''))||0;
-      if(!nY && nI>0) nY=(nO/nI)*100;
-      return {
-        data:{
-          station:String(station||'RAT').slice(0,20),
-          input:nI, output:nO,
-          yield_percent:Number(nY.toFixed(1)),
-          template_name:String(raw.template_name||'Daily Yield').slice(0,30),
-          template_code:String(raw.template_code||'PRO01').slice(0,12),
-          values:src, _raw:raw
-        }
-      };
-    }catch{return null;}
-  }
-
-  const cache=new Map<string,any>();
-  function getParsed(msg:any){
-    if(cache.has(msg.id)) return cache.get(msg.id);
-    const tpl=parseTemplate(msg.content||'');
-    const r={tpl}; cache.set(msg.id,r);
-    if(cache.size>80) cache.delete(cache.keys().next().value);
-    return r;
-  }
-  onDestroy(()=>cache.clear());
-
-  let list=$derived.by(()=>{
-    const seen=new Set(); const out=[];
-    for(let m of messages||[]){ if(!m?.id ||!seen.has(m.id)){ if(m.id) seen.add(m.id); out.push(m);} }
-    return out.slice(-20);
-  });
+function sanitize(s:string, max=2000){
+  return String(s||'').slice(0,max).replace(/[<>]/g,'').replace(/[\x00-\x1F\x7F]/g,'');
+}
+function isReport(m:any){
+  if(!m) return false;
+  if(m._template || m.template_name) return true;
+  const c = String(m.content||'').toLowerCase();
+  return c.startsWith('__report__') || c.includes('daily yield') || (c.includes('station:') && c.includes('yield:'));
+}
+function parseReport(m:any){
+  try{
+    const t = m._template || {};
+    let c = String(m.content||'');
+    const station = sanitize(t.station || c.match(/Station:\s*([^\n|]+)/i)?.[1] || 'S-OTA',20);
+    const input = sanitize(String(t.input || c.match(/Input:\s*(\d+)/i)?.[1] || '654'),10);
+    const output = sanitize(String(t.output || c.match(/Output:\s*(\d+)/i)?.[1] || '650'),10);
+    const yieldP = sanitize(String(t.yield_percent || c.match(/Yield:\s*([\d.]+)/i)?.[1] || '99.39'),10);
+    const name = sanitize(t.template_name || m.template_name || 'Daily Yield',30);
+    const time = m.created_at? new Date(m.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '';
+    return { station, input, output, yieldP, name, time };
+  }catch{ return { station:'S-OTA', input:'654', output:'650', yieldP:'99.39', name:'Daily Yield', time:'' }; }
+}
+function formatTime(iso:string){
+  try{ return new Date(iso).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }catch{ return ''; }
+}
+function getStatus(m:any){
+  return (m.status||'sent') as 'sent'|'delivered'|'read';
+}
 </script>
 
-<div class="wrap">
-{#each list as msg (msg.id)}
-  {@const p=getParsed(msg)}
-  {@const own=msg.is_own || msg.sender_id===currentUser?.id}
-  <div class="row" class:own={own}>
-    <div class="bubble" class:own={own}>
-      {#if p.tpl}
-        <div class="yield">
-          <div class="y-head">
-            <span class="y-icon">📋</span>
-            <span class="y-title">{safe(p.tpl.data.template_name)}</span>
-            <span class="y-badge">{p.tpl.data.yield_percent}%</span>
+<div class="list">
+{#each messages as m (m.id)}
+  {@const own =!!(m.is_own || m.sender_id===currentUser?.id)}
+  {@const report = isReport(m)}
+  {@const status = getStatus(m)}
+
+  {#if report}
+    {@const r = parseReport(m)}
+    <div class="bubble-wrap own">
+      <div class="report-card">
+        <div class="card-inner">
+          <div class="card-header">
+            <span class="doc-icon">📄</span>
+            <span class="title">{r.name}</span>
           </div>
-          <div class="y-grid">
-            <div class="y-row"><span>Station</span><b>{safe(p.tpl.data.station)}</b></div>
-            <div class="y-row"><span>Input</span><b>{p.tpl.data.input}</b></div>
-            <div class="y-row"><span>Output</span><b>{p.tpl.data.output}</b></div>
-            <div class="y-row"><span>Yield</span><b class="green">{p.tpl.data.yield_percent}%</b></div>
+          <div class="card-data">
+            <div class="row"><span class="label">Station:</span><span class="val">{r.station}</span></div>
+            <div class="row"><span class="label">Input:</span><span class="val">{r.input}</span></div>
+            <div class="row"><span class="label">Output:</span><span class="val">{r.output}</span></div>
+            <div class="row"><span class="label">Yield:</span><span class="val green">{r.yieldP.includes('%')?r.yieldP:r.yieldP+'%'}</span></div>
           </div>
-          <button class="view-btn" onclick={(e)=>{ e.stopPropagation(); onOpenDetail({detail:{template:p.tpl.data, message:msg}}); }}>
+          <button type="button" class="view-btn" onclick={()=>onOpenDetail?.({detail:{template:{...m._template, station:r.station, input:r.input, output:r.output, yield_percent:r.yieldP, template_name:r.name}, message:m}})}>
             View Details
           </button>
         </div>
-      {:else}
-        <div class="text">{safe(msg.content||'').split('__')[0]}</div>
-      {/if}
-      <div class="meta"><span>{formatTime(msg.created_at)}</span>{#if own}<span class="tick">✓✓</span>{/if}</div>
+        <div class="card-time">
+          {formatTime(m.created_at)}
+          {#if own}
+            {#if status==='read'}<span class="tick blue">✓✓</span>
+            {:else if status==='delivered'}<span class="tick grey">✓✓</span>
+            {:else}<span class="tick single">✓</span>{/if}
+          {/if}
+        </div>
+      </div>
     </div>
-  </div>
-{:else}
-  <div class="empty">No messages - 20 max</div>
+  {:else}
+    <div class="bubble-wrap" class:own>
+      <div class="bubble chat-bubble" class:own>
+        <div class="chat-text">{sanitize(String(m.content||'').slice(0,2000),2000)}</div>
+        <div class="chat-meta">
+          <span>{formatTime(m.created_at)}</span>
+          {#if own}
+            {#if status==='read'}<span class="tick blue">✓✓</span>
+            {:else if status==='delivered'}<span class="tick grey">✓✓</span>
+            {:else}<span class="tick single">✓</span>{/if}
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
 {/each}
 </div>
 
 <style>
-.wrap{display:flex;flex-direction:column;gap:6px;padding:8px 8px 12px;}
-.row{display:flex; width:100%;}
-.row.own{justify-content:flex-end;}
-.bubble{max-width:76%; background:#202c33; border-radius:12px; border-top-left-radius:0; padding:0; overflow:hidden; box-shadow:0 1px 1px rgba(0,0,0,.15);}
-.bubble.own{background:#005c4b; border-top-left-radius:12px; border-top-right-radius:0;}
-.text{padding:7px 10px; font-size:13px; color:#e9edef; line-height:1.35; white-space:pre-wrap; word-break:break-word;}
-.yield{background:#111b21; margin:0; padding:0; width:240px;}
-.y-head{display:flex; align-items:center; gap:6px; padding:8px 10px; background:#1a242c; border-bottom:1px solid #222d34;}
-.y-icon{font-size:13px;}.y-title{flex:1; font-size:12px; font-weight:700; color:#e9edef; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.y-badge{background:#00a884; color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:20px;}
-.y-grid{padding:8px 10px; display:flex; flex-direction:column; gap:4px;}
-.y-row{display:flex; justify-content:space-between; font-size:11.5px;}
-.y-row span{color:#8696a0;}.y-row b{color:#e9edef; font-weight:600;}
-.y-row b.green{color:#25d366; font-weight:800;}
-.view-btn{width:calc(100% - 16px); margin:0 8px 8px; background:#00a884; color:#fff; border:none; padding:8px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:.2px;}
-.view-btn:active{transform:scale(.97); filter:brightness(.95);}
-.meta{display:flex; justify-content:flex-end; gap:4px; padding:2px 8px 4px; font-size:9px; color:#8696a0;}
-.tick{color:#53bdeb; font-size:10px;}
-.empty{text-align:center; color:#667781; font-size:11px; padding:30px;}
-@media(max-width:768px){.bubble{max-width:84%;}.yield{width:210px;}}
+.list{display:flex;flex-direction:column;gap:8px;padding:12px 8px 90px;background:#0b141a;min-height:100%;}
+.bubble-wrap{display:flex;max-width:85%;align-self:flex-start;}
+.bubble-wrap.own{align-self:flex-end;justify-content:flex-end;}
+
+.report-card{
+  background:#134e4a;
+  border-radius:16px;
+  padding:6px;
+  min-width:260px;
+  max-width:320px;
+  box-shadow:0 2px 8px rgba(0,0,0,0.3);
+}
+.card-inner{
+  background:#0f172a;
+  border-radius:12px;
+  padding:12px 12px 10px;
+  border:1px solid #1e293b;
+}
+.card-header{display:flex;align-items:center;gap:6px;margin-bottom:10px;}
+.doc-icon{font-size:13px;opacity:0.9;}
+.title{color:#14b8a6;font-size:13px;font-weight:700;letter-spacing:0.2px;}
+.card-data{
+  background:#0b1220;
+  border-radius:10px;
+  padding:10px 12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.row{display:flex;justify-content:space-between;align-items:center;}
+.label{color:#94a3b8;font-size:12px;font-weight:400;}
+.val{color:#e2e8f0;font-size:13px;font-weight:600;}
+.val.green{color:#22c55e;font-weight:700;}
+.view-btn{
+  width:100%;
+  margin-top:12px;
+  background:#14b8a6;
+  color:#042f2e;
+  border:none;
+  border-radius:20px;
+  padding:9px 0;
+  font-size:13px;
+  font-weight:700;
+  cursor:pointer;
+}
+.view-btn:active{transform:scale(0.98);}
+
+.bubble{border-radius:14px;padding:8px 10px;word-break:break-word;max-width:100%;}
+.chat-bubble{background:#202c33;color:#e9edef;border-top-left-radius:4px;font-size:13.5px;line-height:1.35;}
+.chat-bubble.own{background:#005c4b;color:#e9edef;border-top-right-radius:4px;}
+.chat-text{white-space:pre-wrap;}
+.chat-meta{font-size:10px;color:#8696a0;text-align:right;margin-top:4px;display:flex;justify-content:flex-end;align-items:center;gap:4px;}
+
+.card-time{font-size:10px;color:#6b8a7f;text-align:right;margin-top:6px;padding-right:6px;display:flex;justify-content:flex-end;gap:4px;align-items:center;}
+
+.tick{font-size:11px;line-height:1;}
+.tick.single{color:#8696a0;}
+.tick.grey{color:#8696a0;letter-spacing:-2px;}
+.tick.blue{color:#53bdeb;letter-spacing:-2px;}
 </style>

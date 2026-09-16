@@ -24,6 +24,7 @@
     let showEmojiPicker = $state(false);
     let showAttachMenu = $state(false);
     let sendingLoc = $state(false);
+    let lastSend = 0;
 
     const emojis = ["😀","😃","😄","😁","😂","😊","😍","❤️","👍","👏","🙏","💪","🔥","✅","📌"];
 
@@ -38,45 +39,53 @@
     function clearTimer(){ if(recordingTimer){ clearInterval(recordingTimer); recordingTimer=null; } }
     function startTimer(){ clearTimer(); recordingSeconds=0; recordingTimer=setInterval(()=>{ recordingSeconds+=1; if(recordingSeconds>=120) stopVoiceRecording(); },1000); }
     function getMime(){ if(typeof MediaRecorder!=="undefined"){ if(MediaRecorder.isTypeSupported("audio/mp4;codecs=mp4a")) return "audio/mp4;codecs=mp4a"; if(MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) return "audio/webm;codecs=opus"; } return ""; }
-    function blobToBase64(blob:Blob):Promise<string>{ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result as string); r.onerror=rej; r.readAsDataURL(blob); }); }
-
+    function sanitize(s:string, max=600){ return String(s||'').trim().slice(0,max).replace(/[<>\"'`$\\]/g,'').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g,'').trim(); }
+    
     function chooseEmoji(){ if(sending||isRecording) return; showEmojiPicker=!showEmojiPicker; showAttachMenu=false; }
     function insertEmoji(e:string){ text=`${text}${e}`.slice(0,600); }
-    function send(){ const msg=text.trim().slice(0,600); if((!msg && selectedFiles.length===0)||sending||isRecording) return; onSendMessage?.({ content: msg, files: selectedFiles }); text=""; selectedFiles=[]; if(fileInput) fileInput.value=""; showEmojiPicker=false; showAttachMenu=false; }
+    
+    function send(){
+      const now = Date.now(); if(now - lastSend < 500) return; lastSend = now;
+      const msg = sanitize(text, 600);
+      if((!msg && selectedFiles.length===0) || sending || isRecording) return;
+      try{ 
+        // FIXED: if files, send as object for chatState to upload
+        if(selectedFiles.length>0){
+          onSendMessage?.({ content: msg || "__FILE__", files: selectedFiles });
+        } else {
+          onSendMessage?.(msg);
+        }
+      }catch(e){ console.error(e); }
+      text=""; selectedFiles=[]; 
+      if(fileInput) fileInput.value=""; if(imageInput) imageInput.value=""; if(videoInput) videoInput.value=""; if(docInput) docInput.value="";
+      showEmojiPicker=false; showAttachMenu=false;
+    }
     function keyDown(e:KeyboardEvent){ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); send(); } }
-
     function toggleAttachMenu(){ if(sending||isRecording) return; showAttachMenu=!showAttachMenu; showEmojiPicker=false; }
     function closeMenus(){ showAttachMenu=false; showEmojiPicker=false; }
     function chooseImage(){ imageInput?.click(); showAttachMenu=false; }
     function chooseVideo(){ videoInput?.click(); showAttachMenu=false; }
     function chooseDoc(){ docInput?.click(); showAttachMenu=false; }
-    function chooseAttachment(){ fileInput?.click(); showAttachMenu=false; }
-
-    function handleFileSelect(e:Event, type:string){
-        const t=e.target as HTMLInputElement;
-        const files=Array.from(t.files||[]);
-        if(!files.length) return;
-        const valid=files.filter(f=>f.size<=5*1024*1024).slice(0,3);
-        if(valid.length!==files.length) alert("Max 5MB, 3 files");
-        selectedFiles=[...selectedFiles,...valid].slice(0,3);
-        t.value="";
+    function handleFileSelect(e:Event){
+        const t=e.target as HTMLInputElement; const files=Array.from(t.files||[]); if(!files.length) return;
+        const valid=files.filter(f=>f.size<=5*1024*1024 && f.name.length<=100).slice(0,3);
+        if(valid.length!==files.length) alert("Max 5MB, 3 files"); selectedFiles=[...selectedFiles,...valid].slice(0,3); t.value="";
     }
     function removeFile(i:number){ selectedFiles=selectedFiles.filter((_,idx)=>idx!==i); }
-
     async function sendLocation(){
-        showAttachMenu=false;
-        if(sending||isRecording||sendingLoc) return;
-        if(!navigator.geolocation){ alert("Location not supported"); return; }
+        showAttachMenu=false; if(sending||isRecording||sendingLoc) return; if(!navigator.geolocation){ alert("Location not supported"); return; }
         sendingLoc=true;
         try{
             const pos:any=await new Promise((res,rej)=>navigator.geolocation.getCurrentPosition(res,rej,{enableHighAccuracy:true,timeout:8000}));
-            onSendLocation?.({detail:{latitude:pos.coords.latitude, longitude:pos.coords.longitude, url:`https://maps.google.com/?q=${pos.coords.latitude},${pos.coords.longitude}`}});
-        }catch(err:any){ alert("Location failed"); } finally{ sendingLoc=false; }
+            const lat=Number(pos.coords.latitude); const lng=Number(pos.coords.longitude);
+            if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180) throw new Error('Invalid');
+            onSendLocation?.({detail:{latitude:lat, longitude:lng, url:`https://maps.google.com/?q=${lat},${lng}`}});
+        }catch{ alert("Location failed"); } finally{ sendingLoc=false; }
     }
 
+    // FIXED VOICE - no truncated base64, send as File
     async function startVoice(){
-        if(sending) return;
-        if(isRecording){ stopVoiceRecording(); return; }
+        if(sending) return; if(isRecording){ stopVoiceRecording(); return; }
         if(!navigator.mediaDevices?.getUserMedia){ alert("Mic not supported"); return; }
         try{
             audioStream=await navigator.mediaDevices.getUserMedia({ audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true} });
@@ -84,60 +93,61 @@
             mediaRecorder=mime? new MediaRecorder(audioStream,{mimeType:mime}) : new MediaRecorder(audioStream);
             mediaRecorder.ondataavailable=(e)=>{ if(e.data?.size>0) audioChunks.push(e.data); };
             mediaRecorder.onstop=async()=>{
-                const finalMime=mediaRecorder?.mimeType||mime||"audio/webm";
-                const blob=new Blob(audioChunks,{type:finalMime});
+                const finalMime=mediaRecorder?.mimeType||mime||"audio/webm"; const blob=new Blob(audioChunks,{type:finalMime});
                 if(audioStream) audioStream.getTracks().forEach(t=>t.stop()); audioStream=null;
-                const dur=recordingSeconds; const shouldSend=isRecording;
-                clearTimer(); isRecording=false; mediaRecorder=null;
+                const dur=recordingSeconds; const shouldSend=isRecording; clearTimer(); isRecording=false; mediaRecorder=null;
                 if(!shouldSend||blob.size<800){ audioChunks=[]; return; }
-                try{ const dataUrl=await blobToBase64(blob); if(dataUrl.length>2*1024*1024){ alert("Voice too long"); return; } const content=`__VOICE__${dataUrl}__DUR__${dur}`; onSendMessage?.({ content, files:[], voiceMessage:true, duration:dur }); }catch{}
+                if(blob.size>2*1024*1024){ alert("Voice max 2MB"); audioChunks=[]; return; }
+                try{
+                  const ext = finalMime.includes('mp4')?'m4a':'webm';
+                  const fileName = `voice_${Date.now()}.${ext}`;
+                  const file = new File([blob], fileName, {type: finalMime});
+                  // send as FILE - chatState will upload to storage
+                  onSendMessage?.({ content: "__VOICE__", files: [file], voiceMessage: true, duration: Math.min(dur,120), _blob: blob });
+                }catch(e){ console.error(e); }
                 audioChunks=[];
             };
             mediaRecorder.start(250); isRecording=true; startTimer(); closeMenus();
         }catch{ isRecording=false; clearTimer(); alert("Mic denied"); }
     }
-    function stopVoiceRecording(){ if(!mediaRecorder||!isRecording) return; if(mediaRecorder.state!=="inactive") mediaRecorder.stop(); }
+    function stopVoiceRecording(){ if(!mediaRecorder||!isRecording) return; if(mediaRecorder.state!=="inactive") try{ mediaRecorder.stop(); }catch{} }
     function cancelVoiceRecording(){ if(!mediaRecorder) return; isRecording=false; clearTimer(); audioChunks=[]; try{ if(mediaRecorder.state!=="inactive") mediaRecorder.stop(); }catch{} mediaRecorder=null; if(audioStream){ audioStream.getTracks().forEach(t=>t.stop()); audioStream=null; } }
     onDestroy(()=>{ clearTimer(); if(mediaRecorder&&mediaRecorder.state!=="inactive") try{ mediaRecorder.stop(); }catch{} if(audioStream) audioStream.getTracks().forEach(t=>t.stop()); });
-
     let touchStartX = 0;
     function handleTouchStart(e:TouchEvent){ touchStartX = e.touches[0].clientX; }
-    function handleTouchEnd(e:TouchEvent){
-        const diff = e.changedTouches[0].clientX - touchStartX;
-        if(touchStartX < 50 && diff > 80){ goto('/chat'); }
-    }
+    function handleTouchEnd(e:TouchEvent){ const diff = e.changedTouches[0].clientX - touchStartX; if(touchStartX < 50 && diff > 80){ goto('/chat'); } }
 </script>
 
 <div class="chat-input-wrapper" ontouchstart={handleTouchStart} ontouchend={handleTouchEnd}>
     {#if isRecording}
         <div class="recording-bar">
             <div class="recording-left"><span class="recording-dot"></span><span>Rec {recordingTimeLabel}</span></div>
-            <div class="rec-actions"><button class="cancel-recording" onclick={cancelVoiceRecording}>Cancel</button><button class="stop-recording" onclick={stopVoiceRecording}>Send</button></div>
+            <div class="rec-actions"><button type="button" class="cancel-recording" onclick={cancelVoiceRecording}>Cancel</button><button type="button" class="stop-recording" onclick={stopVoiceRecording}>Send</button></div>
         </div>
     {/if}
     {#if selectedFiles.length>0}
-        <div class="file-preview">{#each selectedFiles as file,i}<div class="file-chip"><span>{file.type.startsWith("image/")?"🖼️":file.type.startsWith("video/")?"🎥":"📎"}</span><span class="file-name">{file.name.slice(0,16)}</span><button class="remove-file" onclick={()=>removeFile(i)}>×</button></div>{/each}</div>
+        <div class="file-preview">{#each selectedFiles as file,i}<div class="file-chip"><span>{file.type.startsWith("image/")?"🖼️":file.type.startsWith("video/")?"🎥":"📎"}</span><span class="file-name">{sanitize(file.name,16)}</span><button type="button" class="remove-file" onclick={()=>removeFile(i)}>×</button></div>{/each}</div>
     {/if}
 
     {#if showAttachMenu}
-        <div class="attach-overlay" onclick={closeMenus}></div>
+        <div class="attach-overlay" role="button" tabindex="-1" onclick={closeMenus} onkeydown={(e)=>{ if(e.key==='Escape') closeMenus(); }}></div>
         <div class="attach-menu">
-            <button class="attach-item" onclick={chooseImage}><span class="attach-icon blue">IMG</span><span>Gallery</span></button>
-            <button class="attach-item" onclick={chooseVideo}><span class="attach-icon purple">VID</span><span>Video</span></button>
-            <button class="attach-item" onclick={chooseDoc}><span class="attach-icon orange">DOC</span><span>Doc</span></button>
-            <button class="attach-item" onclick={sendLocation}><span class="attach-icon green">LOC</span><span>{#if sendingLoc}...{:else}Location{/if}</span></button>
+            <button type="button" class="attach-item" onclick={chooseImage}><span class="attach-icon blue">IMG</span><span>Gallery</span></button>
+            <button type="button" class="attach-item" onclick={chooseVideo}><span class="attach-icon purple">VID</span><span>Video</span></button>
+            <button type="button" class="attach-item" onclick={chooseDoc}><span class="attach-icon orange">DOC</span><span>Doc</span></button>
+            <button type="button" class="attach-item" onclick={sendLocation}><span class="attach-icon green">LOC</span><span>{#if sendingLoc}...{:else}Location{/if}</span></button>
         </div>
     {/if}
 
     {#if showEmojiPicker &&!isRecording}
-        <div class="emoji-picker"><div class="emoji-header"><span>Emoji</span><button class="emoji-close" onclick={()=>showEmojiPicker=false}>×</button></div><div class="emoji-grid">{#each emojis as emoji}<button class="emoji-item" onclick={()=>insertEmoji(emoji)}>{emoji}</button>{/each}</div></div>
+        <div class="emoji-picker"><div class="emoji-header"><span>Emoji</span><button type="button" class="emoji-close" onclick={()=>showEmojiPicker=false}>×</button></div><div class="emoji-grid">{#each emojis as emoji}<button type="button" class="emoji-item" onclick={()=>insertEmoji(emoji)}>{emoji}</button>{/each}</div></div>
     {/if}
 
     <div class="chat-input">
-        <input bind:this={fileInput} type="file" multiple hidden onchange={(e)=>handleFileSelect(e,'all')} accept="image/*,video/*,audio/*,.pdf,.doc,.docx" />
-        <input bind:this={imageInput} type="file" multiple hidden onchange={(e)=>handleFileSelect(e,'image')} accept="image/*" />
-        <input bind:this={videoInput} type="file" multiple hidden onchange={(e)=>handleFileSelect(e,'video')} accept="video/*" />
-        <input bind:this={docInput} type="file" multiple hidden onchange={(e)=>handleFileSelect(e,'doc')} accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" />
+        <input bind:this={fileInput} type="file" multiple hidden onchange={handleFileSelect} accept="image/*,video/*,audio/*,.pdf,.doc,.docx" />
+        <input bind:this={imageInput} type="file" multiple hidden onchange={handleFileSelect} accept="image/*" />
+        <input bind:this={videoInput} type="file" multiple hidden onchange={handleFileSelect} accept="video/*" />
+        <input bind:this={docInput} type="file" multiple hidden onchange={handleFileSelect} accept=".pdf,.doc,.docx,.xls,.xlsx,.txt" />
 
         <button type="button" class="icon-btn" disabled={sending||isRecording} onclick={chooseEmoji} title="Emoji">☺</button>
         <textarea bind:value={text} rows="1" placeholder={isRecording?"Recording...":"Message"} maxlength="600" disabled={sending||isRecording} onkeydown={keyDown}></textarea>
@@ -152,7 +162,6 @@
 </div>
 
 <style>
-/* COMPACT PRO - NO GAP */
 .chat-input-wrapper{position:relative;background:#f0f2f5;border-top:1px solid #e9edef;padding-bottom:env(safe-area-inset-bottom);}
 .recording-bar{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#fff;border-bottom:1px solid #e9edef;}
 .recording-left{display:flex;gap:6px;align-items:center;font-size:11px;font-weight:700;color:#ef4444;}
@@ -164,7 +173,7 @@
 .attach-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.25);z-index:99;}
 .attach-menu{position:absolute; left:8px; bottom:calc(100% + 6px); background:#fff; border:1px solid #e9edef; border-radius:12px; padding:6px; display:grid; grid-template-columns:repeat(4,1fr); gap:4px; z-index:100; width:220px; box-shadow:0 8px 20px rgba(0,0,0,0.12);}
 .attach-item{ display:flex; flex-direction:column; align-items:center; gap:3px; background:transparent; border:none; color:#111b21; font-size:10px; font-weight:600; cursor:pointer; padding:6px 4px; border-radius:8px; }
-.attach-item:hover{ background:#f5f6; }
+.attach-item:hover{ background:#f5f6f6; }
 .attach-icon{ width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:800; color:#fff;}
 .attach-icon.blue{background:#0075ff;}.attach-icon.purple{background:#7f66ff;}.attach-icon.orange{background:#ff6b00;}.attach-icon.green{background:#00a884;}
 .emoji-picker{position:absolute;left:8px;bottom:calc(100% + 6px);width:200px;max-height:200px;background:#fff;border:1px solid #e9edef;border-radius:12px;overflow:hidden;z-index:100;box-shadow:0 8px 20px rgba(0,0,0,0.12);}
