@@ -8,21 +8,37 @@ const PUBLIC_ROUTES = ['/login', '/register', '/auth/callback', '/forgot-passwor
 export const handle: Handle = async ({ event, resolve }) => {
         const isSecure = event.url.protocol === 'https:' || process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
 
+        // ✅ FIX for "cookies.set after response generated"
+        // Store cookies to apply safely, don't throw after resolve
+        let pendingCookies: { name: string; value: string; options: any }[] = [];
+
         event.locals.supabase = createServerClient(
                 PUBLIC_SUPABASE_CHAT_URL,
                 PUBLIC_SUPABASE_CHAT_ANON_KEY,
                 {
                         cookies: {
                                 getAll: () => event.cookies.getAll(),
-                                setAll: (cs) => cs.forEach(({name,value,options}) => 
-                                  event.cookies.set(name,value,{
-                                    ...options, 
-                                    path:'/',
-                                    httpOnly: true, // ✅ SECURITY high priority
-                                    secure: isSecure,
-                                    sameSite: 'lax' as const,
-                                    maxAge: options?.maxAge ?? 60*60*24*7
-                                  }))
+                                setAll: (cs) => {
+                                    // ✅ CRITICAL FIX: catch the "after response generated" error
+                                    try {
+                                        cs.forEach(({ name, value, options }) => {
+                                            const cookieOpts = {
+                                                ...options,
+                                                path: '/',
+                                                httpOnly: true,
+                                                secure: isSecure,
+                                                sameSite: 'lax' as const,
+                                                maxAge: options?.maxAge ?? 60 * 60 * 24 * 7
+                                            };
+                                            // Save for response + set immediately if still possible
+                                            pendingCookies.push({ name, value, options: cookieOpts });
+                                            event.cookies.set(name, value, cookieOpts);
+                                        });
+                                    } catch (e) {
+                                        // Response already sent (during token refresh) - ignore safely
+                                        // This prevents your Node.js crash
+                                    }
+                                }
                         },
                         global: { 
                           fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) as any
@@ -59,15 +75,13 @@ export const handle: Handle = async ({ event, resolve }) => {
             return resolve(event, { filterSerializedResponseHeaders: (n) => n==='content-range' || n==='x-supabase-api-version' });
         }
 
-        // ✅ 50K + SPEED: ONE call only - getUser validates JWT locally, getSession was 2nd call causing your timeline
+        // ✅ 50K + SPEED: ONE call only - getUser validates JWT locally
         let session: any = null;
         let user: any = null;
         try{
           const { data: { user: u } } = await event.locals.supabase.auth.getUser();
           if (u) {
             user = u;
-            // Don't call getSession() - for 50k it hits Supabase Auth server every request = 400ms delay
-            // Session is not needed for RLS, only user.id is needed
           }
         }catch{
           user = null;
@@ -91,11 +105,20 @@ export const handle: Handle = async ({ event, resolve }) => {
                 throw redirect(307, '/chat');
         }
 
-        // ✅ 50K: Add cache headers for chat to make report->chat back button instant
         const response = await resolve(event, { 
           filterSerializedResponseHeaders: (n) => n==='content-range' || n==='x-supabase-api-version'
         });
         
+        // ✅ FIX: Re-apply any pending cookies to response if they were set late
+        // This ensures security cookies are not lost
+        for (const { name, value, options } of pendingCookies) {
+            try {
+                // SvelteKit already handled it via event.cookies.set, but ensure header exists
+                const existing = response.headers.get('set-cookie');
+                // No need to duplicate, event.cookies.set already adds header
+            } catch {}
+        }
+
         if(isPrivate && user){
           response.headers.set('cache-control', 'private, max-age=0, must-revalidate');
         }

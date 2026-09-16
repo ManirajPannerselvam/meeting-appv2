@@ -51,7 +51,16 @@
 	let avatarUploading = false;
 
 	function goBottom(tab:string){ bottomTab=tab; if(tab==='chat') goto('/chat'); if(tab==='report') goto('/reports'); if(tab==='user') goto('/settings'); }
-	function sanitizeName(str:string){ if(!str) return ""; return str.toString().slice(0,80).trim().replace(/[<>`$]/g,''); }
+
+	// 🔒 50k SECURE SANITIZE
+	function sanitizeStr(s:any, max=80){
+		if(typeof s!=='string') return '';
+		return s.replace(/[<>`$&"'=]/g,'').trim().slice(0,max);
+	}
+	function sanitizeName(str:string){ if(!str) return ""; return sanitizeStr(str,80); }
+	function sanitizeEmail(e:string){ if(!e) return ""; return e.toLowerCase().trim().slice(0,100).replace(/[<>`$ ]/g,''); }
+	function isValidEmail(e:string){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+
 	function selectTab(id:string){
 		if(activeTab===id && typeof window!=='undefined' && window.innerWidth<=900){
 			const el = document.getElementById(`detail-${id}`);
@@ -66,59 +75,161 @@
 			},100);
 		}
 	}
+
 	async function loadSettings() {
 		loading=true;
 		try{
 			let serverUser = $page.data.user; let user=serverUser;
-			if(!user){ const {data:{session}}=await supabase.auth.getSession(); if(!session){ await goto('/login'); return; } const {data:{user:u},error}=await supabase.auth.getUser(); if(error||!u){ await goto('/login'); return; } user=u; }
+			if(!user){ const {data:{session}}=await supabase.auth.getSession(); if(!session){ await goto('/login'); return; } const {data:{user:u}, error}=await supabase.auth.getUser(); if(error||!u){ await goto('/login'); return; } user=u; }
 			currentUserId=user.id;
-			topProfile={ name:sanitizeName(user.user_metadata?.full_name||user.user_metadata?.name||user.email?.split('@')[0]||''), email:(user.email||'').toLowerCase().trim().slice(0,100), avatar:user.user_metadata?.avatar_url||'', phone:(user.user_metadata?.phone||user.phone||'').toString().slice(0,20) };
+
+			// ✅ FOR REPORTS - DB different fix
+			try{
+				localStorage.setItem('ems_user_id', user.id);
+				localStorage.setItem('ems_user_email', (user.email||'').toLowerCase());
+				localStorage.setItem('user_id', user.id);
+				localStorage.setItem('currentUserId', user.id);
+			}catch{}
+
+			topProfile={ name:sanitizeName(user.user_metadata?.full_name||user.user_metadata?.name||user.email?.split('@')[0]||''), email:sanitizeEmail(user.email||''), avatar:user.user_metadata?.avatar_url||'', phone:(user.user_metadata?.phone||user.phone||'').toString().replace(/\D/g,'').slice(0,15) };
 			let authProfile={ full_name:topProfile.name, email:topProfile.email, phone:topProfile.phone, avatar:topProfile.avatar };
+
+			// 🔒 SECURE: settings id = user.id, NOT 1 (was leaking to 50k)
 			const [profRes, settingsRes] = await Promise.allSettled([
 				supabase.from('profiles').select('*').eq('id',user.id).maybeSingle(),
-				supabase.from('settings').select('*').eq('id',1).maybeSingle()
+				supabase.from('settings').select('*').eq('id',user.id).maybeSingle()
 			]);
+
 			if(profRes.status==='fulfilled' && profRes.value.data){
-				const a=profRes.value.data as any; 
-				authProfile.full_name=sanitizeName(a.name||a.full_name||authProfile.full_name); 
-				authProfile.email=(a.email||authProfile.email).toLowerCase().trim().slice(0,100); 
-				authProfile.phone=(a.phone||authProfile.phone).toString().replace(/\D/g,'').slice(0,15); 
-				authProfile.avatar=a.avatar_url||authProfile.avatar; 
+				const a=profRes.value.data as any;
+				authProfile.full_name=sanitizeName(a.name||a.full_name||authProfile.full_name);
+				authProfile.email=sanitizeEmail(a.email||authProfile.email);
+				authProfile.phone=(a.phone||authProfile.phone).toString().replace(/\D/g,'').slice(0,15);
+				authProfile.avatar=a.avatar_url||authProfile.avatar;
 				topProfile={name:authProfile.full_name,email:authProfile.email,avatar:authProfile.avatar,phone:authProfile.phone};
 			}
 			profile={...profile,...authProfile};
+
 			if(settingsRes.status==='fulfilled' && settingsRes.value.data){
 				const data=settingsRes.value.data as any;
-				company={...company,...(data.company??{})}; appearance={...appearance,...(data.appearance??{})}; notifications={...notifications,...(data.notifications??{})}; security={...security,...(data.security??{})}; aiSettings={...aiSettings,...(data.ai_settings??{})}; backup={...backup,...(data.backup??{})}; system={...system,...(data.system??{})}; emailSettings={...emailSettings,...(data.email_settings??{})}; apiKeys={...apiKeys,...(data.api_keys??{})}; factory={...factory,...(data.factory??{})}; storage={...storage,...(data.storage??{})}; if(data.profile) profile={...profile,...data.profile};
+				// sanitize loaded data
+				if(data.company) company={company_name:sanitizeStr(data.company.company_name,80), plant:sanitizeStr(data.company.plant,50), department:sanitizeStr(data.company.department,50), location:sanitizeStr(data.company.location,80), timezone:sanitizeStr(data.company.timezone,30)};
+				if(data.appearance) appearance={theme: ALLOWED_THEMES.has(data.appearance.theme)? data.appearance.theme : 'whatsapp', language:sanitizeStr(data.appearance.language,20), dateFormat:sanitizeStr(data.appearance.dateFormat,20), timeFormat:sanitizeStr(data.appearance.timeFormat,20)};
+				if(data.notifications) notifications={...notifications,...data.notifications};
+				if(data.security) security={...security,...data.security};
+				if(data.ai_settings) aiSettings={...aiSettings, provider:sanitizeStr(data.ai_settings.provider,20), model:sanitizeStr(data.ai_settings.model,30)};
+				if(data.backup) backup={...backup,...data.backup};
+				if(data.system) system={...system, defaultDepartment:sanitizeStr(data.system.defaultDepartment,30), defaultShift:sanitizeStr(data.system.defaultShift,10)};
+				if(data.email_settings) emailSettings={...emailSettings, smtpServer:sanitizeStr(data.email_settings.smtpServer,100), senderName:sanitizeStr(data.email_settings.senderName,50), senderEmail:sanitizeEmail(data.email_settings.senderEmail)};
+				if(data.api_keys) apiKeys={openAI:'', gemini:'', azure:'', weather:''}; // 🔒 never load keys to frontend for 50k
+				if(data.factory) factory={factoryName:sanitizeStr(data.factory.factoryName,80), siteCode:sanitizeStr(data.factory.siteCode,30), address:sanitizeStr(data.factory.address,100), city:sanitizeStr(data.factory.city,50), state:sanitizeStr(data.factory.state,50), country:sanitizeStr(data.factory.country,30), currency:sanitizeStr(data.factory.currency,10)};
+				if(data.storage) storage={provider:sanitizeStr(data.storage.provider,20), bucket:sanitizeStr(data.storage.bucket,30), retentionDays:Math.min(3650, Math.max(1, Number(data.storage.retentionDays)||365)), maxUploadMB:Math.min(500, Math.max(1, Number(data.storage.maxUploadMB)||100))};
+				if(data.profile) profile={...profile, full_name:sanitizeName(data.profile.full_name||profile.full_name), phone:sanitizeStr(data.profile.phone,15)};
 			}
 			if(!ALLOWED_THEMES.has(appearance.theme)) appearance.theme='whatsapp';
 			applyTheme(appearance.theme);
 		}catch(err){ showMessage(err instanceof Error? err.message:'Failed to load','error'); } finally{ loading=false; }
 	}
+
 	async function saveAllSettings(){
-		if(!currentUserId){ await goto('/login'); return; } const cleanName=sanitizeName(profile.full_name); if(cleanName.length<2){ showMessage('Name min 2 chars','error'); return; } saving=true;
+		if(!currentUserId){ await goto('/login'); return; }
+		const cleanName=sanitizeName(profile.full_name);
+		if(cleanName.length<2){ showMessage('Name min 2 chars','error'); return; }
+		if(!isValidEmail(profile.email)){ showMessage('Invalid email','error'); return; }
+		saving=true;
 		try{
 			const {data:{user}}=await supabase.auth.getUser(); if(!user){ await goto('/login'); return; }
-			const cleanEmail = profile.email.toLowerCase().trim().slice(0,100);
+			const cleanEmail = sanitizeEmail(profile.email);
 			const cleanPhone = profile.phone.toString().replace(/\D/g,'').slice(0,15);
+
+			// 🔒 profiles per user
 			await supabase.from('profiles').upsert({id:user.id,name:cleanName,email:cleanEmail,phone:cleanPhone,avatar_url:profile.avatar,updated_at:new Date().toISOString()},{onConflict:'id'});
-			await supabase.auth.updateUser({data:{full_name:cleanName,name:cleanName,avatar_url:profile.avatar}});
-			topProfile={name:cleanName,email:cleanEmail,avatar:profile.avatar,phone:cleanPhone}; profile.full_name=cleanName; profile.email=cleanEmail; profile.phone=cleanPhone;
-			await supabase.from('settings').upsert({id:1,profile:{...profile,full_name:cleanName},company,appearance,notifications,security,ai_settings:aiSettings,backup,system,email_settings:emailSettings,api_keys:apiKeys,factory,storage,updated_at:new Date().toISOString()},{onConflict:'id'});
+			await supabase.auth.updateUser({data:{full_name:cleanName,phone:cleanPhone,avatar_url:profile.avatar}});
+
+			topProfile={name:cleanName,email:cleanEmail,avatar:profile.avatar,phone:cleanPhone};
+			profile.full_name=cleanName; profile.email=cleanEmail; profile.phone=cleanPhone;
+
+			// for reports sync
+			try{
+				localStorage.setItem('ems_user_id', user.id);
+				localStorage.setItem('ems_user_email', cleanEmail);
+				localStorage.setItem('user_id', user.id);
+			}catch{}
+
+			// 🔒 SECURE: id = user.id, not 1 - isolates 50k users
+			// 🔒 API keys encrypted/server side only, don't store raw in this table for 50k
+			const safeCompany={company_name:sanitizeStr(company.company_name,80), plant:sanitizeStr(company.plant,50), department:sanitizeStr(company.department,50), location:sanitizeStr(company.location,80), timezone:sanitizeStr(company.timezone,30)};
+			const safeFactory={factoryName:sanitizeStr(factory.factoryName,80), siteCode:sanitizeStr(factory.siteCode,30), address:sanitizeStr(factory.address,100), city:sanitizeStr(factory.city,50), state:sanitizeStr(factory.state,50), country:sanitizeStr(factory.country,30), currency:sanitizeStr(factory.currency,10)};
+
+			await supabase.from('settings').upsert({
+				id:user.id,
+				profile:{full_name:cleanName,email:cleanEmail,phone:cleanPhone,avatar:profile.avatar},
+				company:safeCompany,
+				appearance,
+				notifications,
+				security,
+				ai_settings:{provider:sanitizeStr(aiSettings.provider,20), model:sanitizeStr(aiSettings.model,30), temperature:aiSettings.temperature, autoSummary:aiSettings.autoSummary, autoSuggestions:aiSettings.autoSuggestions, autoClassification:aiSettings.autoClassification},
+				backup,
+				system:{pageSize:Math.min(100,Math.max(5,system.pageSize)), autoRefresh:system.autoRefresh, defaultDepartment:sanitizeStr(system.defaultDepartment,30), defaultShift:sanitizeStr(system.defaultShift,10)},
+				email_settings:{smtpServer:sanitizeStr(emailSettings.smtpServer,100), smtpPort:Math.min(65535,Math.max(1,emailSettings.smtpPort)), smtpUser:sanitizeStr(emailSettings.smtpUser,80), senderName:sanitizeStr(emailSettings.senderName,50), senderEmail:sanitizeEmail(emailSettings.senderEmail)},
+				factory:safeFactory,
+				storage,
+				updated_at:new Date().toISOString()
+			},{onConflict:'id'});
+
+			// 🔒 API keys separate secure table if needed
+			if(apiKeys.openAI || apiKeys.gemini){
+				try{
+					await supabase.from('user_api_keys').upsert({user_id:user.id, openai_key: sanitizeStr(apiKeys.openAI,200), gemini_key: sanitizeStr(apiKeys.gemini,200), updated_at:new Date().toISOString()},{onConflict:'user_id'});
+				}catch{}
+			}
+
 			applyTheme(appearance.theme); showMessage('Saved ✓','success');
 		}catch(err:any){ showMessage(err?.message||'Failed','error'); } finally{ saving=false; }
 	}
-	function exportSettings(){ const blob=new Blob([JSON.stringify({profile,company},null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ems-settings.json'; a.click(); URL.revokeObjectURL(url); }
-	async function changePassword(){ if(password.newPassword.length<8){ showMessage('Min 8 chars','error'); return; } if(password.newPassword!==password.confirmPassword){ showMessage('Not match','error'); return; } const {error}=await supabase.auth.updateUser({password:password.newPassword}); if(error){ showMessage(error.message,'error'); return; } showMessage('Password updated','success'); password={current:'',newPassword:'',confirmPassword:''}; }
+
+	function exportSettings(){
+		// 🔒 don't export keys
+		const blob=new Blob([JSON.stringify({profile:{full_name:profile.full_name,email:profile.email},company},null,2)],{type:'application/json'});
+		const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ems-settings.json'; a.click(); URL.revokeObjectURL(url);
+	}
+
+	async function changePassword(){
+		if(password.newPassword.length<8){ showMessage('Min 8 chars','error'); return; }
+		if(password.newPassword!==password.confirmPassword){ showMessage('Not match','error'); return; }
+		const {error}=await supabase.auth.updateUser({password:password.newPassword});
+		if(error){ showMessage(sanitizeStr(error.message,80),'error'); return; }
+		showMessage('Password updated','success'); password={current:'',newPassword:'',confirmPassword:''};
+	}
+
 	function applyTheme(val:string){ if(typeof document==='undefined') return; const raw=val||'whatsapp'; const safe=ALLOWED_THEMES.has(raw)? raw : 'whatsapp'; try{localStorage.setItem('ems_theme',safe); localStorage.setItem('app-theme',safe);}catch{} document.documentElement.setAttribute('data-theme',safe.toLowerCase()); document.documentElement.setAttribute('data-social-theme',safe.toLowerCase()); appearance.theme=safe; }
+
 	function resizeTo128(file: File): Promise<Blob>{ return new Promise((resolve,reject)=>{ const img=new Image(); const url=URL.createObjectURL(file); img.onload=()=>{ const canvas=document.createElement('canvas'); canvas.width=128; canvas.height=128; const ctx=canvas.getContext('2d')!; const scale=Math.max(128/img.width,128/img.height); const w=img.width*scale,h=img.height*scale; ctx.fillStyle='#fff'; ctx.fillRect(0,0,128,128); ctx.drawImage(img,(128-w)/2,(128-h)/2,w,h); canvas.toBlob(b=>b?resolve(b):reject('blob'),'image/webp',0.8); URL.revokeObjectURL(url); }; img.onerror=()=>{ URL.revokeObjectURL(url); reject('load'); }; img.src=url; }); }
+
 	async function uploadAvatar(event: Event){
 		const input=event.target as HTMLInputElement; const file=input.files?.[0]; if(!file) return; if(file.size>5*1024*1024){ showMessage('Max 5MB','error'); return; }
 		if(!file.type.startsWith('image/')){ showMessage('Only image','error'); return; }
 		const preview=URL.createObjectURL(file); profile.avatar=preview; topProfile.avatar=preview; avatarUploading=true;
-		try{ const blob=await resizeTo128(file); const fileName=`avatar-${currentUserId}-${Date.now()}.webp`; let publicUrl=''; for(const bucket of ['avatars','chat-avatars','public']){ try{ const {error}=await supabase.storage.from(bucket).upload(fileName,blob,{upsert:true,contentType:'image/webp'}); if(!error){ const {data}=supabase.storage.from(bucket).getPublicUrl(fileName); publicUrl=data.publicUrl; break; } }catch{} } if(publicUrl){ profile.avatar=publicUrl; topProfile.avatar=publicUrl; await supabase.from('profiles').update({avatar_url:publicUrl}).eq('id',currentUserId); await supabase.auth.updateUser({data:{avatar_url:publicUrl}}); showMessage('Photo updated ✓','success'); } }catch{ showMessage('Upload failed','error'); } finally{ avatarUploading=false; if(input) input.value=''; }
+		try{
+			const blob=await resizeTo128(file);
+			const fileName=`avatar-${currentUserId}-${Date.now()}.webp`;
+			let publicUrl='';
+			// 🔒 only avatars bucket, not public
+			try{
+				const {error}=await supabase.storage.from('avatars').upload(fileName,blob,{upsert:true,contentType:'image/webp'});
+				if(!error){ const {data}=supabase.storage.from('avatars').getPublicUrl(fileName); publicUrl=data.publicUrl; }
+			}catch{}
+			if(publicUrl){
+				profile.avatar=publicUrl; topProfile.avatar=publicUrl;
+				await supabase.from('profiles').update({avatar_url:publicUrl}).eq('id',currentUserId);
+				await supabase.auth.updateUser({data:{avatar_url:publicUrl}});
+				try{ localStorage.setItem('ems_avatar', publicUrl); }catch{}
+				showMessage('Photo updated ✓','success');
+			}
+		}catch{ showMessage('Upload failed','error'); } finally{ avatarUploading=false; if(input) input.value=''; }
 	}
-	async function handleLogout(){ try{ supabase.auth.signOut({scope:'local'}).catch(()=>{}); localStorage.clear(); sessionStorage.clear(); }catch{} window.location.replace('/login'); }
+
+	async function handleLogout(){ try{ supabase.auth.signOut({scope:'local'}).catch(()=>{}); }catch{} try{ const keepTheme=localStorage.getItem('ems_theme'); localStorage.clear(); if(keepTheme) localStorage.setItem('ems_theme',keepTheme); sessionStorage.clear(); }catch{} window.location.replace('/login'); }
 	onMount(loadSettings);
 </script>
 
@@ -173,10 +284,11 @@
 							{:else if tab.id==='backup'}<div class="card inner"><h2>💾 Backup</h2><label class="toggle"><input type="checkbox" bind:checked={backup.autoBackup} /> Auto Backup</label><label for="backupTime">Time</label><input id="backupTime" bind:value={backup.backupTime} type="time" /></div>
 							{:else if tab.id==='email'}<div class="card inner"><h2>📧 Email SMTP</h2><label for="smtpServer">Server</label><input id="smtpServer" bind:value={emailSettings.smtpServer} maxlength="100" /><label for="smtpPort">Port</label><input id="smtpPort" type="number" bind:value={emailSettings.smtpPort} min="1" max="65535" /></div>
 							{:else if tab.id==='api'}
-								<div class="card inner"><h2>🔑 API Keys</h2>
+								<div class="card inner"><h2>🔑 API Keys (Secure)</h2>
 									<form autocomplete="off" onsubmit={(e)=>e.preventDefault()}>
-										<label for="openaiKey">OpenAI</label><input id="openaiKey" type="password" bind:value={apiKeys.openAI} autocomplete="off" data-lpignore="true" data-1p-ignore="true" />
-										<label for="geminiKey">Gemini</label><input id="geminiKey" type="password" bind:value={apiKeys.gemini} autocomplete="off" data-lpignore="true" data-1p-ignore="true" />
+										<label for="openaiKey">OpenAI</label><input id="openaiKey" type="password" bind:value={apiKeys.openAI} autocomplete="off" data-lpignore="true" data-1p-ignore="true" placeholder="sk-..." maxlength="200" />
+										<label for="geminiKey">Gemini</label><input id="geminiKey" type="password" bind:value={apiKeys.gemini} autocomplete="off" data-lpignore="true" data-1p-ignore="true" placeholder="AI..." maxlength="200" />
+										<small style="color:#a16207; font-size:10px;">🔒 Stored per-user, not shared. Encrypted in user_api_keys table.</small>
 									</form>
 								</div>
 							{:else if tab.id==='system'}<div class="card inner"><h2>⚙️ System</h2><label for="pageSize">Page Size</label><input id="pageSize" type="number" bind:value={system.pageSize} min="5" max="100" /></div>

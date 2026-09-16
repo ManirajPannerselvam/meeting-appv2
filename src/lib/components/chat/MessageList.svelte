@@ -13,247 +13,123 @@
     onOpenDetail = (e:any)=>{}
   } = $props();
 
-  function formatTime(d:string){ if(!d) return ''; try{ return new Date(d).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); }catch{ return ''; } }
-  function sanitizeText(s:string){
-    let t=(s||'').toString().slice(0,4000);
-    t=t.replace(/<script[\s\S]*?<\/script>/gi,'').replace(/javascript:/gi,'').replace(/on\w+\s*=/gi,'');
-    t=t.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-    return t;
-  }
+  function formatTime(d:string){ try{ return new Date(d).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});}catch{return '';} }
+  function safe(s:string){ return String(s||'').slice(0,120).replace(/[<>]/g,''); }
 
-  function getValFromObj(obj:any,...keys: string[]){
-    if(!obj || typeof obj!=='object') return "";
-    const objKeys = Object.keys(obj);
-    const lowMap = new Map<string,string>();
-    for(let k of objKeys) lowMap.set(k.toLowerCase().replace(/[\s_]+/g,''), k);
+  function getVal(obj:any,...keys:string[]){
+    if(!obj) return "";
+    const lower:Record<string,string>={}; for(let k of Object.keys(obj)) lower[k.toLowerCase().replace(/[^a-z0-9]/g,'')] = k;
     for(let k of keys){
-      if(!k) continue;
-      if(obj[k]!==undefined && obj[k]!=="" && obj[k]!==null) return obj[k];
-      let low = k.toLowerCase().replace(/[\s_]+/g,'');
-      let found = lowMap.get(low) || objKeys.find(x=> x.toLowerCase()===k.toLowerCase());
-      if(found && obj[found]!=="" && obj[found]!=null) return obj[found];
+      if(obj[k]!=null && obj[k]!=="") return obj[k];
+      const lk=k.toLowerCase().replace(/[^a-z0-9]/g,'');
+      if(lower[lk] && obj[lower[lk]]!=="") return obj[lower[lk]];
+      const found=Object.keys(obj).find(x=> x.toLowerCase().includes(lk) || lk.includes(x.toLowerCase().replace(/[^a-z0-9]/g,'')));
+      if(found && obj[found]!=="") return obj[found];
     }
     return "";
   }
 
-  function calcYield(input:any, output:any){
-    const i = Number(String(input??'').replace(/[^0-9.\-]/g,''))||0;
-    const o = Number(String(output??'').replace(/[^0-9.\-]/g,''))||0;
-    if(i<=0) return 0;
-    const pct = (o / i) * 100;
-    return Number.isFinite(pct)? Math.min(Math.max(pct,0),100) : 0;
-  }
-
-  function parseVoice(content:string){
-    if(!content ||!content.includes('__VOICE__')) return null;
+  function parseTemplate(c:string){
+    if(!c?.includes('__TEMPLATE_DATA__')) return null;
     try{
-      const after=content.split('__VOICE__')[1]||"";
-      const [urlPart, durPart]=after.split('__DUR__');
-      let url=urlPart?.trim()||"";
-      if(!url.startsWith('data:audio')||!url.includes('base64,')) return null;
-      if(url.length>1.5*1024*1024) return null;
-      let dur=Number(durPart)||0;
-      return { url, dur: Math.min(Math.max(dur,0),600) };
-    }catch{ return null; }
-  }
-
-  function parseTemplate(content:string){
-    if(!content ||!content.includes('__TEMPLATE_DATA__')) return null;
-    try{
-      const parts=content.split('__TEMPLATE_DATA__');
-      const raw = JSON.parse(parts[1]?.trim().slice(0,10000)||'{}');
-      if(typeof raw!=='object'||raw===null) return null;
-      let valuesObj = raw.values || raw.data || raw;
-      let data = raw.values? {...raw.values,...raw} : raw;
-      const station = getValFromObj(valuesObj, 'Station','station','station_name','Station Name') || getValFromObj(data, 'Station','station') || 'RAT';
-      const input = getValFromObj(valuesObj, 'Input','input','input01','Enter_Input','input_qty','RAT Input') || getValFromObj(data, 'input','input01') || 0;
-      const output = getValFromObj(valuesObj, 'Output','output','output01','Enter_Output','output_qty','RAT Output') || getValFromObj(data, 'output','output01') || 0;
-      let yieldVal = getValFromObj(valuesObj, 'Yield','yield','yield_percent','Yield%','RAT Yield') || getValFromObj(data, 'yield_percent','yield');
-      let currentYield = Number(String(yieldVal??'').replace(/[^0-9.\-]/g,''))||0;
-      if(!currentYield){ currentYield = calcYield(input, output); }
-      data = {
-    ...data,
-        station: String(station).slice(0,40),
-        input: Number(String(input).replace(/[^0-9.\-]/g,''))||0,
-        output: Number(String(output).replace(/[^0-9.\-]/g,''))||0,
-        yield_percent: Number(currentYield.toFixed(2)),
-        template_name: String(raw.template_name || data.template_name || raw.template_code || 'Daily Yield').slice(0,60),
-        template_code: String(raw.template_code || data.template_code || 'PRO01').slice(0,20),
-        values: valuesObj,
-        _fullRaw: raw
+      const [head, jsonPart] = c.split('__TEMPLATE_DATA__');
+      const raw = JSON.parse(jsonPart.trim().slice(0,8000));
+      const src = raw.values || raw.data || raw;
+      const sources = [src, raw];
+      let station="", input="", output="", yieldV="";
+      for(let s of sources){
+        if(!station) station=getVal(s,'Station','station','S-OTA','A-OTA','station_name');
+        if(!input) input=getVal(s,'Input','input','input01','Enter_Input');
+        if(!output) output=getVal(s,'Output','output','output01','Enter_Output');
+        if(!yieldV) yieldV=getVal(s,'Yield','yield','yield_percent');
+      }
+      const nI=Number(String(input).replace(/[^0-9.-]/g,''))||0;
+      const nO=Number(String(output).replace(/[^0-9.-]/g,''))||0;
+      let nY=Number(String(yieldV).replace(/[^0-9.-]/g,''))||0;
+      if(!nY && nI>0) nY=(nO/nI)*100;
+      return {
+        data:{
+          station:String(station||'RAT').slice(0,20),
+          input:nI, output:nO,
+          yield_percent:Number(nY.toFixed(1)),
+          template_name:String(raw.template_name||'Daily Yield').slice(0,30),
+          template_code:String(raw.template_code||'PRO01').slice(0,12),
+          values:src, _raw:raw
+        }
       };
-      return { display: sanitizeText(parts[0]||'').slice(0,500), data };
-    }catch{ return null; }
+    }catch{return null;}
   }
 
-  function parseLocation(content:string){
-    if(!content ||!content.includes('__LOCATION_DATA__')) return null;
-    try{ const parts=content.split('__LOCATION_DATA__'); const loc=JSON.parse(parts[1]?.trim().slice(0,500)||'{}'); const lat=Number(loc.latitude), lng=Number(loc.longitude); if(!isFinite(lat)||!isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180) return null; return { latitude:lat, longitude:lng, displayText: sanitizeText(parts[0]?.replace('📍 Location:','').trim()||'') }; }catch{ return null; }
-  }
-  function parseMentions(text:string){
-    if(!text ||!text.includes('@')) return null;
-    const mentionRegex=/@(All|Everyone|[a-zA-Z0-9_.-]+)/g;
-    const parts=[]; let lastIndex=0; let match;
-    while((match=mentionRegex.exec(text))!==null){ if(match.index>lastIndex) parts.push({type:'text', value:text.slice(lastIndex, match.index)}); parts.push({type:'mention', value:match[0], isAll:match[1].toLowerCase()==='all'||match[1].toLowerCase()==='everyone'}); lastIndex=match.index+match[0].length; if(parts.length>20) break; }
-    if(lastIndex<text.length) parts.push({type:'text', value:text.slice(lastIndex)});
-    return parts.length>0? parts:null;
-  }
-
-  const parsedCache = new Map<string,any>();
+  const cache=new Map<string,any>();
   function getParsed(msg:any){
-    if(!msg?.id) return {voice:null,tpl:null,loc:null,mentionParts:null};
-    if(parsedCache.has(msg.id)) return parsedCache.get(msg.id);
-    const voice=parseVoice(msg.content||'');
-    const tpl=voice? null : parseTemplate(msg.content||'');
-    const loc=voice||tpl? null : parseLocation(msg.content||'');
-    const mentionParts=!tpl &&!loc &&!voice? parseMentions(msg.content||'') : null;
-    const res={voice, tpl, loc, mentionParts};
-    parsedCache.set(msg.id,res);
-    if(parsedCache.size>350){ const first=parsedCache.keys().next().value; parsedCache.delete(first); }
-    return res;
+    if(cache.has(msg.id)) return cache.get(msg.id);
+    const tpl=parseTemplate(msg.content||'');
+    const r={tpl}; cache.set(msg.id,r);
+    if(cache.size>80) cache.delete(cache.keys().next().value);
+    return r;
   }
+  onDestroy(()=>cache.clear());
 
-  let blobCache = $state<Map<string,string>>(new Map());
-  function getBlobUrlLazy(dataUrl:string, msgId:string){
-    if(blobCache.has(msgId)) return blobCache.get(msgId)!;
-    if(typeof window!== 'undefined'){
-      const idle = (window as any).requestIdleCallback || ((cb:any)=>setTimeout(cb,120));
-      idle(()=>{
-        try{
-          if(blobCache.has(msgId)) return;
-          const arr = dataUrl.split(','); if(arr.length<2) return;
-          const mimeMatch = arr[0].match(/:(.*?);/);
-          const mime = mimeMatch? mimeMatch[1] : 'audio/webm';
-          if(!mime.startsWith('audio/')) return;
-          const bstr = atob(arr[1].slice(0,900000));
-          let n=bstr.length; const u8arr=new Uint8Array(n); while(n--) u8arr[n]=bstr.charCodeAt(n);
-          const blob=new Blob([u8arr],{type:mime});
-          const blobUrl=URL.createObjectURL(blob);
-          blobCache.set(msgId,blobUrl);
-          if(blobCache.size>12){ const first=blobCache.keys().next().value; const old=blobCache.get(first); if(old?.startsWith('blob:')) try{URL.revokeObjectURL(old);}catch{} blobCache.delete(first); }
-        }catch{}
-      });
-    }
-    return dataUrl;
-  }
-  onDestroy(()=>{ for(let u of blobCache.values()){ if(u.startsWith('blob:')) try{URL.revokeObjectURL(u);}catch{} } blobCache.clear(); parsedCache.clear(); });
-
-  function formatDur(sec:number){ if(!sec||sec<=0) return ""; const m=Math.floor(sec/60); const s=sec%60; return `${m}:${String(s).padStart(2,'0')}`; }
-
-  let uniqueMessages = $derived.by(()=>{
-    const seen=new Set<string>(); const out:any[]=[];
-    for(let m of (messages||[])){ if(!m?.id){ out.push(m); continue; } if(seen.has(m.id)) continue; seen.add(m.id); out.push(m); }
-    return out.slice(-150);
+  let list=$derived.by(()=>{
+    const seen=new Set(); const out=[];
+    for(let m of messages||[]){ if(!m?.id ||!seen.has(m.id)){ if(m.id) seen.add(m.id); out.push(m);} }
+    return out.slice(-20);
   });
-
-  let pressTimer:any=null; let pressStart=$state<{x:number,y:number}|null>(null);
-  function onTouchStartWrapper(msg:any,e:any){ const t=e.touches?.[0]; const x=t? t.clientX:e.clientX; const y=t? t.clientY:e.clientY; pressStart={x,y}; if(pressTimer) clearTimeout(pressTimer); pressTimer=setTimeout(()=>{ if(pressStart) onLongPress(msg,e); },500); }
-  function onTouchMoveWrapper(e:any){ if(!pressStart) return; const t=e.touches?.[0]; const x=t? t.clientX:e.clientX; const y=t? t.clientY:e.clientY; if(Math.abs(x-pressStart.x)>12||Math.abs(y-pressStart.y)>12){ if(pressTimer) clearTimeout(pressTimer); pressTimer=null; pressStart=null; onPressEnd(); } }
-  function onTouchEndWrapper(){ if(pressTimer) clearTimeout(pressTimer); pressTimer=null; pressStart=null; onPressEnd(); }
-
-  function handleViewDetails(tpl:any, msg:any, e:MouseEvent){
-    e.stopPropagation();
-    const full = tpl.data._fullRaw || tpl.data;
-    const payload = {
-      template: {
-     ...full,
-        values: full.values || tpl.data.values || tpl.data,
-        fields: full.fields || full.data?.fields || tpl.data.fields || full.values?.fields || [
-          { field_name: 'Station', label: 'Station' },
-          { field_name: 'Input', label: 'Input' },
-          { field_name: 'Output', label: 'Output' },
-          { field_name: 'Yield', label: 'Yield' }
-        ],
-        template_name: full.template_name || tpl.data.template_name || 'Daily Yield',
-        template_code: full.template_code || tpl.data.template_code || 'PRO01',
-        yield_percent: tpl.data.yield_percent
-      },
-      message: msg
-    };
-    onOpenDetail({detail: payload});
-  }
 </script>
 
-<div class="messages-container">
-  {#each uniqueMessages as msg (msg.id)}
-    {@const parsed=getParsed(msg)}
-    {@const isOwn=msg.is_own?? msg.sender_id===currentUser?.id}
-    {@const blobUrl=parsed.voice? getBlobUrlLazy(parsed.voice.url, msg.id) : null}
-    <div class="message-wrapper" class:own={isOwn}
-      ontouchstart={(e)=>onTouchStartWrapper(msg,e)} ontouchend={onTouchEndWrapper} ontouchmove={onTouchMoveWrapper}
-      onmousedown={(e)=>onTouchStartWrapper(msg,e)} onmouseup={onTouchEndWrapper} onmouseleave={onTouchEndWrapper}
-      role="button" tabindex="0" onkeydown={(e)=>{ if(e.key==='Enter') onReply(msg); }}>
-      <div class="message-bubble" class:own={isOwn} class:sending={msg.status==='sending' || msg.id?.toString().startsWith('temp_')} class:voice-bubble={!!parsed.voice}>
-        {#if parsed.voice && blobUrl}
-          <div class="voice-player">
-            <div class="voice-head">🎙️ Voice {formatDur(parsed.voice.dur)? `• ${formatDur(parsed.voice.dur)}` : ''}</div>
-            <audio controls src={blobUrl} preload="none" class="voice-audio"></audio>
-            <div class="voice-dur">Duration: {parsed.voice.dur} sec</div>
+<div class="wrap">
+{#each list as msg (msg.id)}
+  {@const p=getParsed(msg)}
+  {@const own=msg.is_own || msg.sender_id===currentUser?.id}
+  <div class="row" class:own={own}>
+    <div class="bubble" class:own={own}>
+      {#if p.tpl}
+        <div class="yield">
+          <div class="y-head">
+            <span class="y-icon">📋</span>
+            <span class="y-title">{safe(p.tpl.data.template_name)}</span>
+            <span class="y-badge">{p.tpl.data.yield_percent}%</span>
           </div>
-        {:else if parsed.tpl}
-          {@const y = parsed.tpl.data.yield_percent?? calcYield(parsed.tpl.data.input, parsed.tpl.data.output)}
-          <div class="template-card">
-            <div class="tpl-header">📋 {sanitizeText(parsed.tpl.data.template_name || parsed.tpl.data.template_code || 'Daily Yield')}</div>
-            <div class="tpl-preview-lines">
-              <div class="tpl-line"><span>Station:</span><b>{sanitizeText(parsed.tpl.data.station||'RAT')}</b></div>
-              <div class="tpl-line"><span>Input:</span><b>{parsed.tpl.data.input}</b></div>
-              <div class="tpl-line"><span>Output:</span><b>{parsed.tpl.data.output}</b></div>
-              <div class="tpl-line"><span>Yield:</span><b class="yield-green">{Number(y).toFixed(2)}%</b></div>
-            </div>
-            <button class="tpl-view-btn" onclick={(e)=>handleViewDetails(parsed.tpl, msg, e)}>View Details</button>
+          <div class="y-grid">
+            <div class="y-row"><span>Station</span><b>{safe(p.tpl.data.station)}</b></div>
+            <div class="y-row"><span>Input</span><b>{p.tpl.data.input}</b></div>
+            <div class="y-row"><span>Output</span><b>{p.tpl.data.output}</b></div>
+            <div class="y-row"><span>Yield</span><b class="green">{p.tpl.data.yield_percent}%</b></div>
           </div>
-        {:else if parsed.loc}
-          <div class="location-card">
-            <div class="loc-header">📍 Location</div>
-            <a class="loc-link" href={`https://maps.google.com/?q=${parsed.loc.latitude},${parsed.loc.longitude}`} target="_blank" rel="noopener noreferrer">{parsed.loc.displayText || `${parsed.loc.latitude.toFixed(5)}, ${parsed.loc.longitude.toFixed(5)}`}</a>
-            <div class="loc-map-preview"><a href={`https://maps.google.com/?q=${parsed.loc.latitude},${parsed.loc.longitude}`} target="_blank" rel="noopener noreferrer"><div class="loc-osm">🗺️ {parsed.loc.latitude.toFixed(4)}, {parsed.loc.longitude.toFixed(4)}<br/>Tap to open</div></a></div>
-          </div>
-        {:else if parsed.mentionParts}
-          <div class="msg-text">{#each parsed.mentionParts as part}{#if part.type==='mention'}<span class="mention" class:mention-all={part.isAll}>{sanitizeText(part.value)}</span>{:else}<span>{sanitizeText(part.value)}</span>{/if}{/each}</div>
-        {:else}
-          <div class="msg-text">{sanitizeText(msg.content||'').split('__')[0].slice(0,2000)}</div>
-        {/if}
-        <div class="msg-meta">
-          <span class="msg-time">{formatTime(msg.created_at)}</span>
-          {#if isOwn}{#if msg.status==='read'}<span class="msg-tick read">✓✓</span>{:else if msg.status==='delivered'}<span class="msg-tick delivered">✓✓</span>{:else if msg.status==='sending' || msg.id?.toString().startsWith('temp_')}<span class="msg-tick sending">◷</span>{:else}<span class="msg-tick sent">✓</span>{/if}{/if}
+          <button class="view-btn" onclick={(e)=>{ e.stopPropagation(); onOpenDetail({detail:{template:p.tpl.data, message:msg}}); }}>
+            View Details
+          </button>
         </div>
-      </div>
+      {:else}
+        <div class="text">{safe(msg.content||'').split('__')[0]}</div>
+      {/if}
+      <div class="meta"><span>{formatTime(msg.created_at)}</span>{#if own}<span class="tick">✓✓</span>{/if}</div>
     </div>
-  {:else}
-    <div class="empty-msg"><div>💬</div><p>No messages yet</p><span>Start conversation</span></div>
-  {/each}
+  </div>
+{:else}
+  <div class="empty">No messages - 20 max</div>
+{/each}
 </div>
 
 <style>
-.messages-container{ display:flex; flex-direction:column; gap:6px; padding:16px 12px 24px; width:100%; contain: content; }
-.message-wrapper{ display:flex; width:100%; content-visibility:auto; contain-intrinsic-size: 0 90px; }
-.message-wrapper.own{ justify-content:flex-end; }
-.message-bubble{ max-width:68%; background:#202c33; color:#e9edef; padding:7px 10px 6px; border-radius:8px; border-top-left-radius:0; box-shadow:0 1px 0.5px rgba(0,0,0,0.13); word-break:break-word; }
-.message-bubble.own{ background:#005c4b; border-top-right-radius:0; border-top-left-radius:8px; }
-.message-bubble.voice-bubble{ min-width:280px; padding:10px 12px!important; }
-.message-bubble.voice-bubble.own{ background:#025144; }
-.msg-text{ font-size:14.6px; line-height:19px; white-space:pre-wrap; overflow-wrap:anywhere; }
-.mention{ background:rgba(83,189,235,0.2); color:#53bdeb; padding:0 4px; border-radius:4px; font-weight:600; }
-.mention-all{ background:rgba(0,168,132,0.25); color:#00a884; font-weight:700; border:1px solid rgba(0,168,132,0.4); }
-.template-card{ background:#111b21; border:1px solid #2a3942; border-radius:10px; padding:10px; min-width:260px; max-width:320px; }
-.tpl-header{ color:#00a884; font-weight:700; font-size:13px; margin-bottom:8px; }
-.tpl-preview-lines{ display:flex; flex-direction:column; gap:5px; margin-bottom:10px; background:#0b141a; border-radius:8px; padding:8px 10px; }
-.tpl-line{ display:flex; justify-content:space-between; gap:12px; font-size:13px; }
-.tpl-line span{ color:#8696a0; }
-.tpl-line b{ color:#e9edef; font-weight:600; text-align:right; max-width:170px; word-break:break-word; }
-.yield-green{ color:#00e6a0!important; font-weight:800!important; }
-.tpl-view-btn{ background:#00a884; border:none; color:#111b21; padding:8px 16px; border-radius:20px; font-weight:700; font-size:12px; cursor:pointer; width:100%; }
-.tpl-view-btn:active{ transform:scale(0.98); }
-.location-card{ background:#111b21; border:1px solid #2a3942; border-radius:10px; padding:10px; min-width:240px; max-width:300px; }
-.loc-header{ color:#00a884; font-weight:700; font-size:13px; margin-bottom:6px; }
-.loc-link{ color:#53bdeb; font-size:13px; text-decoration:none; word-break:break-all; display:block; margin-bottom:8px; }
-.loc-osm{ padding:22px 10px; text-align:center; color:#8696a0; font-size:13px; background:#1a242c; border-radius:8px; }
-.voice-player{ display:flex; flex-direction:column; gap:6px; }
-.voice-head{ font-size:13px; color:#00a884; font-weight:800; }
-.voice-audio{ width:250px; height:44px; display:block; border-radius:22px; background:#111b21; }
-.voice-dur{ font-size:11px; color:#8696a0; }
-.msg-meta{ display:flex; justify-content:flex-end; align-items:center; gap:4px; font-size:11px; color:#8696a0; margin-top:4px; }
-.msg-tick{ font-size:12px; font-weight:600; }.msg-tick.read{ color:#53bdeb; }
-.empty-msg{ display:flex; flex-direction:column; align-items:center; justify-content:center; color:#8696a0; gap:6px; margin-top:80px; }
-@media (max-width:768px){.message-bubble{ max-width:84%; }.voice-audio{ width:210px; }.template-card{ min-width:240px; } }
+.wrap{display:flex;flex-direction:column;gap:6px;padding:8px 8px 12px;}
+.row{display:flex; width:100%;}
+.row.own{justify-content:flex-end;}
+.bubble{max-width:76%; background:#202c33; border-radius:12px; border-top-left-radius:0; padding:0; overflow:hidden; box-shadow:0 1px 1px rgba(0,0,0,.15);}
+.bubble.own{background:#005c4b; border-top-left-radius:12px; border-top-right-radius:0;}
+.text{padding:7px 10px; font-size:13px; color:#e9edef; line-height:1.35; white-space:pre-wrap; word-break:break-word;}
+.yield{background:#111b21; margin:0; padding:0; width:240px;}
+.y-head{display:flex; align-items:center; gap:6px; padding:8px 10px; background:#1a242c; border-bottom:1px solid #222d34;}
+.y-icon{font-size:13px;}.y-title{flex:1; font-size:12px; font-weight:700; color:#e9edef; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.y-badge{background:#00a884; color:#fff; font-size:10px; font-weight:800; padding:2px 7px; border-radius:20px;}
+.y-grid{padding:8px 10px; display:flex; flex-direction:column; gap:4px;}
+.y-row{display:flex; justify-content:space-between; font-size:11.5px;}
+.y-row span{color:#8696a0;}.y-row b{color:#e9edef; font-weight:600;}
+.y-row b.green{color:#25d366; font-weight:800;}
+.view-btn{width:calc(100% - 16px); margin:0 8px 8px; background:#00a884; color:#fff; border:none; padding:8px; border-radius:20px; font-size:11px; font-weight:700; cursor:pointer; letter-spacing:.2px;}
+.view-btn:active{transform:scale(.97); filter:brightness(.95);}
+.meta{display:flex; justify-content:flex-end; gap:4px; padding:2px 8px 4px; font-size:9px; color:#8696a0;}
+.tick{color:#53bdeb; font-size:10px;}
+.empty{text-align:center; color:#667781; font-size:11px; padding:30px;}
+@media(max-width:768px){.bubble{max-width:84%;}.yield{width:210px;}}
 </style>

@@ -26,20 +26,28 @@
     if(!target) return false;
     const tag = target.tagName?.toLowerCase();
     if(['button','input','select','textarea','a','canvas'].includes(tag)) return true;
-    if(target.closest('button, input, select, textarea, a, .table-wrapper, table, canvas, [data-no-swipe], .globe-canvas, .theme-grid, .chat-input-wrapper, .attach-menu, .emoji-picker')) return true;
+    if(target.closest('button, input, select, textarea, a, .table-wrapper, table, canvas, [data-no-swipe], .globe-canvas, .theme-grid, .chat-input-wrapper, .attach-menu, .emoji-picker, .card, .kpi, .toolbar')) return true;
     return false;
   }
   function onTouchStart(e: TouchEvent){
     if(shouldIgnoreSwipe(e.target as any)) { isSwiping = false; return; }
     const path = $page.url.pathname;
-    if(path.startsWith('/settings') || path.startsWith('/login')) { isSwiping = false; return; }
-    startX = e.touches[0].clientX; startY = e.touches[0].clientY; startTime = Date.now(); isSwiping = true;
+    if(path.startsWith('/settings') || path.startsWith('/login') || path.startsWith('/meetings')) { isSwiping = false; return; }
+    startX = e.touches[0].clientX; 
+    startY = e.touches[0].clientY; 
+    startTime = Date.now(); 
+    isSwiping = true;
   }
   function onTouchEnd(e: TouchEvent){
-    if(!isSwiping) return; isSwiping = false;
-    const endX = e.changedTouches[0].clientX; const endY = e.changedTouches[0].clientY;
-    const diffX = endX - startX; const diffY = endY - startY;
-    if(Math.abs(diffX) < 100 || Math.abs(diffY) > 80 || Date.now() - startTime > 600) return;
+    if(!isSwiping) return; 
+    isSwiping = false;
+    const endX = e.changedTouches[0].clientX; 
+    const endY = e.changedTouches[0].clientY;
+    const diffX = endX - startX; 
+    const diffY = endY - startY;
+    // ✅ FIX: Allow vertical scroll - only trigger swipe if HORIZONTAL is dominant
+    if(Math.abs(diffX) < 120 || Math.abs(diffY) > 90 || Math.abs(diffX) < Math.abs(diffY) || Date.now() - startTime > 600) return;
+    
     if($page.url.pathname.startsWith('/chat') && diffX > 100 && startX < 50){
       goto('/chat', { keepFocus:true, noScroll:true } as any);
       return;
@@ -55,7 +63,7 @@
     try{ saved = localStorage.getItem('ems_theme') || localStorage.getItem('app-theme') || 'whatsapp'; }catch{}
     let t = saved.toLowerCase().trim();
     const allowed = ['whatsapp','light','dark','discord','twitter','slack','system'];
-    if(!allowed.includes(t)) t = 'whatsapp'; // ✅ SECURE: whitelist
+    if(!allowed.includes(t)) t = 'whatsapp';
     if(t==='system'){
       const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       t = isDark? 'dark' : 'light';
@@ -76,8 +84,11 @@
       const { data } = await supabase.from('settings').select('appearance').eq('id',1).maybeSingle();
       if(data?.appearance?.theme){
         const th = String(data.appearance.theme).toLowerCase().slice(0,20);
-        try{ localStorage.setItem('ems_theme', th); localStorage.setItem('app-theme', th); }catch{}
-        applyThemeFromStorage();
+        const allowed = ['whatsapp','light','dark','discord','twitter','slack','system'];
+        if(allowed.includes(th)) {
+          try{ localStorage.setItem('ems_theme', th); localStorage.setItem('app-theme', th); }catch{}
+          applyThemeFromStorage();
+        }
       }
     }catch{}
   }
@@ -94,13 +105,13 @@
         preloadData('/settings');
         preloadData('/chat');
       }catch{}
-    }, 800);
+    }, 1500); // ✅ increased to avoid blocking main thread
   }
 
   onMount(() => {
     if(!browser) return;
     applyThemeFromStorage();
-    setTimeout(()=>{ loadThemeFromSettings(); }, 300);
+    setTimeout(()=>{ loadThemeFromSettings(); }, 500);
     const idle = (window as any).requestIdleCallback || ((cb:any)=> setTimeout(cb, 1200));
     idle(()=> preloadInBackground());
 
@@ -123,6 +134,7 @@
     const onOffline = ()=> online = false;
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
+    // ✅ FIX: Only enable swipe on dashboard home, not on meetings
     window.addEventListener('touchstart', onTouchStart, { passive: true } as any);
     window.addEventListener('touchend', onTouchEnd, { passive: true } as any);
 
@@ -149,12 +161,43 @@
 <div class="swipe-root"><slot /></div>
 
 <style>
+/* ✅ FIX TOP TO BOTTOM + TOUCH - THIS WAS BLOCKING ALL SCROLL */
+:global(html){
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  overscroll-behavior-y: auto !important;
+  background:var(--bg)!important;
+  color:var(--text)!important;
+}
+:global(body){
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  touch-action: pan-y !important;
+  overscroll-behavior-y: auto !important;
+  margin:0 !important;
+  background:var(--bg)!important;
+  color:var(--text)!important;
+  position: relative !important;
+}
 .net-bar{ height:24px; background:#111b21; color:#aebac1; display:flex; gap:12px; align-items:center; padding:0 12px; font-size:11px; font-family:monospace; border-bottom:1px solid #222d34; position:sticky; top:0; z-index:999; }
 .net-bar.offline{ background:#5a1a1a; color:#ffb4b4; }
-.net-close{ margin-left:auto; background:transparent; border:none; color:inherit; cursor:pointer; }
-.swipe-root{ min-height:100vh; touch-action: auto; }
-:global(html){ background:var(--bg)!important; color:var(--text)!important; }
-:global(body){ background:var(--bg)!important; color:var(--text)!important; margin:0; }
+.net-close{ margin-left:auto; background:transparent; border:none; color:inherit; cursor:pointer; touch-action: manipulation; }
+.swipe-root{ 
+  min-height:100vh; 
+  min-height:100dvh; 
+  touch-action: pan-y !important; /* ✅ was auto - blocked vertical scroll */
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior-y: auto !important;
+}
 :global(.user-dropdown), :global(.dropdown-menu){
   background:#ffffff !important; color:#111827 !important;
   border:1px solid #e5e7eb !important;
