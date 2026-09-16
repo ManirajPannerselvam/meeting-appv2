@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "c5397fea-7eca-4d79-bde2-f703bf458dd8"
+      }
+    },
+    "android": {
+      "package": "com.manirajpanneerselvam.meetingapp"
+    }
+  }
+}

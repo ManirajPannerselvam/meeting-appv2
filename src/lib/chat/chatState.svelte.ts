@@ -1,4 +1,4 @@
-// src/lib/chat/chatState.svelte.ts - FINAL 50K SECURE + REAL LAST MESSAGE + UNREAD + TICKS + INSTANT
+// src/lib/chat/chatState.svelte.ts - FINAL 50K SECURE + 0 LEAKAGE
 import { browser } from "$app/environment";
 import { getChatClient } from '$lib/supabase';
 
@@ -54,12 +54,11 @@ export function createChatState(data:any){
   function isMeetingMsg(m:any){ const c=String(m.content||'').toLowerCase(); return c.startsWith('__meeting__'); }
   function isVoiceMsg(m:any){ return String(m.content||'').toLowerCase().startsWith('__voice__'); }
 
-  // 0 LEAKAGE GROUPS + REAL LAST MESSAGE + UNREAD
   async function loadGroups(){
     const uid=getCurrentUserId(); if(!isValidUUID(uid)) return;
     try{
       let ids:string[]=[];
-      const {data:members}=await getDB().from("chat_group_members").select("group_id").eq("user_id",uid).limit(20);
+      const {data:members}=await getDB().from("chat_group_members").select("group_id").eq("user_id",uid).limit(50);
       ids=(members||[]).map((m:any)=>m.group_id).filter(isValidUUID);
       if(ids.length===0){
         const {data:owned}=await getDB().from("chat_groups").select("id").eq("owner_id",uid).limit(20);
@@ -67,12 +66,12 @@ export function createChatState(data:any){
       }
       if(!ids.length){ groups=[]; return; }
       const {data:gData}=await getDB().from("chat_groups").select("id,name,avatar_url,created_at").in("id",ids.slice(0,20)).limit(20);
-      // fetch last message per group for preview
       let lastMap=new Map<string,any>();
       let unreadMap=new Map<string,number>();
       if(ids.length){
-        const {data:lastMsgs}=await getDB().from("messages").select("group_id,content,created_at,sender_id,status").in("group_id", ids.slice(0,20)).order("created_at",{ascending:false}).limit(100);
+        const {data:lastMsgs}=await getDB().from("messages").select("group_id,content,created_at,sender_id,status,deleted_by").in("group_id", ids.slice(0,20)).order("created_at",{ascending:false}).limit(100);
         (lastMsgs||[]).forEach((m:any)=>{
+          if((m.deleted_by||[]).includes(uid)) return; // FIX: 0 leakage deleted
           if(!lastMap.has(m.group_id)) lastMap.set(m.group_id, m);
           if(m.sender_id!==uid && m.status!=='read'){
             unreadMap.set(m.group_id, (unreadMap.get(m.group_id)||0)+1);
@@ -93,12 +92,11 @@ export function createChatState(data:any){
     }catch{ groups=[]; }
   }
 
-  // 0 LEAKAGE CONTACTS + REAL LAST MESSAGE + UNREAD COUNT + DATE SOURCE
   async function loadContacts(){
     const uid=getCurrentUserId(); if(!isValidUUID(uid)){ contacts=[]; return; }
     try{
       let mapped:any[]=[{id:uid,actual_user_id:uid,name:"You (Saved)",email:currentUser?.email||"",avatar_url:currentUser?.avatar_url||null,room_id:null,isSelf:true,_type:'contact',last_message:"Message yourself",last_message_at:new Date().toISOString(), unread:0}];
-      const {data:myRooms}=await getDB().from("rooms").select("id,user1_id,user2_id,created_at").or(`user1_id.eq.${uid},user2_id.eq.${uid}`).order('created_at',{ascending:false}).limit(20);
+      const {data:myRooms}=await getDB().from("rooms").select("id,user1_id,user2_id,created_at").or(`user1_id.eq.${uid},user2_id.eq.${uid}`).order('created_at',{ascending:false}).limit(30);
       if(myRooms?.length){
         const roomIds=myRooms.map((r:any)=>r.id).filter(isValidUUID);
         const otherIds=[...new Set(myRooms.map((r:any)=> r.user1_id===uid? r.user2_id : r.user1_id).filter(isValidUUID))];
@@ -107,12 +105,12 @@ export function createChatState(data:any){
           const {data:profs}=await getDB().from("profiles").select("id,full_name,email,avatar_url").in("id",otherIds.slice(0,20));
           (profs||[]).forEach((p:any)=>profMap.set(p.id,p));
         }
-        // REAL LAST MESSAGE + UNREAD - 0 leakage only your rooms
         let lastMap=new Map<string,any>();
         let unreadMap=new Map<string,number>();
         if(roomIds.length){
-          const {data:lastMsgs}=await getDB().from("messages").select("room_id,content,created_at,sender_id,status").in("room_id", roomIds.slice(0,20)).order("created_at",{ascending:false}).limit(120);
+          const {data:lastMsgs}=await getDB().from("messages").select("room_id,content,created_at,sender_id,status,deleted_by").in("room_id", roomIds.slice(0,20)).order("created_at",{ascending:false}).limit(120);
           (lastMsgs||[]).forEach((m:any)=>{
+            if((m.deleted_by||[]).includes(uid)) return; // FIX: 0 leakage
             if(!lastMap.has(m.room_id)) lastMap.set(m.room_id, m);
             if(m.sender_id!==uid && m.status!=='read'){
               unreadMap.set(m.room_id, (unreadMap.get(m.room_id)||0)+1);
@@ -123,6 +121,7 @@ export function createChatState(data:any){
           const other=r.user1_id===uid? r.user2_id : r.user1_id;
           if(!isValidUUID(other)||!isValidUUID(r.id)) continue;
           if(mapped.find(m=>m.actual_user_id===other)) continue;
+          if(roomCache.size>100) roomCache.clear(); // FIX: 50K memory leak
           roomCache.set(other, r.id);
           const prof=profMap.get(other);
           const displayName=prof?.full_name?.trim() || prof?.email?.split('@')[0] || "User "+other.slice(0,4);
@@ -136,7 +135,7 @@ export function createChatState(data:any){
             room_id:r.id,
             status:'accepted',
             _type:'contact',
-            last_message: last ? last.content : "Tap to chat",
+            last_message: last ? last.content.slice(0,32) : "Tap to chat",
             last_message_at: last ? last.created_at : r.created_at,
             unread: unreadMap.get(r.id)||0
           });
@@ -154,7 +153,8 @@ export function createChatState(data:any){
       if(roomId && !isValidUUID(roomId)) return;
       if(groupId && !isValidUUID(groupId)) return;
       
-      let q=getDB().from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status").order("created_at",{ascending:false}).limit(20);
+      // FIX: 0 leakage - always filter + include deleted_by for filter
+      let q=getDB().from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,status,deleted_by").order("created_at",{ascending:false}).limit(20);
       if(older && messages.length) q=q.lt("created_at",messages[0]?.created_at);
       if(groupId) q=q.eq("group_id",groupId);
       else if(roomId) q=q.eq("room_id",roomId);
@@ -162,17 +162,19 @@ export function createChatState(data:any){
 
       const {data, error}=await q;
       if(error){
-        let q2=getDB().from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at").order("created_at",{ascending:false}).limit(20);
+        let q2=getDB().from("messages").select("id,content,sender_id,room_id,group_id,receiver_id,created_at,deleted_by").order("created_at",{ascending:false}).limit(20);
         if(older && messages.length) q2=q2.lt("created_at",messages[0]?.created_at);
         if(groupId) q2=q2.eq("group_id",groupId); else if(roomId) q2=q2.eq("room_id",roomId); else q2=q2.eq("sender_id",uid).eq("receiver_id",uid);
         const r2=await q2;
         if(!r2.data?.length){ if(!older) messages=[]; return; }
-        messages=r2.data.reverse().map((m:any)=>({...m,is_own:m.sender_id===uid,content:sanitize(m.content||'',4000),status:'sent'})).slice(-20);
+        const filtered = r2.data.filter((m:any)=>!(m.deleted_by||[]).includes(uid));
+        messages=filtered.reverse().map((m:any)=>({...m,is_own:m.sender_id===uid,content:sanitize(m.content||'',4000),status:'sent'})).slice(-20);
         return;
       }
       if(!data?.length){ if(!older) messages=[]; hasMore=false; return; }
       hasMore=data.length>=20;
-      messages=data.reverse().map((m:any)=>({...m,is_own:m.sender_id===uid,content:sanitize(m.content||'',4000),status:m.status||'sent'})).slice(-20);
+      const filteredData = data.filter((m:any)=>!(m.deleted_by||[]).includes(uid)); // FIX: 0 leakage
+      messages=filteredData.reverse().map((m:any)=>({...m,is_own:m.sender_id===uid,content:sanitize(m.content||'',4000),status:m.status||'sent'})).slice(-20);
       
       if(!older){
         setTimeout(async()=>{
@@ -213,7 +215,6 @@ export function createChatState(data:any){
     selectedContact=contact;
     selectedRoomId=contact.room_id||roomCache.get(contactUserId)||null;
     messages=[]; isLoadingMessages=true;
-    // clear unread instantly for UI
     contacts=contacts.map(c=> c.id===contact.id ? {...c, unread:0} : c);
     (async()=>{
       let rid=selectedRoomId;
@@ -269,7 +270,6 @@ export function createChatState(data:any){
       final=sanitize(final,4000); if(!final){ sendingLock=false; return; }
       const temp:any={id:tempId,content:final,sender_id:myId,room_id:selectedRoomId,group_id:selectedGroupId,receiver_id:selectedContact?.actual_user_id||myId,created_at:new Date().toISOString(),is_own:true,status:'sent',_voiceUrl:uploadUrl};
       messages=[...messages.slice(-19),temp];
-      // update sidebar preview instantly
       if(selectedRoomId){
         contacts=contacts.map(c=> c.room_id===selectedRoomId ? {...c, last_message:final.slice(0,32), last_message_at:new Date().toISOString()} : c);
       }

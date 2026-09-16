@@ -17,3 +17,5 @@ obj/
 prisma/*.db
 .vercel 
 .svelte-kit 
+.vercel
+.env*

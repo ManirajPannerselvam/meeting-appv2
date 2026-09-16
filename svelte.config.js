@@ -1,16 +1,27 @@
-import adapter from '@sveltejs/adapter-vercel';
+import adapterVercel from '@sveltejs/adapter-vercel';
+import adapterStatic from '@sveltejs/adapter-static';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+// Auto-detect: Tauri sets this env when building android/ios
+const isTauri = !!process.env.TAURI_ENV_ARCH || !!process.env.TAURI_PLATFORM;
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	preprocess: vitePreprocess(),
 
 	kit: {
-		adapter: adapter({
-			runtime: 'nodejs22.x',
-			regions: ['bom1'], // ✅ 50K SPEED: Mumbai = 35ms for Coimbatore/Villupuram
-			split: false // ✅ FIX: 29 functions -> 1 function (Hobby limit 12). For 50k this is FASTER - 1 cold start, not 29
-		}),
+		adapter: isTauri 
+			? adapterStatic({
+				pages: 'build',
+				assets: 'build',
+				fallback: 'index.html',
+				precompress: false
+			  })
+			: adapterVercel({
+				runtime: 'nodejs22.x',
+				regions: ['bom1'],
+				split: false
+			  }),
 
 		prerender: {
 			entries: ['/', '/login', '/register'],
@@ -19,7 +30,6 @@ const config = {
 			origin: 'https://meeting-appv2-one.vercel.app'
 		},
 
-		// ✅ SECURITY: high priority - kept your CSP + tightened
 		csp: {
 			mode: 'auto',
 			directives: {
