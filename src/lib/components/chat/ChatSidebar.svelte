@@ -24,6 +24,39 @@
     return allChats.filter((c:any)=> `${c.name||''} ${c.email||''}`.toLowerCase().includes(s)).slice(0,20);
   });
 
+  function safeName(n:string){ return String(n||'U').slice(0,20).replace(/[<>]/g,''); }
+  
+  function safePreview(t:string){
+    let s = String(t||'').trim().slice(0,40);
+    if(!s) return "Tap to chat";
+    if(s.startsWith('__report__')) return "📋 Report • Tap";
+    if(s.startsWith('__meeting__')) return "📅 Meeting • Tap";
+    if(s.startsWith('__voice__')) return "🎤 Voice message";
+    if(s.startsWith('__')) return "Tap to chat";
+    return s.replace(/[\n\r]+/g,' ').slice(0,32);
+  }
+
+  // TODAY = 01:35 PM, YESTERDAY = Yesterday, ELSE = 14 Sep
+  function formatChatDate(iso:string){
+    if(!iso) return "";
+    try{
+      const d = new Date(iso);
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const yest = new Date(today); yest.setDate(today.getDate()-1);
+      const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      
+      if(msgDay.getTime()===today.getTime()){
+        return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}); // 01:35 PM
+      }
+      if(msgDay.getTime()===yest.getTime()){
+        return "Yesterday";
+      }
+      // date only
+      return d.toLocaleDateString([], {day:'2-digit', month:'short'}); // 14 Sep
+    }catch{ return ""; }
+  }
+
   function handleOpenChat(item:any){
     if(item._type==='group') onSelectGroup(item);
     else onSelectContact(item);
@@ -38,7 +71,6 @@
       handleOpenChat(item);
     }
   }
-  function safeName(n:string){ return String(n||'U').slice(0,20).replace(/[<>]/g,''); }
 </script>
 
 <div class="chat-sidebar">
@@ -68,6 +100,10 @@
       {@const isGroup = chatItem._type==='group'}
       {@const isPending = chatItem.status==='pending'}
       {@const isSelected = isGroup ? selectedGroup?.id===chatItem.id : selectedContact?.id===chatItem.id}
+      {@const preview = safePreview(chatItem.last_message)}
+      {@const timeText = formatChatDate(chatItem.last_message_at)}
+      {@const unread = Number(chatItem.unread||0)}
+
       <div class="chat-row" class:selected={isSelected} class:pending={isPending}
            role="button" tabindex="0"
            onclick={()=>handleOpenChat(chatItem)}
@@ -83,10 +119,15 @@
         <div class="chat-info">
           <div class="name-line">
             <b class:pending-text={isPending}>{safeName(chatItem.name)}</b>
-            <small class="time">{chatItem.last_message_at ? new Date(chatItem.last_message_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : ''}</small>
+            <small class="time">{timeText}</small>
           </div>
           <div class="last-msg" class:pending-msg={isPending}>
-            {#if isPending}<span class="pending-pill">Pending</span>{:else}{(chatItem.last_message||'Tap').slice(0,28)}{/if}
+            {#if isPending}
+              <span class="pending-pill">Pending</span>
+            {:else}
+              <span class="preview-text">{preview}</span>
+              {#if unread>0}<span class="unread-count">{unread>9?'9+':unread}</span>{/if}
+            {/if}
           </div>
         </div>
       </div>
@@ -102,7 +143,6 @@
 
 <style>
 .chat-sidebar{display:flex;flex-direction:column;height:100%;background:#fff;color:#0f172a;font-family:Inter,system-ui,sans-serif;}
-/* COMPACT - NO GAP */
 .top-bar{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#fff;border-bottom:1px solid #f1f5f9;flex-shrink:0;}
 .title-block{display:flex;align-items:center;gap:6px;} .title-block h2{margin:0;font-size:15px;font-weight:800;letter-spacing:-.2px;}
 .count{font-size:10px;font-weight:700;color:#00a884;background:#e7fce3;padding:1px 6px;border-radius:10px;display:inline-block;line-height:1.4;}
@@ -125,11 +165,14 @@
 .avatar-btn img{width:36px;height:36px;border-radius:8px;object-fit:cover;display:block;}
 .badge{position:absolute;bottom:-2px;right:-2px;width:12px;height:12px;border-radius:50%;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;}
 .badge.online{background:#22c55e;} .badge.pending{background:#f59e0b;color:#fff;} .badge.group{background:#7c3aed;color:#fff;font-size:7px;}
-.chat-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;}
+.chat-info{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;}
 .name-line{display:flex;justify-content:space-between;align-items:center;gap:4px;}
 .name-line b{font-size:12px;font-weight:600;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;}
-.name-line b.pending-text{color:#92400e;} .time{font-size:9px;color:#94a3b8;background:#f8fafc;padding:1px 4px;border-radius:4px;flex-shrink:0;}
-.last-msg{font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.name-line b.pending-text{color:#92400e;} 
+.time{font-size:10px;color:#64748b;flex-shrink:0;font-weight:500;min-width:48px;text-align:right;}
+.last-msg{font-size:10px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;justify-content:space-between;align-items:center;gap:6px;}
+.preview-text{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;}
+.unread-count{background:#00a884;color:#fff;font-size:9px;font-weight:800;min-width:18px;height:18px;border-radius:10px;display:flex;align-items:center;justify-content:center;padding:0 5px;flex-shrink:0;}
 .pending-pill{font-size:9px;font-weight:700;color:#b45309;background:#fef3c7;padding:1px 6px;border-radius:10px;}
 .pending-msg{color:#92400e;}
 .empty-state{display:flex;flex-direction:column;align-items:center;padding:24px 12px;gap:4px;color:#94a3b8;text-align:center;}
