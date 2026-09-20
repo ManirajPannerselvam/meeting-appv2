@@ -1,35 +1,38 @@
 /**
  * ============================================================
  * Temple Operations Reporting System
- * File        : src/hooks.client.ts
+ * File : src/hooks.client.ts
  * ============================================================
- * PURPOSE
- *   Client-side application bootstrap.
- *
- * DESCRIPTION
- *   Initializes the application once when the client starts.
- *
- * INITIALIZES
- *   - IndexedDB
- *   - Authentication
- *   - Offline Sync
- *   - Realtime (future)
+ * FIXED: No void, no double init, no Multiple GoTrueClient
  * ============================================================
  */
 
 import type { HandleClientError } from "@sveltejs/kit";
 import { initializeApplication } from "$lib/init";
 
-// Initialize application once on client startup.
-void initializeApplication();
+let initDone = false;
 
-/**
- * Global client error handler.
- */
-export const handleError: HandleClientError = ({ error, status }) => {
-	console.error("Client Error:", status, error);
+// Initialize once, with proper error handling
+async function boot() {
+  if (initDone) return;
+  initDone = true;
 
-	return {
-		message: "An unexpected error occurred."
-	};
+  try {
+    await initializeApplication();
+    console.info("[hooks.client] App booted successfully");
+  } catch (e) {
+    console.warn("[hooks.client] Boot failed, continuing offline:", e);
+  }
+}
+
+// Only run in browser, once
+if (typeof window!== 'undefined') {
+  boot();
+}
+
+export const handleError: HandleClientError = ({ error, status, message }) => {
+  console.error("Client Error:", status, message, error);
+  return {
+    message: "An unexpected error occurred. Check console."
+  };
 };

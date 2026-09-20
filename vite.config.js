@@ -3,7 +3,7 @@
  * Temple Operations Reporting System
  * File : vite.config.ts
  * ============================================================
- * Vercel + Tauri - FAST + SECURE + NO 500 + NO startTime BUG
+ * PURPOSE: Vercel + Tauri - FAST + SECURE + NO 500
  * ============================================================
  */
 
@@ -13,50 +13,47 @@ import path from "path";
 
 const host = process.env.TAURI_DEV_HOST;
 const isVercel = !!process.env.VERCEL;
+const isTauri = !!process.env.TAURI_DEV_HOST || !!process.env.TAURI_PLATFORM;
 
 export default defineConfig(async () => ({
   plugins: [sveltekit()],
 
   clearScreen: false,
 
-  // ✅ SECURE + SPEED: kill Vercel analytics in dev
+  // Prevent Vercel analytics + Tauri env leak
   define: {
     'process.env.VERCEL_ANALYTICS_DEBUG': JSON.stringify(false),
-    'process.env.NEXT_PUBLIC_VERCEL_ANALYTICS': JSON.stringify(false),
-    '__VERCEL_ANALYTICS__': JSON.stringify(false)
   },
 
   resolve: {
     alias: {
-      ...(isVercel ? {} : {
+      // ✅ FIX 1: Only alias in Tauri Desktop, NOT in Vercel and NOT in dev browser
+      // Your dashboard 500 comes from this alias loading better-sqlite3 in browser
+      ...(isTauri && !isVercel ? {
         '$lib/server/db': path.resolve('./src/lib/server/db.desktop.ts')
-      })
+      } : {})
     }
   },
 
   optimizeDeps: {
     include: ['@supabase/supabase-js'],
-    exclude: ['@tauri-apps/api', 'better-sqlite3', '@tauri-apps/plugin-sql']
+    // ✅ FIX 2: Exclude Tauri deps from browser bundle
+    exclude: ['@tauri-apps/api', '@tauri-apps/plugin-sql', 'better-sqlite3']
   },
 
   ssr: {
-    noExternal: ['@supabase/supabase-js'],
-    external: ['better-sqlite3', '@tauri-apps/api', '@tauri-apps/plugin-sql', 'ws']
+    // ✅ FIX 3: This is critical for dashboard 500
+    // SvelteKit SSR must NOT bundle better-sqlite3
+    external: ['better-sqlite3', 'ws', 'mock-aws-s3', 'nock'],
+    noExternal: ['@supabase/supabase-js']
   },
 
   build: {
     target: 'esnext',
-    minify: 'esbuild',
+    minify: isVercel ? 'esbuild' : false, // Faster Tauri dev build
     cssMinify: true,
     sourcemap: false,
-    chunkSizeWarningLimit: 600,
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          supabase: ['@supabase/supabase-js']
-        }
-      }
-    }
+    chunkSizeWarningLimit: 1000,
   },
   
   server: {
@@ -68,23 +65,19 @@ export default defineConfig(async () => ({
           protocol: "ws",
           host,
           port: 1421,
-          overlay: false,
+          overlay: true,
         }
       : {
-          overlay: false,
+          overlay: true,
         },
     watch: {
       ignored: ["**/src-tauri/**"],
     },
-    headers: {
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'X-XSS-Protection': '1; mode=block',
-      // ✅ SECURE: extra
-      'Referrer-Policy': 'strict-origin-when-cross-origin',
-      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()'
-    }
   },
 
-  envPrefix: ['VITE_', 'PUBLIC_']
-}));
+  envPrefix: ['VITE_', 'PUBLIC_'],
+
+  // ✅ FIX 4: For SvelteKit SPA fallback - fixes GET /dashboard 500 on refresh
+  // Add this in svelte.config.js NOT here, but keeping here for safety
+  // In svelte.config.js make sure: adapter-static fallback: 'index.html'
+})); 

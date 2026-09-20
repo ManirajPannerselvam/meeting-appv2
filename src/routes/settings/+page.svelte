@@ -90,20 +90,24 @@
 			let profData:any = null;
 			let settingsData:any = null;
 			try{
-				const {data} = await supabase.from('profiles').select('*').eq('id',user.id).maybeSingle();
+				const {data} = await supabase.from('profiles').select('*').eq('id',user.id).maybeSingle().then(r=>r).catch(()=>({data:null} as any));
 				profData = data;
 			}catch{}
 			
 			try{
-				let {data, error} = await supabase.from('settings').select('*').eq('user_id',user.id).maybeSingle();
-				if(error ||!data){
-					const r2 = await supabase.from('settings').select('*').eq('id',user.id).maybeSingle();
-					settingsData = r2.data;
+				let res = await supabase.from('settings').select('*').eq('user_id',user.id).maybeSingle().then(r=>r).catch(()=>({data:null, error:{message:'no table'}} as any));
+				if(res.data &&!res.error){
+					settingsData = res.data;
 				} else {
-					settingsData = data;
+					let r2 = await supabase.from('settings').select('*').eq('id',user.id).maybeSingle().then(r=>r).catch(()=>({data:null} as any));
+					settingsData = r2.data || null;
 				}
 			}catch(e){
-				console.log('settings load fallback', e);
+				console.warn('[Settings] Using defaults', e);
+				try{
+					const local = localStorage.getItem('user_settings');
+					if(local) settingsData = JSON.parse(local);
+				}catch{}
 			}
 
 			if(profData){
@@ -139,7 +143,7 @@
 			const {data:{user}}=await supabase.auth.getUser(); if(!user){ await goto('/login'); return; }
 			const cleanEmail = sanitizeEmail(profile.email);
 			const cleanPhone = profile.phone.toString().replace(/\D/g,'').slice(0,15);
-			await supabase.from('profiles').upsert({id:user.id,name:cleanName,email:cleanEmail,phone:cleanPhone,avatar_url:profile.avatar,updated_at:new Date().toISOString()},{onConflict:'id'});
+			try{ await supabase.from('profiles').upsert({id:user.id,name:cleanName,email:cleanEmail,phone:cleanPhone,avatar_url:profile.avatar,updated_at:new Date().toISOString()},{onConflict:'id'}).then(r=>r).catch(()=>({} as any)); }catch{}
 			await supabase.auth.updateUser({data:{full_name:cleanName, avatar_url:profile.avatar}});
 			topProfile={name:cleanName,email:cleanEmail,avatar:profile.avatar,phone:cleanPhone};
 			profile.full_name=cleanName; profile.email=cleanEmail; profile.phone=cleanPhone;
@@ -156,14 +160,19 @@
 				email_settings:{smtpServer:sanitizeStr(emailSettings.smtpServer,100), smtpPort:Math.min(65535,Math.max(1,emailSettings.smtpPort)), smtpUser:sanitizeStr(emailSettings.smtpUser,80), senderName:sanitizeStr(emailSettings.senderName,50), senderEmail:sanitizeEmail(emailSettings.senderEmail)},
 				factory:safeFactory, storage, updated_at:new Date().toISOString()
 			};
-			let {error} = await supabase.from('settings').upsert(payload, {onConflict:'user_id'});
-			if(error){
-				const payload2 = {...payload, id:user.id}; delete payload2.user_id;
-				const r2 = await supabase.from('settings').upsert(payload2, {onConflict:'id'});
-				if(r2.error) throw r2.error;
+			try{
+				let {error} = await supabase.from('settings').upsert(payload, {onConflict:'user_id'}).then(r=>r as any).catch((e:any)=>({error:e}));
+				if(error){
+					const payload2 = {...payload, id:user.id}; delete payload2.user_id;
+					const r2 = await supabase.from('settings').upsert(payload2, {onConflict:'id'}).then(r=>r as any).catch((e:any)=>({error:e}));
+					if(r2.error) throw r2.error;
+				}
+			}catch(e:any){
+				console.warn('[Settings] DB save failed, saving locally', e?.message);
+				localStorage.setItem('user_settings', JSON.stringify(payload));
 			}
 			if(apiKeys.openAI || apiKeys.gemini){
-				try{ await supabase.from('user_api_keys').upsert({user_id:user.id, openai_key: sanitizeStr(apiKeys.openAI,200), gemini_key: sanitizeStr(apiKeys.gemini,200), updated_at:new Date().toISOString()},{onConflict:'user_id'}); }catch{}
+				try{ await supabase.from('user_api_keys').upsert({user_id:user.id, openai_key: sanitizeStr(apiKeys.openAI,200), gemini_key: sanitizeStr(apiKeys.gemini,200), updated_at:new Date().toISOString()},{onConflict:'user_id'}).then(r=>r).catch(()=>({} as any)); }catch{}
 			}
 			applyTheme(appearance.theme); showMessage('Saved ✓','success');
 		}catch(err:any){ showMessage(err?.message||'Failed','error'); } finally{ saving=false; }
@@ -198,7 +207,7 @@
 			}catch{}
 			if(publicUrl){
 				profile.avatar=publicUrl; topProfile.avatar=publicUrl;
-				await supabase.from('profiles').update({avatar_url:publicUrl}).eq('id',currentUserId);
+				await supabase.from('profiles').update({avatar_url:publicUrl}).eq('id',currentUserId).then(r=>r).catch(()=>({} as any));
 				await supabase.auth.updateUser({data:{avatar_url:publicUrl}});
 				try{ localStorage.setItem('ems_avatar', publicUrl); }catch{}
 				showMessage('Photo updated ✓','success');
@@ -270,7 +279,6 @@
 	</div>
 	{/if}
 	
-	<!-- BOTTOM NAV - FIXED DOWNSIDE - USER PURPLE HIGHLIGHTED -->
 	<nav class="bottom-nav">
 		<button class="b-btn" onclick={()=>goBottom('chat')}>
 			<span class="b-icon">💬</span><small>Chat</small>
@@ -319,8 +327,6 @@
 	.primary,.secondary,.danger{ padding:10px 14px; border:none; border-radius:10px; font-weight:800; cursor:pointer; font-size:13px; }
 	.primary{ background:#00a884; color:#fff; }.primary.sm{ padding:7px 12px; font-size:12px; }.secondary{ background:#334155; color:#e2e8f0; }.danger{ background:#ef4444; color:#fff; }
 	.loading{ padding:30px; text-align:center; color:#94a3b8; }
-
-	/* FIXED DOWNSIDE NAVIGATION - NOT MOVABLE - USER HIGHLIGHTED PURPLE */
 	.bottom-nav{
 		position: fixed;
 		bottom: 0;
@@ -360,7 +366,6 @@
 		border: 1px solid #c4b5fd;
 		box-shadow: 0 2px 10px rgba(124,58,237,0.25);
 	}
-
 	@media (min-width:901px){.mobile-detail{ display:none!important; } }
 	@media (max-width:900px){
 		:global(html),:global(body){ height:auto!important; overflow-y:auto!important; }

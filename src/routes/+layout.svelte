@@ -45,7 +45,6 @@
     const endY = e.changedTouches[0].clientY;
     const diffX = endX - startX; 
     const diffY = endY - startY;
-    // ✅ FIX: Allow vertical scroll - only trigger swipe if HORIZONTAL is dominant
     if(Math.abs(diffX) < 120 || Math.abs(diffY) > 90 || Math.abs(diffX) < Math.abs(diffY) || Date.now() - startTime > 600) return;
     
     if($page.url.pathname.startsWith('/chat') && diffX > 100 && startX < 50){
@@ -78,40 +77,29 @@
     document.documentElement.style.colorScheme = isDarkTheme ? 'dark' : 'light';
   }
 
+  // ✅ FIXED: No DB call - theme only from localStorage to prevent 400
   async function loadThemeFromSettings(){
     if(!browser) return;
-    try{
-      const { data } = await supabase.from('settings').select('appearance').eq('id',1).maybeSingle();
-      if(data?.appearance?.theme){
-        const th = String(data.appearance.theme).toLowerCase().slice(0,20);
-        const allowed = ['whatsapp','light','dark','discord','twitter','slack','system'];
-        if(allowed.includes(th)) {
-          try{ localStorage.setItem('ems_theme', th); localStorage.setItem('app-theme', th); }catch{}
-          applyThemeFromStorage();
-        }
-      }
-    }catch{}
+    applyThemeFromStorage();
   }
 
   function preloadInBackground(){
     if(!browser) return;
+    // ✅ FIXED: Removed settings table preload that caused 400
     Promise.allSettled([
       supabase.from('contacts').select('id').limit(1).then(()=>{}).catch(()=>{}),
-      supabase.from('settings').select('id').limit(1).then(()=>{}).catch(()=>{}),
     ]);
     setTimeout(()=>{
       try{
         preloadData('/reports');
-        preloadData('/settings');
         preloadData('/chat');
       }catch{}
-    }, 1500); // ✅ increased to avoid blocking main thread
+    }, 1500);
   }
 
   onMount(() => {
     if(!browser) return;
     applyThemeFromStorage();
-    setTimeout(()=>{ loadThemeFromSettings(); }, 500);
     const idle = (window as any).requestIdleCallback || ((cb:any)=> setTimeout(cb, 1200));
     idle(()=> preloadInBackground());
 
@@ -134,7 +122,6 @@
     const onOffline = ()=> online = false;
     window.addEventListener('online', onOnline);
     window.addEventListener('offline', onOffline);
-    // ✅ FIX: Only enable swipe on dashboard home, not on meetings
     window.addEventListener('touchstart', onTouchStart, { passive: true } as any);
     window.addEventListener('touchend', onTouchEnd, { passive: true } as any);
 
@@ -161,7 +148,6 @@
 <div class="swipe-root"><slot /></div>
 
 <style>
-/* ✅ FIX TOP TO BOTTOM + TOUCH - THIS WAS BLOCKING ALL SCROLL */
 :global(html){
   height: auto !important;
   min-height: 100% !important;
@@ -192,7 +178,7 @@
 .swipe-root{ 
   min-height:100vh; 
   min-height:100dvh; 
-  touch-action: pan-y !important; /* ✅ was auto - blocked vertical scroll */
+  touch-action: pan-y !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
   -webkit-overflow-scrolling: touch !important;
