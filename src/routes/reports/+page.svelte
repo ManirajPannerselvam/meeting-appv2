@@ -21,7 +21,7 @@
   let analysisSets: any[] = $state([{id:1, x:'', y:'', label:'Set 1', stationFilter: [] as string[], chartType:'line'}]);
   let currentUserId = $state('');
   let bottomTab = $state('reports');
-  let subTab = $state('reports'); // 1->2 moved here
+  let subTab = $state('reports');
 
   function sanitizeStr(s:any, max=80){ if(typeof s!=='string') return ''; return s.replace(/[<>`$&"'=;]/g,'').trim().slice(0,max); }
   function esc(v:any){ return String(v||'').replace(/[<>]/g,'').slice(0,100); }
@@ -72,19 +72,6 @@
     try{ const { data:{ session } } = await chatDB.auth.getSession(); if(session?.user?.id) return session.user.id; }catch{}
     try{ const { data:{ user } } = await supabaseTemplates.auth.getUser(); if(user?.id) return user.id; }catch{}
     try{ const { data:{ session } } = await supabaseTemplates.auth.getSession(); if(session?.user?.id) return session.user.id; }catch{}
-    try{
-      if(browser){
-        for(let i=0;i<localStorage.length;i++){
-          const k = localStorage.key(i) || '';
-          if(k.includes('sb-') && k.includes('auth')){
-            const raw = localStorage.getItem(k); if(!raw) continue;
-            const p = JSON.parse(raw);
-            const id = p?.user?.id || p?.currentSession?.user?.id || p?.session?.user?.id;
-            if(id) return id;
-          }
-        }
-      }
-    }catch{}
     return '';
   }
 
@@ -165,7 +152,6 @@
 </script>
 
 <div class="app" ontouchstart={onTouchStart} ontouchend={onTouchEnd}>
-  <!-- TOP: only title, 1 removed -->
   <div class="top-fixed">
     <div class="top-row"><div class="title">Reports ({records.length})</div><div class="right-info">{templates.length} templates</div></div>
     <div class="filters"><div class="f1"><label>Calendar</label><button class="date-btn" onclick={()=>showCalendar=!showCalendar}>{sanitizeStr(dateRange.from,10)} / {sanitizeStr(dateRange.to,10)}</button>{#if showCalendar}<div class="cal-pop"><input type="date" bind:value={dateRange.from} /><input type="date" bind:value={dateRange.to} /><button class="apply" onclick={()=>{showCalendar=false; loadRecords();}}>Apply</button></div>{/if}</div><div class="f2"><label>Template</label><select bind:value={selectedTemplateId} onchange={()=>loadRecords()}><option value="ALL">All ({templates.length})</option>{#each templates as t}<option value={t.id}>{sanitizeStr(t.name,30)}</option>{/each}</select></div><button class="load" onclick={loadRecords} disabled={loading}>{loading?'...':'Load'}</button></div>
@@ -182,13 +168,18 @@
     {/if}
   </div>
 
-  <!-- 1 MOVED TO 2: location above navigation -->
+  <!-- MID TABS - KEEP COLOR -->
   <div class="mid-tabs">
     <button class:active={subTab==='reports'} onclick={()=>goSub('reports')}>Reports</button>
     <button class:active={subTab==='meeting'} onclick={()=>goSub('meeting')}>Meetings</button>
   </div>
 
-  <nav class="bottom-fixed"><button class:active={bottomTab==='chat'} onclick={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button><button class:active={bottomTab==='reports'} onclick={()=>goBottom('reports')}><span class="b-icon">📋</span><small>Reports</small></button><button class:active={bottomTab==='user'} onclick={()=>goBottom('user')}><span class="b-icon">👤</span><small>User</small></button></nav>
+  <!-- BOTTOM NAV - LIKE CHAT SCREENSHOT PILL -->
+  <nav class="bottom-fixed" aria-label="Bottom navigation">
+    <button class="nav-btn" onclick={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button>
+    <button class="nav-btn report-active" onclick={()=>goBottom('reports')}><span class="b-icon">📋</span><small>Reports</small></button>
+    <button class="nav-btn user-btn" onclick={()=>goBottom('user')}><span class="b-icon">👤</span><small>User</small></button>
+  </nav>
 </div>
 
 <style>
@@ -221,14 +212,16 @@ select.inline{flex:1;min-width:60px;padding:7px 6px;border-radius:6px;border:1px
 .chart-wrap canvas{width:100%!important;height:100%!important;}
 .add{width:100%;background:white;border:1px dashed #2563eb;color:#2563eb;padding:10px;border-radius:8px;font-weight:700;margin-top:6px;}
 
-/* NEW: location 2 above navigation */
-.mid-tabs{flex:0 0 auto; display:flex; gap:1px; padding:8px 12px; background:#f8fafc; border-top:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0; justify-content:center;}
+/* KEEP REPORT COLOR - MID TABS */
+.mid-tabs{flex:0 0 auto; display:flex; gap:8px; padding:8px 12px; background:#f8fafc; border-top:1px solid #e2e8f0; border-bottom:1px solid #e2e8f0; justify-content:center;}
 .mid-tabs button{flex:1; max-width:160px; padding:8px 12px; border-radius:20px; border:1px solid #cbd5e1; background:white; font-size:12px; font-weight:700; color:#475569;}
-.mid-tabs button.active{background:#2563eb; color:white; border-color:#2563eb;}
+.mid-tabs button.active{background:#0ea5e9; color:white; border-color:#0ea5e9;}
 
-.bottom-fixed{flex-shrink:0;height:68px;background:#202c33;border-top:1px solid #2a3942;display:grid;grid-template-columns:1fr 2fr 1fr 0fr;align-items:center;z-index:30;}
-.bottom-fixed button{background:none;border:none;display:flex;flex-direction:column;align-items:center;gap:3px;color:#8696a0;cursor:pointer;flex:1;padding:6px;}
-.bottom-fixed button.active{color:#00a884;}
-.b-icon{font-size:20px;}
-.bottom-fixed small{font-size:11px;font-weight:600;}
+/* BOTTOM NAV - SAME AS CHAT SCREENSHOT PILL - REPORT ACTIVE BLUE */
+.bottom-fixed{flex-shrink:0;height:64px;min-height:64px;background:#0a0f12;display:flex;align-items:center;justify-content:space-between;z-index:30;padding:6px 8px;gap:8px;border-top:3px solid #0ea5e9;}
+.bottom-fixed .nav-btn{flex:1;height:50px;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:16px;transition:.18s;font-weight:800;background:transparent;color:#7a8a96;}
+.bottom-fixed .nav-btn .b-icon{font-size:18px;line-height:1;}
+.bottom-fixed .nav-btn small{font-size:10px;letter-spacing:.2px;font-weight:800;}
+.bottom-fixed .nav-btn.report-active{background:#e3f2fd!important;color:#0284c7!important;flex:1.4;box-shadow:0 0 0 2px rgba(14,165,233,.15) inset;}
+.bottom-fixed .nav-btn.user-btn{color:#6b5a8a;}
 </style>

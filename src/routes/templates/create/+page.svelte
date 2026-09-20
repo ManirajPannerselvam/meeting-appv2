@@ -9,6 +9,7 @@
   function sanitizeText(v:string){ return v.replace(/[<>"'`;]/g,"").trim().slice(0,60); }
   function sanitizeCode(v:string){ return v.toUpperCase().replace(/[^A-Z0-9-_]/g,"").slice(0,20); }
   function sanitizeFieldName(v:string){ return v.toLowerCase().replace(/[^a-z0-9_]+/g,"_").slice(0,40); }
+  function sanitizeOption(v:string){ return v.replace(/[<>"'`;]/g,"").trim().slice(0,30); }
   function isValidUUID(u:string){ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u); }
 
   type FieldType = "text" | "number" | "dropdown" | "time" | "formula";
@@ -58,9 +59,10 @@
   $: numberFields = placed.filter(p=>p.metric || p.type==='number' || p.type==='dropdown');
   let editFormula = "{enter_output} ÷ {enter_input} × 100";
   let savedCount = 0; let isDirty = true; let toast = ""; let showSavedPopup = false; let savedTemplates: any[] = [];
+  let newOptionText = "";
 
   onMount(async ()=>{
-    creatingTime = new Date(); 
+    creatingTime = new Date();
     const iv = setInterval(()=> creatingTime = new Date(), 1000);
     if(browser){
       try{ const s=localStorage.getItem("template_theme_id"); if(s && /^[a-z]+$/.test(s)){ const f=themes.find(t=>t.id===s); if(f) selectedTheme=f; } }catch{}
@@ -68,24 +70,24 @@
     }
     return ()=> clearInterval(iv);
   });
-  function loadSaved(){ 
+  function loadSaved(){
     if(!browser) return;
-    try{ let t=JSON.parse(localStorage.getItem("templates")||"[]"); savedTemplates = Array.isArray(t)? t.slice(0,100):[]; savedCount=t.length; }catch{ savedCount=0; } 
+    try{ let t=JSON.parse(localStorage.getItem("templates")||"[]"); savedTemplates = Array.isArray(t)? t.slice(0,100):[]; savedCount=t.length; }catch{ savedCount=0; }
   }
 
   function quickAdd(def:FieldDef){
     const w=4.5; const h=2.2;
     const x=(placed.length*5)%(cols-w); const y=(placed.length*3)%(rows-h);
-    placed=[...placed, { id:uuid(), defId:def.id, label:sanitizeText(def.label), field_name:sanitizeFieldName(def.label)+"_"+uuid().slice(0,3), type:def.type, metric:def.metric, options:[...(def.options||[])].map(s=>sanitizeText(s)), formula:def.type==='formula'? "{enter_output} ÷ {enter_input} × 100" : "", x, y, w, h, color:def.color, border:def.border, required:def.required }];
+    placed=[...placed, { id:uuid(), defId:def.id, label:sanitizeText(def.label), field_name:sanitizeFieldName(def.label)+"_"+uuid().slice(0,3), type:def.type, metric:def.metric, options:[...(def.options||[])].map(s=>sanitizeOption(s)), formula:def.type==='formula'? "{enter_output} ÷ {enter_input} × 100" : "", x, y, w, h, color:def.color, border:def.border, required:def.required }];
     selectedId=placed[placed.length-1].id; if(placed[placed.length-1].type==='formula') editFormula=placed[placed.length-1].formula; isDirty=true;
   }
 
   let boardEl: HTMLDivElement;
-  
+
   function startDrag(e: PointerEvent, p:Placed){
     if((e.target as HTMLElement).closest('.x')) return;
     e.stopPropagation();
-    selectedId=p.id; editFormula=p.formula||"";
+    selectedId=p.id; editFormula=p.formula||""; newOptionText="";
     const b=boardEl.getBoundingClientRect();
     startPt={x:e.clientX, y:e.clientY};
     dragOff.x=e.clientX-b.left-p.x*gap;
@@ -145,6 +147,32 @@
   function updateSelectedLabel(val:string){ if(!selected) return; let s=sanitizeText(val); if(!s) return; selected.label=s; selected.field_name=sanitizeFieldName(s); placed=[...placed]; isDirty=true; }
   function deleteField(id:string){ placed=placed.filter(x=>x.id!==id); isDirty=true; }
 
+  function addOption(){
+    if(!selected) return;
+    const opt = sanitizeOption(newOptionText);
+    if(!opt){ toast="Enter option"; setTimeout(()=>toast="",1500); return; }
+    if(selected.options.includes(opt)){ toast="Already exists"; setTimeout(()=>toast="",1500); return; }
+    if(selected.options.length>=20){ toast="Max 20 options"; setTimeout(()=>toast="",1500); return; }
+    selected.options = [...selected.options, opt];
+    placed=[...placed];
+    newOptionText="";
+    isDirty=true;
+  }
+  function removeOption(idx:number){
+    if(!selected) return;
+    selected.options = selected.options.filter((_,i)=>i!==idx);
+    placed=[...placed];
+    isDirty=true;
+  }
+  function updateOption(idx:number, val:string){
+    if(!selected) return;
+    const opt = sanitizeOption(val);
+    if(!opt) return;
+    selected.options[idx]=opt;
+    placed=[...placed];
+    isDirty=true;
+  }
+
   async function saveTemplate(){
     if(!browser) return;
     let cleanName=sanitizeText(templateName); if(!cleanName){ toast="Enter valid Name"; setTimeout(()=>toast="",2000); return; }
@@ -153,7 +181,7 @@
     let owner=getTemplateOwner(); let realIdStr=owner.owner_id; let realEmail=sanitizeText(owner.owner_name||owner.owner_email||"user"); let realUUID:string|null=null;
     try{ const { data:{user} }=await supabaseTemplates.auth.getUser(); if(user){ realEmail=sanitizeText(user.email||user.id); realIdStr=user.email||user.id; if(isValidUUID(user.id)) realUUID=user.id; } }catch{}
     const newId=safeUUID();
-    const normalized=placed.map(p=>({ ...p, label:sanitizeText(p.label), field_name:sanitizeFieldName(p.field_name||p.label), name:sanitizeFieldName(p.field_name||p.label), formula:(p.formula||"").slice(0,200) }));
+    const normalized=placed.map(p=>({...p, label:sanitizeText(p.label), field_name:sanitizeFieldName(p.field_name||p.label), name:sanitizeFieldName(p.field_name||p.label), formula:(p.formula||"").slice(0,200), options:(p.options||[]).map(o=>sanitizeOption(o)).slice(0,20) }));
     let obj={ id:newId, name:cleanName, code:cleanCode, template_code:cleanCode, t_code:cleanCode, category:sanitizeText(category), theme:selectedTheme.id, theme_color:selectedTheme.color, fields:normalized, data:{fields:normalized}, owner_id:realIdStr, owner_name:realEmail, createdAt:new Date().toISOString() };
     all=[obj,...all].slice(0,100); localStorage.setItem("templates",JSON.stringify(all)); localStorage.setItem("template_theme_id",selectedTheme.id);
     savedTemplates=all; savedCount=all.length; isDirty=false;
@@ -164,11 +192,10 @@
     }catch(e:any){ toast=`Saved locally`; }
     setTimeout(()=>toast="",2500); showSavedPopup=true;
   }
-  function handleBack(){ if(isDirty && !confirm("Not Saved! Leave?")) return; history.back(); }
+  function handleBack(){ if(isDirty &&!confirm("Not Saved! Leave?")) return; history.back(); }
   function pickTheme(t:any){ if(!t||!/^[a-z]+$/.test(t.id)) return; selectedTheme=t; if(browser) localStorage.setItem("template_theme_id",t.id); isDirty=true; }
 </script>
 
-<!-- SAME MARKUP BUT WITH FIXED EVENTS -->
 <div class="top-fixed two-line">
   <div class="top-line line1">
     <div class="tl1">
@@ -225,7 +252,7 @@
               ontouchmove={onTouchMove}
               ontouchend={onTouchEnd}
               onclick={()=>{ if(!isDragging){selectedId=p.id; editFormula=p.formula;}}}>
-              <span class="mod-label">{p.label}</span>
+              <span class="mod-label">{p.label}{p.type==='dropdown'?` (${p.options.length})`:''}</span>
               <button class="x" onclick={(e)=>{ e.stopPropagation(); deleteField(p.id); }}>✕</button>
             </div>
           {/each}
@@ -235,12 +262,14 @@
     </div>
 
     <div class="preview-wrap linked onebyone" style="border-color:{selectedTheme.color}">
-      <div class="preview-head">◉ Preview - {selectedTheme.name}</div>
+      <div class="preview-head">◉ Preview - {selectedTheme.name} - Dropdown Fixed</div>
       <div class="preview-white">
         {#each placed as p (p.id)}
           <div class="p-preview-item" style="border-left:3px solid {p.border}">
-            <b class="p-l">{p.label}</b>
-            {#if p.type!=='formula'}
+            <b class="p-l">{p.label} [{p.type}]</b>
+            {#if p.type==='dropdown'}
+              <select class="p-input" style="background:#ffffff!important; border:2px solid {p.border}!important; color:#0f172a!important;"><option value="">-- Select {p.label} --</option>{#each p.options as opt}<option value={opt}>{opt}</option>{/each}</select>
+            {:else if p.type!=='formula'}
               <input class="p-input" placeholder="Enter {p.label}" value={p.type==='number'?'0':''} maxlength={20} />
             {:else}
               <div class="p-formula" style="background:{selectedTheme.light}; border:1px solid {selectedTheme.color};">{p.formula || "⚡ Auto Calculated"}</div>
@@ -255,6 +284,24 @@
     {#if selected}
       <div class="edit-box" style="border-color:{selectedTheme.color}"><div class="edit-head"><b>✏️ {selected.label}</b><small>{selected.type}</small></div>
         <label>Label</label><input class="edit-in" value={selected.label} oninput={(e)=>updateSelectedLabel(e.currentTarget.value)} maxlength={60} />
+        {#if selected.type==='dropdown'}
+          <div style="display:flex; flex-direction:column; gap:6px; background:#fffbeb; border:1px solid #f59e0b; border-radius:8px; padding:8px; margin-top:6px;">
+            <label style="font-weight:800; color:#0f172a; font-size:10px;">▼ Dropdown Options ({selected.options.length}/20)</label>
+            <div style="display:flex; flex-direction:column; gap:4px; max-height:120px; overflow-y:auto;">
+              {#each selected.options as opt, idx}
+                <div style="display:flex; gap:4px; align-items:center;">
+                  <input style="flex:1; height:28px; border:1px solid #cbd5e1; border-radius:6px; padding:0 8px; font-size:10px; background:#ffffff; color:#0f172a;" value={opt} oninput={(e)=>updateOption(idx, e.currentTarget.value)} maxlength={30} />
+                  <button style="width:28px; height:28px; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; border-radius:6px; cursor:pointer; font-weight:800;" onclick={()=>removeOption(idx)}>✕</button>
+                </div>
+              {/each}
+            </div>
+            <div style="display:flex; gap:4px;">
+              <input class="edit-in" bind:value={newOptionText} placeholder="New option" maxlength={30} onkeydown={(e)=>{ if(e.key==='Enter'){ e.preventDefault(); addOption(); }}} />
+              <button style="height:28px; border:0; border-radius:6px; color:#fff; font-weight:800; font-size:10px; padding:0 10px; cursor:pointer; background:{selectedTheme.color}" onclick={addOption}>+ Add</button>
+            </div>
+            <small style="color:#64748b; font-size:8px;">🔒 Secure: max 20, sanitized</small>
+          </div>
+        {/if}
       </div>
     {/if}
     <div class="formula-builder" style="border-color:{selectedTheme.color}; background:{selectedTheme.light}">
@@ -276,68 +323,68 @@
   </div>
 </div>
 
-<style> 
+<style>
   :global(body){margin:0; font-family:system-ui; background:#ffffff; color:#0f172a;}
-  .top-fixed.two-line{position:fixed; top:0; left:0; right:0; z-index:1000; background:#ffffff; border-bottom:2px solid #e2e8f0; display:flex; flex-direction:column; gap:0; color:#0f172a;}
-  .top-line{display:flex; justify-content:space-between; align-items:center; padding:4px 6px;}
-  .line1{background:#f8fafc; border-bottom:1px solid #e2e8f0; height:32px;}
-  .line2{background:#ffffff; height:36px;}
-  .tl1{display:flex; gap:6px; align-items:center;} .tr1{display:flex; gap:4px; align-items:center;}
-  .back{width:24px; height:24px; border:1px solid #cbd5e1; background:#ffffff; border-radius:5px; color:#0f172a; cursor:pointer; font-weight:700;}
-  .dirty{font-size:7px; color:#ef4444; font-weight:800; background:#fef2f2; padding:2px 6px; border-radius:10px; border:1px solid #fecaca;} 
-  .saved{font-size:7px; color:#16a34a; font-weight:800; background:#f0fdf4; padding:2px 6px; border-radius:10px; border:1px solid #bbf7d0;}
-  .count-badge{background:#0f172a; color:#ffffff; padding:0 8px; height:22px; border-radius:10px; font-size:8px; font-weight:800; display:flex; align-items:center;}
-  .preview-btn{height:22px; border:1px solid #cbd5e1; background:#ffffff; color:#0f172a; border-radius:5px; font-size:8px; font-weight:700; padding:0 8px; cursor:pointer;}
-  .save{height:22px; border:none; border-radius:5px; color:#ffffff; font-weight:800; font-size:8px; padding:0 10px; cursor:pointer;}
-  .t-inputs-2{display:flex; gap:6px; align-items:center; width:100%;}
-  .t-field{display:flex; flex-direction:column; gap:1px; flex:1;} .t-field.small{flex:0 0 80px;}
-  .t-field label{font-size:6px; font-weight:800; color:#334155; text-transform:uppercase; letter-spacing:0.5px;}
-  .t-field input, .t-field select{height:22px; border:1px solid #cbd5e1; border-radius:4px; padding:0 6px; font-size:9px; width:100%; box-sizing:border-box; background:#ffffff; color:#0f172a;}
-  .toast{position:fixed; top:70px; right:8px; background:#0f172a; color:#ffffff; padding:8px 12px; border-radius:8px; font-size:10px; font-weight:700; z-index:2000; border:1px solid #334155;}
-  .layout.two-top{display:grid; grid-template-columns: 14% 50% 36%; gap:2px; margin-top:72px; height:calc(100vh - 72px); overflow:hidden; background:#f1f5f9;}
-  .left{overflow-y:auto; background:#ffffff; border-right:1px solid #e2e8f0; padding:4px; display:flex; flex-direction:column; gap:4px;}
-  .center{overflow-y:auto; background:#f8fafc; padding:4px; display:flex; flex-direction:column; gap:4px;}
-  .right{overflow-y:auto; background:#ffffff; padding:4px; display:flex; flex-direction:column; gap:6px; border-left:1px solid #e2e8f0;}
-  .search-box{display:flex; gap:6px; align-items:center; border:1px solid #cbd5e1; border-radius:8px; padding:0 8px; background:#ffffff; height:26px; font-size:9px; color:#0f172a;}
-  .search-box input{border:none; outline:none; font-size:9px; width:100%; background:#ffffff; color:#0f172a;}
-  .field-grid.single-col{display:flex; flex-direction:column; gap:4px;}
-  .field-row.vertical{height:36px !important; min-height:36px !important; width:100% !important; border:1px solid #e2e8f0; border-left-width:4px !important; background:#ffffff; border-radius:8px; display:flex; flex-direction:row; align-items:center; gap:8px; padding:0 8px !important; color:#0f172a; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.04);}
-  .field-row.vertical:hover{background:#f8fafc; border-color:#cbd5e1;}
-  .field-row.vertical .f-icon{font-size:14px !important; width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#f1f5f9; border-radius:6px;}
-  .field-row.vertical .f-label-down{font-size:8px !important; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#0f172a;}
-  .board-wrap{width:100%; background:#ffffff; border:2px solid #0ea5e9; border-radius:8px; height:52%; min-height:200px; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 2px 8px rgba(0,0,0,0.06);}
-  .board-scroll{flex:1; overflow:auto; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; background:#ffffff; background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size:14px 14px;}
-  .board{position:relative; touch-action:pan-x pan-y; background:transparent;}
-  .dot{display:none;}
-  .mod.reduced{position:absolute; background:#ffffff; border:2px solid; border-radius:8px; display:flex; align-items:center; padding:0 26px 0 8px; font-weight:800; box-shadow:0 2px 6px rgba(0,0,0,.12); touch-action:none; user-select:none; cursor:grab; box-sizing:border-box; min-width:72px; overflow:hidden; color:#0f172a;}
-  .mod.reduced.active{border-width:2.5px; z-index:20; box-shadow:0 6px 16px rgba(0,0,0,.18); background:#ffffff;}
-  .mod-label{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px !important; line-height:1.2; color:#0f172a !important; font-weight:800;}
-  .x{position:absolute !important; right:4px !important; top:50% !important; transform:translateY(-50%); width:18px !important; height:18px !important; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:5px; font-size:11px !important; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:30; font-weight:800;}
-  .creating-info{padding:6px 8px; display:flex; justify-content:space-between; font-size:8px; flex-shrink:0; background:#ffffff; color:#0f172a; font-weight:600; border-top:1px solid #e2e8f0;}
-  .preview-wrap.linked.onebyone{flex:1; overflow:auto; background:#ffffff; border:2px solid #0ea5e9; border-radius:8px; padding:6px; box-shadow:0 2px 8px rgba(0,0,0,0.06);}
-  .preview-head{font-size:8px; font-weight:800; margin-bottom:6px; color:#0f172a; background:#f0f9ff; padding:6px 8px; border-radius:6px; border:1px solid #bae6fd;}
-  .preview-white{display:flex; flex-direction:column; gap:6px;}
-  .p-preview-item{display:flex; flex-direction:column; gap:3px; background:#ffffff; border-radius:6px; padding:6px; border:1px solid #e2e8f0; border-left:3px solid #0ea5e9;}
-  .p-l{font-size:9px; font-weight:800; color:#0f172a;} .p-input{height:24px; font-size:9px; border:1px solid #cbd5e1; background:#ffffff; color:#0f172a; border-radius:6px; padding:0 8px;}
-  .p-formula{font-size:8px; padding:8px; border-radius:6px; font-weight:800; text-align:center; background:#f0fdf4; color:#065f46; border:1px solid #bbf7d0;}
-  .edit-box{background:#ffffff; border:2px solid #e2e8f0; border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:6px; box-shadow:0 1px 3px rgba(0,0,0,0.05);}
-  .edit-head{display:flex; justify-content:space-between; font-size:9px; color:#0f172a; font-weight:800;} .edit-box label{font-size:8px; font-weight:800; color:#334155;}
-  .edit-in{height:26px; border:1px solid #cbd5e1; border-radius:6px; padding:0 8px; font-size:9px; background:#ffffff; color:#0f172a;}
-  .formula-builder{position:relative !important; left:auto !important; top:auto !important; transform:none !important; border:2px solid #bbf7d0; border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:8px; background:#ffffff; width:100%; box-sizing:border-box; box-shadow:0 2px 8px rgba(0,0,0,0.06);}
-  .fb-head{font-size:9px; font-weight:800; color:#065f46; background:#f0fdf4; padding:6px 8px; border-radius:6px; border:1px solid #bbf7d0;} 
-  .fb-ta{width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:8px; font-size:10px; resize:none; box-sizing:border-box; background:#ffffff; color:#0f172a; font-weight:600;}
-  .fb-ops.all-sym{position:static !important; display:grid !important; grid-template-columns:repeat(3,1fr); gap:6px; width:100% !important; background:transparent !important; border:none !important; box-shadow:none !important;}
-  .fb-ops.all-sym button{position:static !important; height:36px !important; background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; font-weight:800; font-size:14px !important; cursor:pointer; touch-action:manipulation; color:#0f172a; box-shadow:0 1px 2px rgba(0,0,0,0.04);}
-  .fb-ops.all-sym button:hover{background:#f8fafc; border-color:#94a3b8;}
-  .fb-sec{display:flex; flex-direction:column; gap:4px; font-size:8px; color:#0f172a; font-weight:700;} 
-  .fb-field{width:100%; min-height:26px; border:1px solid #e2e8f0; border-radius:8px; font-size:8px; background:#ffffff; color:#0f172a; padding:6px 8px; text-align:left; font-weight:600; cursor:pointer;}
-  .fb-field:hover{background:#f8fafc;}
-  .savef{height:32px; border:none; border-radius:8px; color:#ffffff; font-weight:800; font-size:9px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.1);}
+ .top-fixed.two-line{position:fixed; top:0; left:0; right:0; z-index:1000; background:#ffffff; border-bottom:2px solid #e2e8f0; display:flex; flex-direction:column; gap:0; color:#0f172a;}
+ .top-line{display:flex; justify-content:space-between; align-items:center; padding:4px 6px;}
+ .line1{background:#f8fafc; border-bottom:1px solid #e2e8f0; height:32px;}
+ .line2{background:#ffffff; height:36px;}
+ .tl1{display:flex; gap:6px; align-items:center;}.tr1{display:flex; gap:4px; align-items:center;}
+ .back{width:24px; height:24px; border:1px solid #cbd5e1; background:#ffffff; border-radius:5px; color:#0f172a; cursor:pointer; font-weight:700;}
+ .dirty{font-size:7px; color:#ef4444; font-weight:800; background:#fef2f2; padding:2px 6px; border-radius:10px; border:1px solid #fecaca;}
+ .saved{font-size:7px; color:#16a34a; font-weight:800; background:#f0fdf4; padding:2px 6px; border-radius:10px; border:1px solid #bbf7d0;}
+ .count-badge{background:#0f172a; color:#ffffff; padding:0 8px; height:22px; border-radius:10px; font-size:8px; font-weight:800; display:flex; align-items:center;}
+ .preview-btn{height:22px; border:1px solid #cbd5e1; background:#ffffff; color:#0f172a; border-radius:5px; font-size:8px; font-weight:700; padding:0 8px; cursor:pointer;}
+ .save{height:22px; border:none; border-radius:5px; color:#ffffff; font-weight:800; font-size:8px; padding:0 10px; cursor:pointer;}
+ .t-inputs-2{display:flex; gap:6px; align-items:center; width:100%;}
+ .t-field{display:flex; flex-direction:column; gap:1px; flex:1;}.t-field.small{flex:0 0 80px;}
+ .t-field label{font-size:6px; font-weight:800; color:#334155; text-transform:uppercase; letter-spacing:0.5px;}
+ .t-field input,.t-field select{height:22px; border:1px solid #cbd5e1; border-radius:4px; padding:0 6px; font-size:9px; width:100%; box-sizing:border-box; background:#ffffff; color:#0f172a;}
+ .toast{position:fixed; top:70px; right:8px; background:#0f172a; color:#ffffff; padding:8px 12px; border-radius:8px; font-size:10px; font-weight:700; z-index:2000; border:1px solid #334155;}
+ .layout.two-top{display:grid; grid-template-columns: 14% 50% 36%; gap:2px; margin-top:72px; height:calc(100vh - 72px); overflow:hidden; background:#f1f5f9;}
+ .left{overflow-y:auto; background:#ffffff; border-right:1px solid #e2e8f0; padding:4px; display:flex; flex-direction:column; gap:4px;}
+ .center{overflow-y:auto; background:#f8fafc; padding:4px; display:flex; flex-direction:column; gap:4px;}
+ .right{overflow-y:auto; background:#ffffff; padding:4px; display:flex; flex-direction:column; gap:6px; border-left:1px solid #e2e8f0;}
+ .search-box{display:flex; gap:6px; align-items:center; border:1px solid #cbd5e1; border-radius:8px; padding:0 8px; background:#ffffff; height:26px; font-size:9px; color:#0f172a;}
+ .search-box input{border:none; outline:none; font-size:9px; width:100%; background:#ffffff; color:#0f172a;}
+ .field-grid.single-col{display:flex; flex-direction:column; gap:4px;}
+ .field-row.vertical{height:36px!important; min-height:36px!important; width:100%!important; border:1px solid #e2e8f0; border-left-width:4px!important; background:#ffffff; border-radius:8px; display:flex; flex-direction:row; align-items:center; gap:8px; padding:0 8px!important; color:#0f172a; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,0.04);}
+ .field-row.vertical:hover{background:#f8fafc; border-color:#cbd5e1;}
+ .field-row.vertical.f-icon{font-size:14px!important; width:22px; height:22px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#f1f5f9; border-radius:6px;}
+ .field-row.vertical.f-label-down{font-size:8px!important; font-weight:800; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#0f172a;}
+ .board-wrap{width:100%; background:#ffffff; border:2px solid #0ea5e9; border-radius:8px; height:52%; min-height:200px; overflow:hidden; display:flex; flex-direction:column; box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+ .board-scroll{flex:1; overflow:auto; touch-action:pan-x pan-y; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; background:#ffffff; background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size:14px 14px;}
+ .board{position:relative; touch-action:pan-x pan-y; background:transparent;}
+ .dot{display:none;}
+ .mod.reduced{position:absolute; background:#ffffff; border:2px solid; border-radius:8px; display:flex; align-items:center; padding:0 26px 0 8px; font-weight:800; box-shadow:0 2px 6px rgba(0,0,0,.12); touch-action:none; user-select:none; cursor:grab; box-sizing:border-box; min-width:72px; overflow:hidden; color:#0f172a;}
+ .mod.reduced.active{border-width:2.5px; z-index:20; box-shadow:0 6px 16px rgba(0,0,0,.18); background:#ffffff;}
+ .mod-label{flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:9px!important; line-height:1.2; color:#0f172a!important; font-weight:800;}
+ .x{position:absolute!important; right:4px!important; top:50%!important; transform:translateY(-50%); width:18px!important; height:18px!important; background:#fef2f2; color:#dc2626; border:1px solid #fecaca; border-radius:5px; font-size:11px!important; display:flex; align-items:center; justify-content:center; cursor:pointer; z-index:30; font-weight:800;}
+ .creating-info{padding:6px 8px; display:flex; justify-content:space-between; font-size:8px; flex-shrink:0; background:#ffffff; color:#0f172a; font-weight:600; border-top:1px solid #e2e8f0;}
+ .preview-wrap.linked.onebyone{flex:1; overflow:auto; background:#ffffff; border:2px solid #0ea5e9; border-radius:8px; padding:6px; box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+ .preview-head{font-size:8px; font-weight:800; margin-bottom:6px; color:#0f172a; background:#f0f9ff; padding:6px 8px; border-radius:6px; border:1px solid #bae6fd;}
+ .preview-white{display:flex; flex-direction:column; gap:6px;}
+ .p-preview-item{display:flex; flex-direction:column; gap:3px; background:#ffffff; border-radius:6px; padding:6px; border:1px solid #e2e8f0; border-left:3px solid #0ea5e9;}
+ .p-l{font-size:9px; font-weight:800; color:#0f172a;}.p-input{height:24px; font-size:9px; border:1px solid #cbd5e1; background:#ffffff; color:#0f172a; border-radius:6px; padding:0 8px;}
+ .p-formula{font-size:8px; padding:8px; border-radius:6px; font-weight:800; text-align:center; background:#f0fdf4; color:#065f46; border:1px solid #bbf7d0;}
+ .edit-box{background:#ffffff; border:2px solid #e2e8f0; border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:6px; box-shadow:0 1px 3px rgba(0,0,0,0.05);}
+ .edit-head{display:flex; justify-content:space-between; font-size:9px; color:#0f172a; font-weight:800;}.edit-box label{font-size:8px; font-weight:800; color:#334155;}
+ .edit-in{height:26px; border:1px solid #cbd5e1; border-radius:6px; padding:0 8px; font-size:9px; background:#ffffff; color:#0f172a;}
+ .formula-builder{position:relative!important; left:auto!important; top:auto!important; transform:none!important; border:2px solid #bbf7d0; border-radius:8px; padding:8px; display:flex; flex-direction:column; gap:8px; background:#ffffff; width:100%; box-sizing:border-box; box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+ .fb-head{font-size:9px; font-weight:800; color:#065f46; background:#f0fdf4; padding:6px 8px; border-radius:6px; border:1px solid #bbf7d0;}
+ .fb-ta{width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:8px; font-size:10px; resize:none; box-sizing:border-box; background:#ffffff; color:#0f172a; font-weight:600;}
+ .fb-ops.all-sym{position:static!important; display:grid!important; grid-template-columns:repeat(3,1fr); gap:6px; width:100%!important; background:transparent!important; border:none!important; box-shadow:none!important;}
+ .fb-ops.all-sym button{position:static!important; height:36px!important; background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; font-weight:800; font-size:14px!important; cursor:pointer; touch-action:manipulation; color:#0f172a; box-shadow:0 1px 2px rgba(0,0,0,0.04);}
+ .fb-ops.all-sym button:hover{background:#f8fafc; border-color:#94a3b8;}
+ .fb-sec{display:flex; flex-direction:column; gap:4px; font-size:8px; color:#0f172a; font-weight:700;}
+ .fb-field{width:100%; min-height:26px; border:1px solid #e2e8f0; border-radius:8px; font-size:8px; background:#ffffff; color:#0f172a; padding:6px 8px; text-align:left; font-weight:600; cursor:pointer;}
+ .fb-field:hover{background:#f8fafc;}
+ .savef{height:32px; border:none; border-radius:8px; color:#ffffff; font-weight:800; font-size:9px; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.1);}
   @media (max-width:480px){
-    .layout.two-top{grid-template-columns: 22% 40% 38%; margin-top:68px; height:calc(100vh - 68px);}
-    .line2{height:auto; padding:3px 4px;}
-    .t-inputs-2{gap:3px; flex-wrap:wrap;}
-    .t-field.small{flex:1 0 60px;}
-    .mod.reduced{min-width:80px !important;}
+   .layout.two-top{grid-template-columns: 22% 40% 38%; margin-top:68px; height:calc(100vh - 68px);}
+   .line2{height:auto; padding:3px 4px;}
+   .t-inputs-2{gap:3px; flex-wrap:wrap;}
+   .t-field.small{flex:1 0 60px;}
+   .mod.reduced{min-width:80px!important;}
   }
 </style>

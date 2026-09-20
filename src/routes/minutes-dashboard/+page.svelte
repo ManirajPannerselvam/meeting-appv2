@@ -3,7 +3,7 @@ import { onMount } from 'svelte';
 import { goto } from '$app/navigation';
 import { supabaseTemplates, getTemplateClient, getMeetingsQueryBuilder } from '$lib/supabase/client';
 
-let topNav:'reports'|'meetings' = 'meetings'; // meetings page = meetings active
+let topNav:'reports'|'meetings' = 'meetings';
 
 let rows:any[]=[]; let loading=true; let search=""; let sd=""; let tab:'Active'|'History'='Active';
 let currentUserId=''; let currentUserEmail=''; let cacheKey=''; let apiError='';
@@ -67,14 +67,12 @@ function goBottom(t:string){ const m:any={ chat:'/chat', reports:'/reports', use
 </script>
 
 <div class="app">
-  <!-- TOP 2 BUTTONS -->
- 
   <div class="scrollMain">
     <div class="topCard">
      <div class="left">
-  <h1 class="dashTitle">Meeting Dashboard 🔒 <span class="emailTag">{currentUserEmail? `(${sanitizeStr(currentUserEmail,25)})`:''}</span></h1>
-  {#if apiError}<div style="color:#dc2626;font-size:10px;margin-top:4px;">{sanitizeStr(apiError,120)}</div>{/if}
-</div>
+      <h1 class="dashTitle">Meeting Dashboard 🔒 <span class="emailTag">{currentUserEmail? `(${sanitizeStr(currentUserEmail,25)})`:''}</span></h1>
+      {#if apiError}<div style="color:#dc2626;font-size:10px;margin-top:4px;">{sanitizeStr(apiError,120)}</div>{/if}
+     </div>
       <div class="right">
         <div class="stat"><span>Total</span><b>{totals.t}</b></div>
         <div class="stat p"><span>Pending</span><b>{totals.p}</b></div>
@@ -121,23 +119,26 @@ function goBottom(t:string){ const m:any={ chat:'/chat', reports:'/reports', use
     </div>
     {/if}
   </div>
+
 <div class="topSegment">
     <button class="segBtn" class:active={topNav==='reports'} on:click={()=>goTop('reports')}>Reports</button>
     <button class="segBtn" class:active={topNav==='meetings'} on:click={()=>goTop('meetings')}>Meetings</button>
   </div>
-  <!-- BOTTOM NAV -->
-  <nav class="bottom-fixed">
-    <button on:click={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button>
-    <button class="active" on:click={()=>goBottom('reports')}><span class="b-icon">📋</span><small>Reports</small></button>
-    <button on:click={()=>goBottom('user')}><span class="b-icon">👤</span><small>User</small></button>
+
+  <!-- BOTTOM NAV - PILL LIKE SCREENSHOT - REPORTS BLUE ACTIVE -->
+  <nav class="bottom-fixed" aria-label="Bottom navigation">
+    <button class="nav-btn" on:click={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button>
+    <button class="nav-btn report-active" on:click={()=>goBottom('reports')}><span class="b-icon">📋</span><small>Reports</small></button>
+    <button class="nav-btn user-btn" on:click={()=>goBottom('user')}><span class="b-icon">👤</span><small>User</small></button>
   </nav>
 </div>
 
 <style>
 .app{display:flex;flex-direction:column;height:100dvh;width:100vw;background:#f8fafc;overflow:hidden;}
+/* TOP SEGMENT - KEEP REPORT BLUE */
 .topSegment{flex:0 0 auto;display:flex;gap:12px;padding:10px 16px;background:#ffffff;border-bottom:1px solid #e5e7eb;justify-content:center;z-index:20;}
 .segBtn{flex:1;max-width:50%;height:44px;border-radius:24px;border:1.5px solid #e2e8f0;background:#fff;color:#334155;font-size:14px;font-weight:700;cursor:pointer;transition:.2s;}
-.segBtn.active{background:#2563eb;color:#fff;border-color:#2563eb;box-shadow:0 2px 8px rgba(37,99,235,.3);}
+.segBtn.active{background:#0ea5e9;color:#fff;border-color:#0ea5e9;box-shadow:0 2px 8px rgba(14,165,233,.3);}
 .scrollMain{flex:1 1 auto;overflow-y:auto;overflow-x:hidden;padding:12px;display:flex;flex-direction:column;gap:10px;-webkit-overflow-scrolling:touch;}
 .topCard{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px 16px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;box-shadow:0 1px 4px rgba(0,0,0,.05);}
 .left{background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:8px 14px;display:flex;align-items:center;}
@@ -167,7 +168,12 @@ td.prio{padding:12px 10px;min-width:120px;} td.prio .prioBox{padding:7px 18px;bo
 .pill{min-width:34px;height:30px;border-radius:8px;border:1px solid #e2e8f0;font-weight:800;font-size:11.5px;cursor:pointer;padding:0 8px;background:#f8fafc;}
 .pill.total{background:#eff6ff;color:#1e40af;border-color:#bfdbfe;} .pill.pend{background:#fee2e2;color:#dc2626;} .pill.ongo,.pill.comp{background:#f8fafc;color:#64748b;}
 .empty{padding:20px;color:#94a3b8;font-weight:600;font-size:12px;text-align:center;} .sk{height:48px;margin:8px;background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%);background-size:200% 100%;animation:sh 1s infinite;border-radius:10px;}@keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
-.bottom-fixed{flex:0 0 auto;height:70px;background:#202c33;border-top:1px solid #2a3942;display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;justify-items:center;z-index:30;}
-.bottom-fixed button{background:none;border:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;color:#94a3b8;width:100%;height:100%;cursor:pointer;}
-.bottom-fixed button.active{color:#00a884;} .bottom-fixed button.active small{color:#00a884;} .b-icon{font-size:22px;} .bottom-fixed small{font-size:11px;font-weight:600;}
+
+/* BOTTOM NAV - PILL LIKE CHAT SCREENSHOT - ONLY COLOR CHANGE TO REPORT BLUE */
+.bottom-fixed{flex-shrink:0;height:64px;min-height:64px;background:#0a0f12;display:flex;align-items:center;justify-content:space-between;z-index:30;padding:6px 8px;gap:8px;border-top:3px solid #0ea5e9;}
+.bottom-fixed .nav-btn{flex:1;height:50px;border:none;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:16px;transition:.18s;font-weight:800;background:transparent;color:#7a8a96;}
+.bottom-fixed .nav-btn .b-icon{font-size:18px;line-height:1;}
+.bottom-fixed .nav-btn small{font-size:10px;letter-spacing:.2px;font-weight:800;}
+.bottom-fixed .nav-btn.report-active{background:#e3f2fd!important;color:#0284c7!important;flex:1.4;box-shadow:0 0 0 2px rgba(14,165,233,.15) inset;}
+.bottom-fixed .nav-btn.user-btn{color:#6b5a8a;}
 </style>

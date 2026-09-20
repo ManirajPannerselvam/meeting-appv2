@@ -48,71 +48,71 @@
 	const ALLOWED_THEMES = new Set(themeOptions.map(t=>t.id));
 	let topProfile = { name: '', email: '', avatar: '', phone: '' };
 	let bottomTab = 'user';
-	let avatarUploading = false;
 
-	function goBottom(tab:string){ bottomTab=tab; if(tab==='chat') goto('/chat'); if(tab==='report') goto('/reports'); if(tab==='user') goto('/settings'); }
-
-	// 🔒 50k SECURE SANITIZE
-	function sanitizeStr(s:any, max=80){
-		if(typeof s!=='string') return '';
-		return s.replace(/[<>`$&"'=]/g,'').trim().slice(0,max);
+	function goBottom(tab:string){
+		bottomTab=tab;
+		if(tab==='chat') goto('/chat');
+		if(tab==='report') goto('/reports');
+		if(tab==='user') goto('/settings');
 	}
+
+	function sanitizeStr(s:any, max=80){ if(typeof s!=='string') return ''; return s.replace(/[<>`$&"'=]/g,'').trim().slice(0,max); }
 	function sanitizeName(str:string){ if(!str) return ""; return sanitizeStr(str,80); }
 	function sanitizeEmail(e:string){ if(!e) return ""; return e.toLowerCase().trim().slice(0,100).replace(/[<>`$ ]/g,''); }
 	function isValidEmail(e:string){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
-
-	function selectTab(id:string){
-		if(activeTab===id && typeof window!=='undefined' && window.innerWidth<=900){
-			const el = document.getElementById(`detail-${id}`);
-			if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-			return;
-		}
-		activeTab=id;
-		if(typeof window!=='undefined'){
-			setTimeout(()=>{
-				const el = document.getElementById(`tab-${id}`);
-				el?.scrollIntoView({behavior:'smooth', block:'nearest'});
-			},100);
-		}
-	}
+	function selectTab(id:string){ activeTab=id; }
 
 	async function loadSettings() {
 		loading=true;
 		try{
 			let serverUser = $page.data.user; let user=serverUser;
-			if(!user){ const {data:{session}}=await supabase.auth.getSession(); if(!session){ await goto('/login'); return; } const {data:{user:u}, error}=await supabase.auth.getUser(); if(error||!u){ await goto('/login'); return; } user=u; }
+			if(!user){
+				const {data:{session}}=await supabase.auth.getSession();
+				if(!session){ await goto('/login'); return; }
+				const {data:{user:u}, error}=await supabase.auth.getUser();
+				if(error||!u){ await goto('/login'); return; }
+				user=u;
+			}
 			currentUserId=user.id;
-
-			// ✅ FOR REPORTS - DB different fix
 			try{
 				localStorage.setItem('ems_user_id', user.id);
 				localStorage.setItem('ems_user_email', (user.email||'').toLowerCase());
 				localStorage.setItem('user_id', user.id);
-				localStorage.setItem('currentUserId', user.id);
 			}catch{}
 
-			topProfile={ name:sanitizeName(user.user_metadata?.full_name||user.user_metadata?.name||user.email?.split('@')[0]||''), email:sanitizeEmail(user.email||''), avatar:user.user_metadata?.avatar_url||'', phone:(user.user_metadata?.phone||user.phone||'').toString().replace(/\D/g,'').slice(0,15) };
-			let authProfile={ full_name:topProfile.name, email:topProfile.email, phone:topProfile.phone, avatar:topProfile.avatar };
-
-			// 🔒 SECURE: settings id = user.id, NOT 1 (was leaking to 50k)
-			const [profRes, settingsRes] = await Promise.allSettled([
-				supabase.from('profiles').select('*').eq('id',user.id).maybeSingle(),
-				supabase.from('settings').select('*').eq('id',user.id).maybeSingle()
-			]);
-
-			if(profRes.status==='fulfilled' && profRes.value.data){
-				const a=profRes.value.data as any;
-				authProfile.full_name=sanitizeName(a.name||a.full_name||authProfile.full_name);
-				authProfile.email=sanitizeEmail(a.email||authProfile.email);
-				authProfile.phone=(a.phone||authProfile.phone).toString().replace(/\D/g,'').slice(0,15);
-				authProfile.avatar=a.avatar_url||authProfile.avatar;
-				topProfile={name:authProfile.full_name,email:authProfile.email,avatar:authProfile.avatar,phone:authProfile.phone};
+			topProfile={
+				name:sanitizeName(user.user_metadata?.full_name||user.user_metadata?.name||user.email?.split('@')[0]||''),
+				email:sanitizeEmail(user.email||''),
+				avatar:user.user_metadata?.avatar_url||'',
+				phone:(user.user_metadata?.phone||'').toString().replace(/\D/g,'').slice(0,15)
+			};
+			
+			let profData:any = null;
+			let settingsData:any = null;
+			try{
+				const {data} = await supabase.from('profiles').select('*').eq('id',user.id).maybeSingle();
+				profData = data;
+			}catch{}
+			
+			try{
+				let {data, error} = await supabase.from('settings').select('*').eq('user_id',user.id).maybeSingle();
+				if(error ||!data){
+					const r2 = await supabase.from('settings').select('*').eq('id',user.id).maybeSingle();
+					settingsData = r2.data;
+				} else {
+					settingsData = data;
+				}
+			}catch(e){
+				console.log('settings load fallback', e);
 			}
-			profile={...profile,...authProfile};
 
-			if(settingsRes.status==='fulfilled' && settingsRes.value.data){
-				const data=settingsRes.value.data as any;
-				// sanitize loaded data
+			if(profData){
+				topProfile={name:sanitizeName(profData.name||profData.full_name||topProfile.name), email:sanitizeEmail(profData.email||topProfile.email), avatar:profData.avatar_url||topProfile.avatar, phone:(profData.phone||'').toString().replace(/\D/g,'').slice(0,15)};
+			}
+			profile={ full_name:topProfile.name, email:topProfile.email, phone:topProfile.phone, avatar:topProfile.avatar };
+
+			if(settingsData){
+				const data=settingsData as any;
 				if(data.company) company={company_name:sanitizeStr(data.company.company_name,80), plant:sanitizeStr(data.company.plant,50), department:sanitizeStr(data.company.department,50), location:sanitizeStr(data.company.location,80), timezone:sanitizeStr(data.company.timezone,30)};
 				if(data.appearance) appearance={theme: ALLOWED_THEMES.has(data.appearance.theme)? data.appearance.theme : 'whatsapp', language:sanitizeStr(data.appearance.language,20), dateFormat:sanitizeStr(data.appearance.dateFormat,20), timeFormat:sanitizeStr(data.appearance.timeFormat,20)};
 				if(data.notifications) notifications={...notifications,...data.notifications};
@@ -121,10 +121,8 @@
 				if(data.backup) backup={...backup,...data.backup};
 				if(data.system) system={...system, defaultDepartment:sanitizeStr(data.system.defaultDepartment,30), defaultShift:sanitizeStr(data.system.defaultShift,10)};
 				if(data.email_settings) emailSettings={...emailSettings, smtpServer:sanitizeStr(data.email_settings.smtpServer,100), senderName:sanitizeStr(data.email_settings.senderName,50), senderEmail:sanitizeEmail(data.email_settings.senderEmail)};
-				if(data.api_keys) apiKeys={openAI:'', gemini:'', azure:'', weather:''}; // 🔒 never load keys to frontend for 50k
 				if(data.factory) factory={factoryName:sanitizeStr(data.factory.factoryName,80), siteCode:sanitizeStr(data.factory.siteCode,30), address:sanitizeStr(data.factory.address,100), city:sanitizeStr(data.factory.city,50), state:sanitizeStr(data.factory.state,50), country:sanitizeStr(data.factory.country,30), currency:sanitizeStr(data.factory.currency,10)};
 				if(data.storage) storage={provider:sanitizeStr(data.storage.provider,20), bucket:sanitizeStr(data.storage.bucket,30), retentionDays:Math.min(3650, Math.max(1, Number(data.storage.retentionDays)||365)), maxUploadMB:Math.min(500, Math.max(1, Number(data.storage.maxUploadMB)||100))};
-				if(data.profile) profile={...profile, full_name:sanitizeName(data.profile.full_name||profile.full_name), phone:sanitizeStr(data.profile.phone,15)};
 			}
 			if(!ALLOWED_THEMES.has(appearance.theme)) appearance.theme='whatsapp';
 			applyTheme(appearance.theme);
@@ -141,55 +139,37 @@
 			const {data:{user}}=await supabase.auth.getUser(); if(!user){ await goto('/login'); return; }
 			const cleanEmail = sanitizeEmail(profile.email);
 			const cleanPhone = profile.phone.toString().replace(/\D/g,'').slice(0,15);
-
-			// 🔒 profiles per user
 			await supabase.from('profiles').upsert({id:user.id,name:cleanName,email:cleanEmail,phone:cleanPhone,avatar_url:profile.avatar,updated_at:new Date().toISOString()},{onConflict:'id'});
-			await supabase.auth.updateUser({data:{full_name:cleanName,phone:cleanPhone,avatar_url:profile.avatar}});
-
+			await supabase.auth.updateUser({data:{full_name:cleanName, avatar_url:profile.avatar}});
 			topProfile={name:cleanName,email:cleanEmail,avatar:profile.avatar,phone:cleanPhone};
 			profile.full_name=cleanName; profile.email=cleanEmail; profile.phone=cleanPhone;
-
-			// for reports sync
-			try{
-				localStorage.setItem('ems_user_id', user.id);
-				localStorage.setItem('ems_user_email', cleanEmail);
-				localStorage.setItem('user_id', user.id);
-			}catch{}
-
-			// 🔒 SECURE: id = user.id, not 1 - isolates 50k users
-			// 🔒 API keys encrypted/server side only, don't store raw in this table for 50k
+			try{ localStorage.setItem('ems_user_id', user.id); localStorage.setItem('ems_user_email', cleanEmail); }catch{}
 			const safeCompany={company_name:sanitizeStr(company.company_name,80), plant:sanitizeStr(company.plant,50), department:sanitizeStr(company.department,50), location:sanitizeStr(company.location,80), timezone:sanitizeStr(company.timezone,30)};
 			const safeFactory={factoryName:sanitizeStr(factory.factoryName,80), siteCode:sanitizeStr(factory.siteCode,30), address:sanitizeStr(factory.address,100), city:sanitizeStr(factory.city,50), state:sanitizeStr(factory.state,50), country:sanitizeStr(factory.country,30), currency:sanitizeStr(factory.currency,10)};
-
-			await supabase.from('settings').upsert({
-				id:user.id,
+			const payload:any = {
+				user_id: user.id,
 				profile:{full_name:cleanName,email:cleanEmail,phone:cleanPhone,avatar:profile.avatar},
-				company:safeCompany,
-				appearance,
-				notifications,
-				security,
+				company:safeCompany, appearance, notifications, security,
 				ai_settings:{provider:sanitizeStr(aiSettings.provider,20), model:sanitizeStr(aiSettings.model,30), temperature:aiSettings.temperature, autoSummary:aiSettings.autoSummary, autoSuggestions:aiSettings.autoSuggestions, autoClassification:aiSettings.autoClassification},
 				backup,
 				system:{pageSize:Math.min(100,Math.max(5,system.pageSize)), autoRefresh:system.autoRefresh, defaultDepartment:sanitizeStr(system.defaultDepartment,30), defaultShift:sanitizeStr(system.defaultShift,10)},
 				email_settings:{smtpServer:sanitizeStr(emailSettings.smtpServer,100), smtpPort:Math.min(65535,Math.max(1,emailSettings.smtpPort)), smtpUser:sanitizeStr(emailSettings.smtpUser,80), senderName:sanitizeStr(emailSettings.senderName,50), senderEmail:sanitizeEmail(emailSettings.senderEmail)},
-				factory:safeFactory,
-				storage,
-				updated_at:new Date().toISOString()
-			},{onConflict:'id'});
-
-			// 🔒 API keys separate secure table if needed
-			if(apiKeys.openAI || apiKeys.gemini){
-				try{
-					await supabase.from('user_api_keys').upsert({user_id:user.id, openai_key: sanitizeStr(apiKeys.openAI,200), gemini_key: sanitizeStr(apiKeys.gemini,200), updated_at:new Date().toISOString()},{onConflict:'user_id'});
-				}catch{}
+				factory:safeFactory, storage, updated_at:new Date().toISOString()
+			};
+			let {error} = await supabase.from('settings').upsert(payload, {onConflict:'user_id'});
+			if(error){
+				const payload2 = {...payload, id:user.id}; delete payload2.user_id;
+				const r2 = await supabase.from('settings').upsert(payload2, {onConflict:'id'});
+				if(r2.error) throw r2.error;
 			}
-
+			if(apiKeys.openAI || apiKeys.gemini){
+				try{ await supabase.from('user_api_keys').upsert({user_id:user.id, openai_key: sanitizeStr(apiKeys.openAI,200), gemini_key: sanitizeStr(apiKeys.gemini,200), updated_at:new Date().toISOString()},{onConflict:'user_id'}); }catch{}
+			}
 			applyTheme(appearance.theme); showMessage('Saved ✓','success');
 		}catch(err:any){ showMessage(err?.message||'Failed','error'); } finally{ saving=false; }
 	}
 
 	function exportSettings(){
-		// 🔒 don't export keys
 		const blob=new Blob([JSON.stringify({profile:{full_name:profile.full_name,email:profile.email},company},null,2)],{type:'application/json'});
 		const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='ems-settings.json'; a.click(); URL.revokeObjectURL(url);
 	}
@@ -203,18 +183,15 @@
 	}
 
 	function applyTheme(val:string){ if(typeof document==='undefined') return; const raw=val||'whatsapp'; const safe=ALLOWED_THEMES.has(raw)? raw : 'whatsapp'; try{localStorage.setItem('ems_theme',safe); localStorage.setItem('app-theme',safe);}catch{} document.documentElement.setAttribute('data-theme',safe.toLowerCase()); document.documentElement.setAttribute('data-social-theme',safe.toLowerCase()); appearance.theme=safe; }
-
 	function resizeTo128(file: File): Promise<Blob>{ return new Promise((resolve,reject)=>{ const img=new Image(); const url=URL.createObjectURL(file); img.onload=()=>{ const canvas=document.createElement('canvas'); canvas.width=128; canvas.height=128; const ctx=canvas.getContext('2d')!; const scale=Math.max(128/img.width,128/img.height); const w=img.width*scale,h=img.height*scale; ctx.fillStyle='#fff'; ctx.fillRect(0,0,128,128); ctx.drawImage(img,(128-w)/2,(128-h)/2,w,h); canvas.toBlob(b=>b?resolve(b):reject('blob'),'image/webp',0.8); URL.revokeObjectURL(url); }; img.onerror=()=>{ URL.revokeObjectURL(url); reject('load'); }; img.src=url; }); }
-
 	async function uploadAvatar(event: Event){
 		const input=event.target as HTMLInputElement; const file=input.files?.[0]; if(!file) return; if(file.size>5*1024*1024){ showMessage('Max 5MB','error'); return; }
 		if(!file.type.startsWith('image/')){ showMessage('Only image','error'); return; }
-		const preview=URL.createObjectURL(file); profile.avatar=preview; topProfile.avatar=preview; avatarUploading=true;
+		const preview=URL.createObjectURL(file); profile.avatar=preview; topProfile.avatar=preview;
 		try{
 			const blob=await resizeTo128(file);
 			const fileName=`avatar-${currentUserId}-${Date.now()}.webp`;
 			let publicUrl='';
-			// 🔒 only avatars bucket, not public
 			try{
 				const {error}=await supabase.storage.from('avatars').upload(fileName,blob,{upsert:true,contentType:'image/webp'});
 				if(!error){ const {data}=supabase.storage.from('avatars').getPublicUrl(fileName); publicUrl=data.publicUrl; }
@@ -226,9 +203,8 @@
 				try{ localStorage.setItem('ems_avatar', publicUrl); }catch{}
 				showMessage('Photo updated ✓','success');
 			}
-		}catch{ showMessage('Upload failed','error'); } finally{ avatarUploading=false; if(input) input.value=''; }
+		}catch{ showMessage('Upload failed','error'); } finally{ if(input) input.value=''; }
 	}
-
 	async function handleLogout(){ try{ supabase.auth.signOut({scope:'local'}).catch(()=>{}); }catch{} try{ const keepTheme=localStorage.getItem('ems_theme'); localStorage.clear(); if(keepTheme) localStorage.setItem('ems_theme',keepTheme); sessionStorage.clear(); }catch{} window.location.replace('/login'); }
 	onMount(loadSettings);
 </script>
@@ -243,7 +219,7 @@
 		<div style="display:flex; gap:8px;"><button class="secondary" onclick={()=>goto('/chat')}>← Chat</button><button class="danger" onclick={handleLogout}>Logout</button></div>
 	</div>
 	<div class="page-header">
-		<div class="title-block"><h1>⚙ Settings</h1><p>12 sections - SWIPE UP/DOWN in list below</p></div>
+		<div class="title-block"><h1>⚙ Settings</h1><p>12 sections - SWIPE UP/DOWN</p></div>
 		<div class="actions"><button class="secondary" onclick={exportSettings}>📤 Export</button><button class="primary" disabled={saving} onclick={saveAllSettings}>{saving?'...':'💾 Save'}</button></div>
 	</div>
 
@@ -251,7 +227,7 @@
 	{:else}
 	<div class="layout">
 		<div class="sidebar">
-			<div class="hint">↕ Swipe here up/down - 12 items, scrollbar on right →</div>
+			<div class="hint">↕ Swipe here up/down - 12 items →</div>
 			<div class="scroll-area" id="scrollArea">
 				{#each tabs as tab (tab.id)}
 					<div class="tab-wrap" id="tab-{tab.id}" class:active={activeTab===tab.id}>
@@ -265,55 +241,53 @@
 								<div class="card inner"><h2>👤 Profile</h2>
 									<div class="avatar-upload">{#if profile.avatar}<img src={profile.avatar} class="avatar" alt="" />{:else}<div class="avatar placeholder">{(profile.full_name||'?').charAt(0).toUpperCase()}</div>{/if}
 									<label class="primary sm" for="avatarFile" style="cursor:pointer;">📷 Photo<input id="avatarFile" type="file" accept="image/*" hidden onchange={uploadAvatar} /></label></div>
-									<label for="fullName">Full Name *</label><input id="fullName" bind:value={profile.full_name} maxlength="80" autocomplete="name" />
-									<label for="emailField">Email</label><input id="emailField" bind:value={profile.email} readonly autocomplete="email" />
+									<label>Full Name *</label><input bind:value={profile.full_name} maxlength="80" autocomplete="name" />
+									<label>Email</label><input bind:value={profile.email} readonly autocomplete="email" />
 									<button class="primary" style="width:100%;" onclick={saveAllSettings}>Save</button>
 								</div>
-							{:else if tab.id==='company'}<div class="card inner"><h2>🏭 Company</h2><label for="companyName">Company</label><input id="companyName" bind:value={company.company_name} maxlength="80" /><label for="plant">Plant</label><input id="plant" bind:value={company.plant} maxlength="50" /><label for="location">Location</label><input id="location" bind:value={company.location} maxlength="80" /></div>
-							{:else if tab.id==='appearance'}<div class="card inner"><h2>🎨 Appearance</h2><label for="themeSelect">Theme</label><select id="themeSelect" bind:value={appearance.theme} onchange={(e)=>applyTheme((e.target as HTMLSelectElement).value)}>{#each themeOptions as th}<option value={th.id}>{th.label}</option>{/each}</select></div>
-							{:else if tab.id==='notifications'}<div class="card inner"><h2>🔔 Notifications</h2><label class="toggle"><input type="checkbox" bind:checked={notifications.email} /> Email</label></div>
-							{:else if tab.id==='security'}
-								<div class="card inner"><h2>🔒 Security</h2>
-									<form autocomplete="off" onsubmit={(e)=>{e.preventDefault(); changePassword();}}>
-										<label for="newPass">New Password</label><input id="newPass" type="password" bind:value={password.newPassword} autocomplete="new-password" minlength="8" />
-										<label for="confirmPass">Confirm Password</label><input id="confirmPass" type="password" bind:value={password.confirmPassword} autocomplete="new-password" minlength="8" />
-										<button class="primary" type="submit" style="width:100%; margin-top:10px;">Update Password</button>
-									</form>
-								</div>
-							{:else if tab.id==='ai'}<div class="card inner"><h2>🤖 AI - Models</h2><label for="provider">Provider</label><select id="provider" bind:value={aiSettings.provider}><option>OpenAI</option><option>Gemini</option></select><label for="model">Model</label><input id="model" bind:value={aiSettings.model} maxlength="50" /><label class="toggle"><input type="checkbox" bind:checked={aiSettings.autoSummary} /> Auto Summary</label></div>
-							{:else if tab.id==='backup'}<div class="card inner"><h2>💾 Backup</h2><label class="toggle"><input type="checkbox" bind:checked={backup.autoBackup} /> Auto Backup</label><label for="backupTime">Time</label><input id="backupTime" bind:value={backup.backupTime} type="time" /></div>
-							{:else if tab.id==='email'}<div class="card inner"><h2>📧 Email SMTP</h2><label for="smtpServer">Server</label><input id="smtpServer" bind:value={emailSettings.smtpServer} maxlength="100" /><label for="smtpPort">Port</label><input id="smtpPort" type="number" bind:value={emailSettings.smtpPort} min="1" max="65535" /></div>
-							{:else if tab.id==='api'}
-								<div class="card inner"><h2>🔑 API Keys (Secure)</h2>
-									<form autocomplete="off" onsubmit={(e)=>e.preventDefault()}>
-										<label for="openaiKey">OpenAI</label><input id="openaiKey" type="password" bind:value={apiKeys.openAI} autocomplete="off" data-lpignore="true" data-1p-ignore="true" placeholder="sk-..." maxlength="200" />
-										<label for="geminiKey">Gemini</label><input id="geminiKey" type="password" bind:value={apiKeys.gemini} autocomplete="off" data-lpignore="true" data-1p-ignore="true" placeholder="AI..." maxlength="200" />
-										<small style="color:#a16207; font-size:10px;">🔒 Stored per-user, not shared. Encrypted in user_api_keys table.</small>
-									</form>
-								</div>
-							{:else if tab.id==='system'}<div class="card inner"><h2>⚙️ System</h2><label for="pageSize">Page Size</label><input id="pageSize" type="number" bind:value={system.pageSize} min="5" max="100" /></div>
-							{:else if tab.id==='factory'}<div class="card inner"><h2>🏭 Factory</h2><label for="factoryName">Factory Name</label><input id="factoryName" bind:value={factory.factoryName} maxlength="80" /><label for="factoryCity">City</label><input id="factoryCity" bind:value={factory.city} maxlength="50" /></div>
-							{:else if tab.id==='storage'}<div class="card inner"><h2>🗂 Storage</h2><label for="storageProvider">Provider</label><input id="storageProvider" bind:value={storage.provider} maxlength="30" /><label for="bucket">Bucket</label><input id="bucket" bind:value={storage.bucket} maxlength="50" /></div>
+							{:else if tab.id==='company'}<div class="card inner"><h2>🏭 Company</h2><label>Company</label><input bind:value={company.company_name} maxlength="80" /><label>Plant</label><input bind:value={company.plant} maxlength="50" /><label>Location</label><input bind:value={company.location} maxlength="80" /></div>
+							{:else if tab.id==='appearance'}<div class="card inner"><h2>🎨 Appearance</h2><label>Theme</label><select bind:value={appearance.theme} onchange={(e)=>applyTheme((e.target as HTMLSelectElement).value)}>{#each themeOptions as th}<option value={th.id}>{th.label}</option>{/each}</select></div>
+							{:else if tab.id==='notifications'}<div class="card inner"><h2>🔔 Notifications</h2><label class="toggle"><input type="checkbox" bind:checked={notifications.email} /> Email</label><label class="toggle"><input type="checkbox" bind:checked={notifications.meetingReminder} /> Meeting</label></div>
+							{:else if tab.id==='security'}<div class="card inner"><h2>🔒 Security</h2><form autocomplete="off" onsubmit={(e)=>{e.preventDefault(); changePassword();}}><label>New Password</label><input type="password" bind:value={password.newPassword} autocomplete="new-password" minlength="8" /><label>Confirm</label><input type="password" bind:value={password.confirmPassword} autocomplete="new-password" minlength="8" /><button class="primary" type="submit" style="width:100%; margin-top:10px;">Update Password</button></form></div>
+							{:else if tab.id==='ai'}<div class="card inner"><h2>🤖 AI</h2><label>Provider</label><select bind:value={aiSettings.provider}><option>OpenAI</option><option>Gemini</option></select><label>Model</label><input bind:value={aiSettings.model} maxlength="50" /></div>
+							{:else if tab.id==='backup'}<div class="card inner"><h2>💾 Backup</h2><label class="toggle"><input type="checkbox" bind:checked={backup.autoBackup} /> Auto Backup</label><label>Time</label><input bind:value={backup.backupTime} type="time" /></div>
+							{:else if tab.id==='email'}<div class="card inner"><h2>📧 Email</h2><label>Server</label><input bind:value={emailSettings.smtpServer} maxlength="100" /><label>Port</label><input type="number" bind:value={emailSettings.smtpPort} min="1" max="65535" /></div>
+							{:else if tab.id==='api'}<div class="card inner"><h2>🔑 API Keys</h2><form autocomplete="off" onsubmit={(e)=>e.preventDefault()}><label>OpenAI</label><input type="password" bind:value={apiKeys.openAI} placeholder="sk-..." maxlength="200" /><label>Gemini</label><input type="password" bind:value={apiKeys.gemini} placeholder="AI..." maxlength="200" /><small style="color:#a16207; font-size:10px;">🔒 Stored per-user secure</small></form></div>
+							{:else if tab.id==='system'}<div class="card inner"><h2>⚙️ System</h2><label>Page Size</label><input type="number" bind:value={system.pageSize} min="5" max="100" /></div>
+							{:else if tab.id==='factory'}<div class="card inner"><h2>🏭 Factory</h2><label>Factory Name</label><input bind:value={factory.factoryName} maxlength="80" /><label>City</label><input bind:value={factory.city} maxlength="50" /></div>
+							{:else if tab.id==='storage'}<div class="card inner"><h2>🗂 Storage</h2><label>Provider</label><input bind:value={storage.provider} maxlength="30" /><label>Bucket</label><input bind:value={storage.bucket} maxlength="50" /></div>
 							{/if}
 						</div>
 						{/if}
 					</div>
 				{/each}
-				<div style="height:20px; flex-shrink:0;"></div>
+				<div style="height:30px;"></div>
 			</div>
 		</div>
 		<div class="content desktop-only">
-			<div class="card"><h2>{tabs.find(t=>t.id===activeTab)?.label} - Detail</h2><p>Active: {activeTab}. On mobile, tap the tab above to expand. Desktop right panel scrolls separately.</p><button class="primary" onclick={saveAllSettings}>Save All</button></div>
+			<div class="card"><h2>{tabs.find(t=>t.id===activeTab)?.label} - Detail</h2><p>Active: {activeTab}. On mobile tap tab to expand.</p><button class="primary" onclick={saveAllSettings}>Save All</button></div>
 		</div>
 	</div>
 	{/if}
-	<nav class="bottom-fixed"><button class:active={bottomTab==='chat'} onclick={()=>goBottom('chat')}><span class="b-icon">💬</span><small>Chat</small></button><button class:active={bottomTab==='report'} onclick={()=>goBottom('report')}><span class="b-icon">📋</span><small>Report</small></button><button class:active={bottomTab==='user'} onclick={()=>goBottom('user')}><span class="b-icon">👤</span><small>User</small></button></nav>
+	
+	<!-- BOTTOM NAV - FIXED DOWNSIDE - USER PURPLE HIGHLIGHTED -->
+	<nav class="bottom-nav">
+		<button class="b-btn" onclick={()=>goBottom('chat')}>
+			<span class="b-icon">💬</span><small>Chat</small>
+		</button>
+		<button class="b-btn" onclick={()=>goBottom('report')}>
+			<span class="b-icon">📋</span><small>Reports</small>
+		</button>
+		<button class="b-btn active">
+			<span class="b-icon">👤</span><small>User</small>
+		</button>
+	</nav>
 </div>
 
 <style>
 	:global(html){ height:100%; overflow-y:auto; }
-	:global(body){ min-height:100%; overflow-y:auto; overflow-x:hidden; margin:0; -webkit-overflow-scrolling:touch; touch-action:pan-y; overscroll-behavior-y:auto; }
-	.page{ width:100%; max-width:1400px; margin:0 auto; padding:12px 12px 80px 12px; display:flex; flex-direction:column; gap:12px; background:#0f172a; color:#e2e8f0; min-height:100dvh; box-sizing:border-box; }
+	:global(body){ min-height:100%; overflow-y:auto; overflow-x:hidden; margin:0; -webkit-overflow-scrolling:touch; }
+	.page{ width:100%; max-width:1400px; margin:0 auto; padding:12px 12px 90px 12px; display:flex; flex-direction:column; gap:12px; background:#0f172a; color:#e2e8f0; min-height:100dvh; box-sizing:border-box; }
 	.message{ padding:12px; border-radius:10px; font-weight:700; position:sticky; top:0; z-index:40; }
 	.message.success{ background:#ecfdf5; color:#065f46; }.message.error{ background:#fef2f2; color:#991b1b; }
 	.topbar{ display:flex; justify-content:space-between; align-items:center; padding:12px; background:#1e293b; border:1px solid #334155; border-radius:12px; }
@@ -327,11 +301,7 @@
 	.layout{ display:grid; grid-template-columns:300px 1fr; gap:12px; align-items:start; }
 	.sidebar{ background:#1e293b; border:1px solid #334155; border-radius:12px; padding:8px; display:flex; flex-direction:column; gap:0; height:calc(100dvh - 170px); overflow:hidden; position:sticky; top:8px; }
 	.hint{ background:#0b1f1a; border:1px dashed #00a884; color:#00a884; font-size:10px; font-weight:800; padding:7px; border-radius:8px; text-align:center; flex-shrink:0; margin-bottom:6px; }
-	.scroll-area{ flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; touch-action:pan-y; overscroll-behavior:contain; display:flex; flex-direction:column; gap:6px; padding-right:6px; scrollbar-width:thin; scrollbar-color:#00a884 #0f172a; }
-	.scroll-area::-webkit-scrollbar{ width:6px; }
-	.scroll-area::-webkit-scrollbar-thumb{ background:#00a884; border-radius:10px; }
-	.scroll-area::-webkit-scrollbar-track{ background:#0f172a; border-radius:10px; }
-	.content{ height:calc(100dvh - 170px); overflow-y:auto; }
+	.scroll-area{ flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:6px; padding-right:6px; }
 	.tab-wrap{ background:#0f172a; border:1px solid #1e293b; border-radius:10px; overflow:hidden; flex-shrink:0; }
 	.tab-wrap.active{ border-color:#00a884; background:#0b1f1a; }
 	.tab-btn{ width:100%; padding:13px 11px; border:none; background:transparent; color:#e2e8f0; display:flex; justify-content:space-between; align-items:center; cursor:pointer; text-align:left; }
@@ -349,9 +319,47 @@
 	.primary,.secondary,.danger{ padding:10px 14px; border:none; border-radius:10px; font-weight:800; cursor:pointer; font-size:13px; }
 	.primary{ background:#00a884; color:#fff; }.primary.sm{ padding:7px 12px; font-size:12px; }.secondary{ background:#334155; color:#e2e8f0; }.danger{ background:#ef4444; color:#fff; }
 	.loading{ padding:30px; text-align:center; color:#94a3b8; }
-	.bottom-fixed{ position:fixed; bottom:0; left:0; right:0; height:68px; background:#202c33; border-top:1px solid #2a3942; display:flex; justify-content:space-around; align-items:center; z-index:50; padding-bottom:env(safe-area-inset-bottom); }
-	.bottom-fixed button{ background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:3px; color:#8696a0; cursor:pointer; flex:1; }
-	.bottom-fixed button.active{ color:#00a884; }.b-icon{ font-size:20px; }.bottom-fixed small{ font-size:11px; font-weight:700; }
+
+	/* FIXED DOWNSIDE NAVIGATION - NOT MOVABLE - USER HIGHLIGHTED PURPLE */
+	.bottom-nav{
+		position: fixed;
+		bottom: 0;
+		left: 0;
+		right: 0;
+		width: 100%;
+		height: 74px;
+		background: #0a0f12;
+		border-top: 2px solid #8b5cf6;
+		display: flex;
+		justify-content: space-around;
+		align-items: center;
+		z-index: 9999;
+		padding: 6px 12px 10px 12px;
+		box-sizing: border-box;
+	}
+	.b-btn{
+		flex: 1;
+		height: 54px;
+		border: none;
+		background: transparent;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 4px;
+		border-radius: 16px;
+		color: #6b7280;
+		cursor: pointer;
+	}
+	.b-btn.b-icon{ font-size: 20px; line-height: 1; }
+	.b-btn small{ font-size: 11px; font-weight: 700; }
+	.b-btn.active{
+		background: #ede9fe;
+		color: #7c3aed;
+		flex: 1.3;
+		border: 1px solid #c4b5fd;
+		box-shadow: 0 2px 10px rgba(124,58,237,0.25);
+	}
 
 	@media (min-width:901px){.mobile-detail{ display:none!important; } }
 	@media (max-width:900px){
@@ -359,7 +367,7 @@
 		.page{ padding:10px 10px 90px 10px!important; background:#111b21!important; height:auto!important; min-height:100dvh!important; display:block!important; }
 		.layout{ display:block!important; height:auto!important; }
 		.sidebar{ position:relative!important; top:0!important; height:auto!important; min-height:400px!important; max-height:calc(100dvh - 160px)!important; background:#202c33!important; border-color:#2a3942!important; display:flex!important; overflow:hidden!important; }
-		.scroll-area{ height:auto!important; flex:1!important; max-height:calc(100dvh - 200px)!important; overflow-y:auto!important; touch-action:pan-y!important; }
+		.scroll-area{ height:auto!important; flex:1!important; max-height:calc(100dvh - 200px)!important; overflow-y:auto!important; }
 		.content{ display:none!important; }
 		.mobile-detail{ display:block!important; }
 	}

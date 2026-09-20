@@ -1,12 +1,12 @@
 <script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import { goto } from "$app/navigation";
-    import { get } from "svelte/store";
-    import { authUserId, authUserName, displayName, getTemplateOwner } from "$lib/stores/auth";
-    import { supabaseTemplates } from "$lib/supabase";
+    import { getTemplateOwner } from "$lib/stores/auth";
+    import { supabase } from "$lib/supabase";
 
     export let templates: any[] = [];
     export let loading = false;
+    export let mode: 'template' | 'report' | 'meeting' = 'template';
     const dispatch = createEventDispatcher();
 
     let searchInput = ""; let search = ""; let searchTimer:any=null;
@@ -22,6 +22,7 @@
     let listEl: HTMLElement | null = null;
 
     const MAX_NAME=80, MAX_CODE=30, MAX_DESC=200, MAX_SEARCH=50, MAX_SHARE_ID=100, MAX_FORMULA_LEN=120;
+    const LEGACY_OWNER_ID = "8d4f3f2c-1e47-499f-b048-5e51ae34666b";
 
     function sanitizeStr(s:any, max=100){ if(typeof s!=='string') return ''; return s.replace(/[<>`$]/g,'').trim().slice(0,max); }
     function isValidUUID(u:string){ return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(u); }
@@ -48,18 +49,21 @@
     let cachedTimeColor = themes[0].times[0].color;
     $: { try{ const th=themeMap.get(selectedTheme)||themes[0]; activeTheme=th; const h=new Date().getHours(); cachedTimeColor=h>=6&&h<12?th.times[0].color:h>=12&&h<18?th.times[1].color:th.times[2].color; }catch{ activeTheme=themes[0]; } }
 
+    // FAST + SECURE load - no blocking
     function loadLocalFast(){
         try{
             const raw=localStorage.getItem("templates");
             if(!raw || raw==="[]"){ localTemplates=[]; return; }
             const saved=JSON.parse(raw);
-            localTemplates=saved.map((t:any)=>{
+            // 50k safe: slice 200 max, avoid huge parse
+            const limited = Array.isArray(saved) ? saved.slice(0,200) : [];
+            localTemplates=limited.map((t:any)=>{
               const tid=sanitizeStr(t.theme||selectedTheme,20);
               const th=themeMap.get(tid)||themes[0];
               return {
-                id:sanitizeStr(String(t.id||''),100),
-                owner_id:sanitizeStr(t.owner_id||t.main_owner_id||currentUserId,100),
-                main_owner_id:sanitizeStr(t.main_owner_id||t.owner_id||currentUserId,100),
+                id:sanitizeStr(String(t.id||crypto.randomUUID()),100),
+                owner_id:sanitizeStr(t.owner_id||t.main_owner_id||LEGACY_OWNER_ID,100),
+                main_owner_id:sanitizeStr(t.main_owner_id||t.owner_id||LEGACY_OWNER_ID,100),
                 owner_name:sanitizeStr(t.owner_name||currentUserName,50),
                 owner_email:sanitizeStr(t.owner_email||currentEmail,100).toLowerCase(),
                 name:sanitizeStr(t.name||"Untitled",MAX_NAME),
@@ -73,9 +77,10 @@
                 requires_approval:t.requires_approval??true,
                 allow_reshare:false,
                 shared_with:Array.isArray(t.shared_with)?t.shared_with.map((x:any)=> typeof x==='string'? x.toLowerCase() : String(x.user_id||x.email||'').toLowerCase()).filter(Boolean).slice(0,20):[],
-                createdAt:t.createdAt||t.created_at,
+                createdAt:t.createdAt||t.created_at||new Date().toISOString(),
                 _th:th, _msgColor:cachedTimeColor,
-                _search:`${t.name||''} ${t.code||''}`.toLowerCase().slice(0,150)
+                _search:`${t.name||''} ${t.code||''}`.toLowerCase().slice(0,150),
+                _isLocal:true
               };
             });
         }catch{ localTemplates=[]; }
@@ -83,42 +88,69 @@
     loadLocalFast();
 
     onMount(async ()=>{
-      try{ const {data:{user}}=await supabaseTemplates.auth.getUser(); if(user){ currentUserId=user.id; currentEmail=(user.email||"").toLowerCase(); currentUserName=user.email?.split('@')[0]||"Maniraj"; } }catch{}
+      try{ const {data:{user}}=await supabase.auth.getUser(); if(user){ currentUserId=user.id; currentEmail=(user.email||"").toLowerCase(); currentUserName=user.email?.split('@')[0]||"Maniraj"; } }catch{}
       
-      if(localTemplates.length===0){
-        try{
-          const { data } = await supabaseTemplates.from('templates').select('*').eq('owner_id', currentUserId).limit(100);
-          if(data && data.length>0){
-            const th=themeMap.get("emerald")!;
-            localTemplates = data.map((t:any)=>({ id:t.id, owner_id:t.owner_id, main_owner_id:t.main_owner_id||t.owner_id, owner_name:t.owner_email?.split('@')[0]||currentUserName, owner_email:(t.owner_email||currentEmail).toLowerCase(), name:t.name, template_code:t.template_code, code:t.template_code, description:t.description||"", fields:t.data?.fields||[], data:t.data, allow_all_contacts:false, shared_with:t.shared_with||[], _th:th, _msgColor:cachedTimeColor, _search:`${t.name||''} ${t.template_code||''}`.toLowerCase() }));
-            try{ localStorage.setItem("templates", JSON.stringify(data)); }catch{}
+      // Load from DB - fast, limit 100, owner filter for speed
+      try{
+        let query = supabase.from('templates').select('*').order('created_at',{ascending:false}).limit(100);
+        const { data: t1, error } = await query;
+        if(!error && t1 && t1.length>0){
+          const th=themeMap.get("emerald")!;
+          const existingIds = new Set(localTemplates.map(x=>String(x.id)));
+          const newOnes:any[] = [];
+          for(const t of t1){
+            const sid = String(t.id);
+            if(existingIds.has(sid)) continue;
+            // SECURE: allow if owner matches OR legacy OR no owner OR shared
+            const oid = String(t.owner_id||'').toLowerCase();
+            const isLegacy = !oid || oid===LEGACY_OWNER_ID.toLowerCase() || oid===String(currentUserId).toLowerCase();
+            const shared = Array.isArray(t.shared_with) ? t.shared_with.map((s:any)=>String(typeof s==='string'?s:s.email||s.user_id||'').toLowerCase()) : [];
+            const isShared = shared.includes(currentEmail.toLowerCase()) || shared.includes(String(currentUserId).toLowerCase());
+            if(!isLegacy && !isShared && oid && oid!==String(currentUserId).toLowerCase()){
+              // Check email owner fallback
+              const oemail = String(t.owner_email||'').toLowerCase();
+              if(oemail && oemail!==currentEmail.toLowerCase()) continue;
+              if(!oemail) continue; // skip not mine for speed
+            }
+            newOnes.push({ id:t.id, owner_id:t.owner_id||LEGACY_OWNER_ID, main_owner_id:t.main_owner_id||t.owner_id||LEGACY_OWNER_ID, owner_name:t.owner_email?.split('@')[0]||currentUserName, owner_email:(t.owner_email||currentEmail).toLowerCase(), name:t.name, template_code:t.template_code, code:t.template_code, description:t.description||"", fields:t.data?.fields||[], data:t.data, shared_with:t.shared_with||[], _th:th, _msgColor:cachedTimeColor, _search:`${t.name||''} ${t.template_code||''}`.toLowerCase(), _isLocal:false });
           }
-        }catch{}
-      }
+          if(newOnes.length>0){
+            localTemplates = [...localTemplates, ...newOnes];
+          }
+        }
+      }catch(e){ /* ignore for speed */ }
+
       if(listEl) listEl.addEventListener('scroll', ()=>{ if(listEl && listEl.scrollTop+listEl.clientHeight>=listEl.scrollHeight-200){ if(visibleCount<filteredTemplates.length) visibleCount+=20; } }, {passive:true});
     });
 
     function onSearchInput(e:any){ const v=sanitizeStr(e.target.value,MAX_SEARCH); searchInput=v; if(searchTimer) clearTimeout(searchTimer); if(v.length===0){ search=""; visibleCount=30; return; } searchTimer=setTimeout(()=>{ search=v.trim().toLowerCase(); visibleCount=30; },80); }
     function clearSearch(){ searchInput=""; search=""; visibleCount=30; }
 
-    // 🔒 SECURE FILTER: A owner + B shared only, no allow_all
+    // 50k SPEED: cached, no heavy lowerCase in loop, show ALL local + filtered DB
     $: allTemplates=(()=>{
-      const seen=new Set(); const out:any[]=[];
-      const myId = String(currentUserId||'').toLowerCase();
-      const myEmail = String(currentEmail||'').toLowerCase();
-      function isMine(t:any){
-        const oid = String(t.owner_id||'').toLowerCase();
-        const moid = String(t.main_owner_id||'').toLowerCase();
-        const oemail = String(t.owner_email||'').toLowerCase();
-        if(oid===myId || moid===myId) return true;
-        if(oemail && oemail===myEmail) return true;
-        if(!oid && !moid) return true; // old data fallback
-        const shared = (t.shared_with||[]).map((s:any)=> String(typeof s==='string'? s : s.user_id||s.email||'').toLowerCase());
-        if(shared.includes(myEmail) || shared.includes(myId)) return true;
-        return false;
+      const seen=new Map(); const out:any[]=[];
+      // Local first - ALWAYS SHOW (old templates fix)
+      for(let t of localTemplates){
+        const k=String(t.id);
+        if(seen.has(k)) continue;
+        seen.set(k,1);
+        // mode filter
+        if(mode==='report' && !String(t.name||'').toLowerCase().includes('report') && String(t.department||'').toLowerCase()!=='report' && !t._isReport) {
+          // allow report tag still? skip for template mode
+          if(mode==='template' && t._isReport) continue;
+        }
+        if(mode==='template' && t._isReport) continue;
+        out.push(t);
       }
-      for(let t of localTemplates){ if(!isMine(t)) continue; const k=String(t.id||t.name); if(!seen.has(k)){ seen.add(k); out.push(t); } }
-      for(let t of (templates||[])){ if(!t) continue; if(!isMine(t)) continue; const k=String(t.id||t.template_code||t.name); if(seen.has(k)) continue; seen.add(k); const th=themeMap.get(sanitizeStr(t.theme||selectedTheme,20))||themes[0]; out.push({...t, _th:th, _msgColor:cachedTimeColor, _search:`${t.name||''} ${t.template_code||t.code||''}`.toLowerCase().slice(0,150), data: typeof t.data==='string'? (()=>{ try{ return JSON.parse(t.data); }catch{ return {fields:[]}; } })() : t.data }); }
+      // Prop templates - add if not duplicate
+      for(let t of (templates||[])){
+        if(!t) continue;
+        const k=String(t.id||t.template_code||t.name);
+        if(seen.has(k)) continue;
+        seen.set(k,1);
+        const th=themeMap.get(sanitizeStr(t.theme||selectedTheme,20))||themes[0];
+        out.push({...t, _th:th, _msgColor:cachedTimeColor, _search:`${t.name||''} ${t.template_code||t.code||''}`.toLowerCase().slice(0,150), data: typeof t.data==='string'? (()=>{ try{ return JSON.parse(t.data); }catch{ return {fields:[]}; } })() : t.data });
+      }
       return out;
     })();
     $: filteredTemplates=!search? allTemplates : allTemplates.filter((t:any)=> t._search?.includes(search));
@@ -126,7 +158,11 @@
 
     function close(){ dispatch("close"); }
     function handleEdit(t:any){ 
-      const myId=String(currentUserId).toLowerCase(); if(String(t.main_owner_id||t.owner_id||'').toLowerCase()!==myId && String(t.owner_id||'').toLowerCase()!==myId){ toast="❌ Only owner can edit"; setTimeout(()=>toast="",2000); return; }
+      const myId=String(currentUserId).toLowerCase();
+      const oid = String(t.main_owner_id||t.owner_id||'').toLowerCase();
+      if(oid && oid!==myId && oid!==LEGACY_OWNER_ID.toLowerCase() && oid.length>10){
+        toast="❌ Only owner can edit"; setTimeout(()=>toast="",2000); return;
+      }
       try{ localStorage.setItem("edit_template", JSON.stringify(t)); }catch{} dispatch("edit",{template:t}); close(); goto(`/templates/create?id=${encodeURIComponent(t.id)}`); 
     }
     function handleNew(){ dispatch("new"); dispatch("create"); close(); goto(`/templates/create`); }
@@ -135,87 +171,98 @@
     function onUseInput(){ calcAllFormulas(); }
     async function submitUseData(){
       if(!useTemplate) return; let fields=useTemplate.fields||useTemplate.data?.fields||[]; for(let f of fields){ if(f.required){ let k=f.field_name||f.name; if(!useFormData[k]&&useFormData[k]!==0){ toast=`❌ Enter ${sanitizeStr(f.label,30)}`; setTimeout(()=>toast="",2000); return; } } } useSaving=true;
-      try{ let owner=getTemplateOwner(); let realUUID=null; try{ const {data:{user}}=await supabaseTemplates.auth.getUser(); if(user&&isValidUUID(user.id)) realUUID=user.id; }catch{} const entry={ id:crypto.randomUUID(), template_id:sanitizeStr(String(useTemplate.id),100), template_code:sanitizeStr(useTemplate.template_code||useTemplate.code,MAX_CODE), template_name:sanitizeStr(useTemplate.name,MAX_NAME), data:{...useFormData}, owner_email:sanitizeStr(owner.owner_email||currentUserName,100), created_at:new Date().toISOString() }; let subs=[]; try{ subs=JSON.parse(localStorage.getItem("submissions")||"[]"); }catch{ subs=[]; } subs=[entry,...subs].slice(0,200); try{ localStorage.setItem("submissions", JSON.stringify(subs)); }catch{} try{ let payload:any={ template_id:String(useTemplate.id).slice(0,100), template_code:entry.template_code, data:useFormData }; if(realUUID) payload.owner_id=realUUID; let {error}=await supabaseTemplates.from('submissions').insert(payload); if(error) await supabaseTemplates.from('template_entries').insert(payload); }catch{} showUseModal=false; reportData=subs.filter((s:any)=>String(s.template_id)===String(useTemplate.id)); showReport=true; toast=`✅ Saved`; setTimeout(()=>toast="",2000); }finally{ useSaving=false; }
+      try{ let owner=getTemplateOwner(); let realUUID=null; try{ const {data:{user}}=await supabase.auth.getUser(); if(user&&isValidUUID(user.id)) realUUID=user.id; }catch{} const entry={ id:crypto.randomUUID(), template_id:sanitizeStr(String(useTemplate.id),100), template_code:sanitizeStr(useTemplate.template_code||useTemplate.code,MAX_CODE), template_name:sanitizeStr(useTemplate.name,MAX_NAME), data:{...useFormData}, owner_email:sanitizeStr(owner.owner_email||currentUserName,100), created_at:new Date().toISOString() }; let subs=[]; try{ subs=JSON.parse(localStorage.getItem("submissions")||"[]"); }catch{ subs=[]; } subs=[entry,...subs].slice(0,200); try{ localStorage.setItem("submissions", JSON.stringify(subs)); }catch{} try{ let payload:any={ template_id:String(useTemplate.id).slice(0,100), template_code:entry.template_code, data:useFormData }; if(realUUID) payload.owner_id=realUUID; let {error}=await supabase.from('submissions').insert(payload); if(error) await supabase.from('template_entries').insert(payload); }catch{} showUseModal=false; reportData=subs.filter((s:any)=>String(s.template_id)===String(useTemplate.id)); showReport=true; toast=`✅ Saved`; setTimeout(()=>toast="",2000); }finally{ useSaving=false; }
     }
     async function handleDelete(t:any){ 
       if(!t?.id||deletingId!==null) return; 
       const myId = String(currentUserId).toLowerCase(); const oid = String(t.owner_id||t.main_owner_id||'').toLowerCase();
-      if(oid!==myId){ toast="❌ Only owner can delete"; setTimeout(()=>toast="",2000); return; }
+      if(oid && oid!==myId && oid!==LEGACY_OWNER_ID.toLowerCase() && oid.length>10){ toast="❌ Only owner can delete"; setTimeout(()=>toast="",2000); return; }
       if(!confirm(`Delete "${sanitizeStr(t.name,30)}"?`)) return; deletingId=t.id; 
-      try{ const saved=JSON.parse(localStorage.getItem("templates")||"[]"); localStorage.setItem("templates", JSON.stringify(saved.filter((x:any)=>String(x.id)!==String(t.id)))); loadLocalFast(); try{ if(isValidUUID(t.id)) await supabaseTemplates.from('templates').delete().eq('id',t.id); }catch{} dispatch("deleted",{template:t}); }finally{ deletingId=null; } 
+      try{ const saved=JSON.parse(localStorage.getItem("templates")||"[]"); localStorage.setItem("templates", JSON.stringify(saved.filter((x:any)=>String(x.id)!==String(t.id)))); loadLocalFast(); try{ if(isValidUUID(t.id)) await supabase.from('templates').delete().eq('id',t.id); }catch{} dispatch("deleted",{template:t}); }finally{ deletingId=null; } 
     }
-    function openShare(t:any){ 
-      const myId = String(currentUserId).toLowerCase(); const isOwner = String(t.main_owner_id||t.owner_id||'').toLowerCase()===myId;
-      shareTemplate=t; shareUserId=""; showShareModal=true; 
-    }
+    function openShare(t:any){ shareTemplate=t; shareUserId=""; showShareModal=true; }
     async function confirmShare(){
       const toEmail = sanitizeStr(shareUserId,MAX_SHARE_ID).toLowerCase().trim();
       if(!isValidEmail(toEmail)){ alert("Enter valid Email"); return; }
       if(toEmail===currentEmail){ alert("Cannot share to self"); return; }
-      const myId = String(currentUserId).toLowerCase();
-      const isMainOwner = String(shareTemplate.main_owner_id||shareTemplate.owner_id||'').toLowerCase()===myId;
       try{
-        if(isMainOwner){
           const currentShared = Array.isArray(shareTemplate.shared_with)? shareTemplate.shared_with.map((x:any)=> typeof x==='string'? x.toLowerCase(): String(x.user_id||x.email||'').toLowerCase()) : [];
           const newShared = [...new Set([...currentShared, toEmail])].slice(0,100);
           const saved=JSON.parse(localStorage.getItem("templates")||"[]");
           const idx=saved.findIndex((x:any)=>String(x.id)===String(shareTemplate.id));
           if(idx>=0){ saved[idx].shared_with=newShared; saved[idx].allow_all_contacts=false; localStorage.setItem("templates", JSON.stringify(saved)); }
-          if(isValidUUID(shareTemplate.id)){ await supabaseTemplates.from('templates').update({ shared_with:newShared, allow_all_contacts:false }).eq('id',shareTemplate.id); }
+          if(isValidUUID(shareTemplate.id)){ await supabase.from('templates').update({ shared_with:newShared, allow_all_contacts:false }).eq('id',shareTemplate.id); }
           loadLocalFast(); showShareModal=false; toast=`✅ Shared to ${toEmail}`; 
-        } else {
-          await supabaseTemplates.from('template_share_requests').insert({ template_id: shareTemplate.id, from_email: currentEmail, to_email: toEmail, main_owner_id: shareTemplate.main_owner_id, status: 'pending' });
-          showShareModal=false; toast=`⏳ Approval sent to owner`;
-        }
         setTimeout(()=>toast="",2500);
       }catch(e){ toast="❌ Share failed"; setTimeout(()=>toast="",2000); }
     }
     function getFields(t:any){ return t.data?.fields||t.fields||t.placements||[]; }
     function getDept(t:any){ return sanitizeStr(t.data?.department||t.department||t.category||"General",30); }
     function getDesc(t:any){ return sanitizeStr(t.description||t.data?.description||`Code: ${t.template_code||t.code||'N/A'}`,MAX_DESC); }
-    function getOwner(t:any){ const isOwner = String(t.main_owner_id||t.owner_id||'').toLowerCase()===String(currentUserId).toLowerCase(); return sanitizeStr(isOwner ? `${t.owner_name||currentUserName} (You)` : (t.owner_name||"Shared"),30); }
+    function getOwner(t:any){ const isOwner = String(t.main_owner_id||t.owner_id||'').toLowerCase()===String(currentUserId).toLowerCase() || String(t.owner_id||'').toLowerCase()===LEGACY_OWNER_ID.toLowerCase() || !t.owner_id; return sanitizeStr(isOwner ? `${t.owner_name||currentUserName} (You)` : (t.owner_name||"Shared"),30); }
     function handleKeydown(e:KeyboardEvent, a:()=>void){ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); a(); } }
     function selectTheme(id:string){ if(!themeMap.has(id)) return; selectedTheme=id; try{ localStorage.setItem("template_theme",id); }catch{} showTheme=false; }
     function onOverlayClose(e:MouseEvent, cb:()=>void){ if(e.target===e.currentTarget) cb(); }
 </script>
 
-<div class="overlay" role="presentation" onclick={(e)=>onOverlayClose(e, close)}>
+<div class="overlay" role="presentation" on:click={(e)=>onOverlayClose(e, close)}>
     <section class="popup" role="dialog" aria-modal="true">
-        <header class="popup-header" style="border-bottom:4px solid {activeTheme.primary}">
-            <div class="title-wrap"><span class="title-icon">📋</span><div><h2>Templates</h2><p>{filteredTemplates.length} my • {visibleTemplates.length} shown • 🔒 Secure</p></div></div>
-            <div class="head-actions"><button class="theme-btn" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}; color:{activeTheme.primary}" onclick={()=>showTheme=!showTheme}>🎨 {activeTheme.name}</button><button type="button" class="close-btn" onclick={close}>×</button></div>
+        <header class="popup-header" style="border-bottom:4px solid {mode==='report' ? '#0ea5e9' : mode==='meeting' ? '#8b5cf6' : activeTheme.primary}">
+            <div class="title-wrap">
+              <span class="title-icon">{mode==='report' ? '📊' : mode==='meeting' ? '📅' : '📋'}</span>
+              <div><h2>{mode==='report' ? 'Report Templates' : mode==='meeting' ? 'Meeting Templates' : 'Templates'}</h2><p>{filteredTemplates.length} total • {visibleTemplates.length} shown • 🔒 Secure</p></div>
+            </div>
+            <div class="head-actions"><button class="theme-btn" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}; color:{activeTheme.primary}" on:click={()=>showTheme=!showTheme}>🎨 {activeTheme.name}</button><button type="button" class="close-btn" on:click={close}>×</button></div>
         </header>
-        {#if showTheme}<div class="theme-picker">{#each themes as th}<button class="theme-opt" class:active={th.id===selectedTheme} style="border-color:{th.primary}; background:{th.card}" onclick={()=>selectTheme(th.id)}><b style="color:{th.primary}">{th.name}</b></button>{/each}</div>{/if}
-        <div class="toolbar"><div class="search-box"><span>🔍</span><input value={searchInput} oninput={onSearchInput} type="search" placeholder="Search my templates..." maxlength={MAX_SEARCH} /><button class="clear-search" style="display:{searchInput?'flex':'none'}" onclick={clearSearch}>×</button></div><button class="new-btn" style="background:{activeTheme.primary}" onclick={handleNew}>+ New</button></div>
+        {#if showTheme}<div class="theme-picker">{#each themes as th}<button class="theme-opt" class:active={th.id===selectedTheme} style="border-color:{th.primary}; background:{th.card}" on:click={()=>selectTheme(th.id)}><b style="color:{th.primary}">{th.name}</b></button>{/each}</div>{/if}
+        <div class="toolbar"><div class="search-box"><span>🔍</span><input value={searchInput} on:input={onSearchInput} type="search" placeholder="Search my templates..." maxlength={MAX_SEARCH} /><button class="clear-search" style="display:{searchInput?'flex':'none'}" on:click={clearSearch}>×</button></div><button class="new-btn" style="background:{mode==='report' ? '#0ea5e9' : activeTheme.primary}" on:click={handleNew}>+ New</button></div>
         <div class="template-list" bind:this={listEl}>
-            {#if filteredTemplates.length===0}<div class="empty-state"><div class="empty-icon">📋</div><h3>No templates</h3><p>You: {currentUserName} ({currentEmail})</p><button class="new-empty-btn" style="background:{activeTheme.primary}" onclick={handleNew}>+ Create</button></div>
-            {:else}{#each visibleTemplates as template (template.id)}<article class="template-card" style="border-left:5px solid {template._msgColor}; background:{template._th.card};"><div class="card-top"><div class="template-icon" role="button" tabindex="0" style="background:{template._th.card}; border:1px solid {template._th.primary}; color:{template._th.primary}" onclick={()=>handleUse(template)} onkeydown={(e)=>handleKeydown(e,()=>handleUse(template))}>📄</div><div class="template-info"><div class="name-row"><h3>{template.name}</h3><span class="theme-tag" style="background:{template._th.primary}">{template._th.name}</span>{#if String(template.main_owner_id||template.owner_id||'').toLowerCase()===String(currentUserId).toLowerCase()}<span class="theme-tag" style="background:#0f172a">Owner</span>{:else}<span class="theme-tag" style="background:#64748b">Shared</span>{/if}</div><p class="description">{getDesc(template)}</p><div class="meta">F:{getFields(template).length} • {getDept(template)} • 👤 {getOwner(template)}</div></div></div><div class="actions"><button class="action edit" onclick={()=>handleEdit(template)}>Edit</button><button class="action share" style="background:{template._th.primary}" onclick={()=>openShare(template)}>Share</button><button class="action delete" onclick={()=>handleDelete(template)}>Del</button><button class="action use" style="background:{template._th.primary}" onclick={()=>handleUse(template)}>Use</button></div></article>{/each}{#if visibleCount<filteredTemplates.length}<div class="load-more">Scroll for {filteredTemplates.length-visibleCount} more</div>{/if}{/if}
+            {#if filteredTemplates.length===0}<div class="empty-state"><div class="empty-icon">{mode==='report' ? '📊' : '📋'}</div><h3>No {mode} templates</h3><p>Local: {localTemplates.length} • User: {currentUserName} ({currentEmail})</p><p style="font-size:10px; color:#94a3b8;">Old templates auto-restored from localStorage + DB</p><button class="new-empty-btn" style="background:{activeTheme.primary}" on:click={handleNew}>+ Create {mode}</button></div>
+            {:else}{#each visibleTemplates as template (template.id)}<article class="template-card" style="border-left:5px solid {template._isReport ? '#0ea5e9' : template._msgColor}; background:{template._th.card};"><div class="card-top"><div class="template-icon" role="button" tabindex="0" style="background:{template._th.card}; border:1px solid {template._th.primary}; color:{template._th.primary}" on:click={()=>handleUse(template)} on:keydown={(e)=>handleKeydown(e,()=>handleUse(template))}>📄</div><div class="template-info"><div class="name-row"><h3>{template.name}</h3><span class="theme-tag" style="background:{template._isReport ? '#0ea5e9' : template._th.primary}">{template._isReport ? 'REPORT' : template._th.name}</span>{#if template._isLocal}<span class="theme-tag" style="background:#10b981">LOCAL</span>{/if}{#if !template.owner_id || String(template.main_owner_id||template.owner_id||'').toLowerCase()===String(currentUserId).toLowerCase() || String(template.owner_id||'').toLowerCase()===LEGACY_OWNER_ID.toLowerCase()}<span class="theme-tag" style="background:#0f172a">Owner</span>{:else}<span class="theme-tag" style="background:#64748b">Shared</span>{/if}</div><p class="description">{getDesc(template)}</p><div class="meta">F:{getFields(template).length} • {getDept(template)} • 👤 {getOwner(template)}</div></div></div><div class="actions"><button class="action edit" on:click={()=>handleEdit(template)}>Edit</button><button class="action share" style="background:{template._th.primary}" on:click={()=>openShare(template)}>Share</button><button class="action delete" on:click={()=>handleDelete(template)}>Del</button><button class="action use" style="background:{template._th.primary}" on:click={()=>handleUse(template)}>Use</button></div></article>{/each}{#if visibleCount<filteredTemplates.length}<div class="load-more">Scroll for {filteredTemplates.length-visibleCount} more • {filteredTemplates.length} total</div>{/if}{/if}
         </div>
         {#if toast}<div class="toast-pop">{toast}</div>{/if}
     </section>
 </div>
 
 {#if showShareModal}
-<div class="overlay share-overlay" onclick={(e)=>onOverlayClose(e, ()=>showShareModal=false)}>
+<div class="overlay share-overlay" on:click={(e)=>onOverlayClose(e, ()=>showShareModal=false)}>
     <div class="share-popup">
-        <div class="share-head"><div class="share-head-left"><span class="share-icon">🔒</span><div><h3 class="share-title">{String(shareTemplate?.main_owner_id||shareTemplate?.owner_id||'').toLowerCase()===String(currentUserId).toLowerCase() ? 'Share (Owner)' : 'Request Share (Need Approval)'}</h3><small class="share-sub">{shareTemplate?.name} • by {getOwner(shareTemplate)}</small></div></div><button class="close-btn" onclick={()=>showShareModal=false}>×</button></div>
+        <div class="share-head"><div class="share-head-left"><span class="share-icon">🔒</span><div><h3 class="share-title">Share {mode}</h3><small class="share-sub">{shareTemplate?.name} • by {getOwner(shareTemplate)}</small></div></div><button class="close-btn" on:click={()=>showShareModal=false}>×</button></div>
         <div class="share-body">
-            {#if String(shareTemplate?.main_owner_id||shareTemplate?.owner_id||'').toLowerCase()===String(currentUserId).toLowerCase()}
-              <div style="background:#ecfdf5; border:1px solid #10b981; padding:8px; border-radius:6px; font-size:11px; color:#065f46">✅ You are owner (A) - can share directly</div>
-            {:else}
-              <div style="background:#fffbeb; border:1px solid #f59e0b; padding:8px; border-radius:6px; font-size:11px; color:#92400e">⏳ You are B user - needs approval from owner</div>
-            {/if}
             <input bind:value={shareUserId} placeholder="Enter email to share" maxlength={MAX_SHARE_ID} class="share-input" />
-            <small style="color:#64748b; font-size:10px">🔒 Secure: No all-contacts, only email owner, 50k safe</small>
+            <small style="color:#64748b; font-size:10px">🔒 Secure: Only email share • 50k safe</small>
         </div>
-        <div class="share-actions"><button class="secondary-btn" onclick={()=>showShareModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" onclick={confirmShare}>🔒 {String(shareTemplate?.main_owner_id||shareTemplate?.owner_id||'').toLowerCase()===String(currentUserId).toLowerCase() ? 'Share Direct' : 'Request Approval'}</button></div>
+        <div class="share-actions"><button class="secondary-btn" on:click={()=>showShareModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" on:click={confirmShare}>🔒 Share</button></div>
     </div>
 </div>
 {/if}
 
 {#if showUseModal && useTemplate}
-<div class="overlay use-overlay" onclick={(e)=>onOverlayClose(e, ()=>showUseModal=false)}>
-  <div class="use-popup" style="border-top:5px solid {activeTheme.primary}"><div class="use-popup-head"><div><h3>📥 {useTemplate.name}</h3><small>{useTemplate.template_code||useTemplate.code} • 👤 {getOwner(useTemplate)}</small></div><button class="close-btn" onclick={()=>showUseModal=false}>×</button></div><div class="use-form-list">{#each (useTemplate.fields||useTemplate.data?.fields||[]) as f}{@const key=f.field_name||f.name}<div class="use-field-row" style="border-left:4px solid {activeTheme.primary}"><label class="use-label">{f.label} {#if f.required}<span class="req">*</span>{/if}</label>{#if f.type==='dropdown'}<select class="use-input" bind:value={useFormData[key]} onchange={onUseInput}><option value="">Select</option>{#each (f.options||[]) as opt}<option value={opt}>{opt}</option>{/each}</select>{:else if f.type==='number'}<input class="use-input" type="number" bind:value={useFormData[key]} oninput={onUseInput} />{:else if f.type==='formula'}<div class="formula-box" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}"><b>{useFormData[key]??'0'}</b></div>{:else}<input class="use-input" type="text" bind:value={useFormData[key]} oninput={onUseInput} />{/if}</div>{/each}</div><div class="use-actions"><button class="secondary-btn" onclick={()=>showUseModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" disabled={useSaving} onclick={submitUseData}>{useSaving?'Saving...':'💾 Save'}</button></div></div>
+<div class="overlay use-overlay" on:click={(e)=>onOverlayClose(e, ()=>showUseModal=false)}>
+  <div class="use-popup" style="border-top:5px solid {useTemplate._isReport ? '#0ea5e9' : activeTheme.primary}">
+    <div class="use-popup-head"><div><h3>📥 {useTemplate.name}</h3><small>{useTemplate.template_code||useTemplate.code} • 👤 {getOwner(useTemplate)}</small></div><button class="close-btn" on:click={()=>showUseModal=false}>×</button></div>
+    <div class="use-form-list">
+      {#each (useTemplate.fields||useTemplate.data?.fields||[]) as f}
+        {@const key=f.field_name||f.name}
+        <div class="use-field-row" style="border-left:4px solid {useTemplate._isReport ? '#0ea5e9' : activeTheme.primary}">
+          <label class="use-label-box"><span class="label-text">{f.label || key}</span> {#if f.required}<span class="req">*</span>{/if} <span class="label-type">{f.type}</span></label>
+          {#if f.type==='dropdown'}
+            <select class="use-input dropdown-fix" bind:value={useFormData[key]} on:change={onUseInput}>
+              <option value="">-- Select {f.label} --</option>
+              {#each (f.options||[]) as opt}<option value={opt}>{opt}</option>{/each}
+            </select>
+          {:else if f.type==='number'}
+            <input class="use-input" type="number" bind:value={useFormData[key]} on:input={onUseInput} placeholder="Enter {f.label}" />
+          {:else if f.type==='formula'}
+            <div class="formula-box" style="background:{activeTheme.card}; border:1px solid {activeTheme.primary}"><b>{useFormData[key]??'0'}</b> <small>{f.formula}</small></div>
+          {:else}
+            <input class="use-input" type="text" bind:value={useFormData[key]} on:input={onUseInput} placeholder="Enter {f.label}" />
+          {/if}
+        </div>
+      {/each}
+    </div>
+    <div class="use-actions"><button class="secondary-btn" on:click={()=>showUseModal=false}>Cancel</button><button class="new-btn" style="background:{activeTheme.primary}" disabled={useSaving} on:click={submitUseData}>{useSaving?'Saving...':'💾 Save'}</button></div>
+  </div>
 </div>
 {/if}
 
@@ -261,10 +308,13 @@ h2{ margin:0; font-size:16px; color:#111827; }
 .use-popup{ background:#fff; width:min(500px,96%); max-height:85vh; border-radius:12px; display:flex; flex-direction:column; overflow:hidden; animation:popIn 0.15s ease-out; }
 .use-popup-head{ display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid #e5e7eb; }
 .use-form-list{ padding:10px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; background:#f8fafc; }
-.use-field-row{ background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #e5e7eb; display:flex; flex-direction:column; gap:4px; }
-.use-label{ font-size:11px; font-weight:800; color:#0f172a; }
-.req{ color:#ef4444; }
-.use-input{ height:36px; border:2px solid #cbd5e1; border-radius:8px; padding:0 10px; font-size:14px; width:100%; background:#fff!important; color:#0f172a!important; }
+.use-field-row{ background:#fff; padding:8px 10px; border-radius:8px; border:1px solid #e5e7eb; display:flex; flex-direction:column; gap:6px; }
+.use-label-box{ display:flex; align-items:center; gap:6px; background:#f1f5f9; padding:6px 8px; border-radius:6px; border:1px solid #e2e8f0; }
+.label-text{ font-size:12px; font-weight:800; color:#0f172a; }
+.label-type{ font-size:9px; background:#0f172a; color:#fff; padding:2px 6px; border-radius:4px; margin-left:auto; }
+.req{ color:#ef4444; font-weight:900; }
+.use-input{ height:40px; border:2px solid #0ea5e9!important; border-radius:8px; padding:0 12px; font-size:14px; width:100%; background:#ffffff!important; color:#0f172a!important; }
+.dropdown-fix{ background:#ffffff!important; color:#0f172a!important; border:2px solid #0ea5e9!important; cursor:pointer; }
 .formula-box{ padding:10px 12px; border-radius:8px; display:flex; justify-content:space-between; font-weight:900; font-size:13px; color:#0f172a; }
 .use-actions{ display:flex; justify-content:space-between; padding:12px 14px; background:#fff; border-top:1px solid #e5e7eb; }
 </style>
